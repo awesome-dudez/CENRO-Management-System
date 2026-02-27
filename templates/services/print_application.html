@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Print Application #{{ sr.id }}{% endblock %}
+{% block content %}
+<style>
+    .print-container { max-width: 800px; margin: 20px auto; padding: 20px; }
+    .print-page {
+        background: white; border: 1px solid #ddd; padding: 40px 50px;
+        font-size: 14px; color: #2d3142; line-height: 1.6;
+    }
+    .print-header { text-align: center; border-bottom: 3px double #2d3142; padding-bottom: 16px; margin-bottom: 24px; }
+    .print-header h1 { font-size: 18px; margin: 0 0 4px; }
+    .print-header h2 { font-size: 16px; margin: 0 0 4px; color: #555; }
+    .print-header p { font-size: 12px; color: #888; margin: 0; }
+    .print-section { margin-bottom: 20px; }
+    .print-section h3 { font-size: 14px; background: #f0f0f0; padding: 6px 10px; margin: 0 0 10px; }
+    .print-table { width: 100%; border-collapse: collapse; }
+    .print-table td { padding: 6px 10px; border: 1px solid #ddd; font-size: 13px; vertical-align: top; }
+    .print-table td:first-child { font-weight: 600; width: 40%; background: #fafafa; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 40px; gap: 40px; }
+    .sig-block { text-align: center; flex: 1; }
+    .sig-line { border-top: 1px solid #2d3142; margin-top: 50px; padding-top: 6px; font-weight: 600; }
+    .sig-title { font-size: 12px; color: #666; }
+    .print-btn-bar { text-align: center; margin: 20px 0; }
+    .print-btn-bar button { padding: 10px 30px; background: #1abc9c; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    @media print {
+        .print-btn-bar, header, footer, .top-nav, .admin-header, .toast-container { display: none !important; }
+        .print-container { margin: 0; padding: 0; }
+        .print-page { border: none; padding: 10px; }
+    }
+</style>
+
+<div class="print-container">
+    <div class="print-btn-bar">
+        <button onclick="window.print()">Print Application</button>
+    </div>
+
+    <div class="print-page">
+        <div class="print-header">
+            <h1>CITY ENVIRONMENT AND NATURAL RESOURCES OFFICE (CENRO)</h1>
+            <h2>SEPTAGE MANAGEMENT SERVICES</h2>
+            <p>City of Bayawan, Negros Oriental</p>
+        </div>
+
+        <div class="print-section">
+            <h3>A. Customer Request</h3>
+            <table class="print-table">
+                <tr><td>Reference No.</td><td>ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</td></tr>
+                <tr><td>Client / Establishment Name</td><td>{{ sr.client_name }}</td></tr>
+                <tr><td>Request Date</td><td>{{ sr.request_date|date:"F d, Y" }}</td></tr>
+                <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
+                <tr><td>Complete Address</td><td>{{ sr.address }}, {{ sr.barangay }}</td></tr>
+                <tr><td>Contact Number</td><td>{{ sr.contact_number }}</td></tr>
+                <tr><td>Connected to BAWAD</td><td>{% if sr.connected_to_bawad %}YES{% else %}NO{% endif %}</td></tr>
+                <tr><td>Public / Private</td><td>{{ sr.get_public_private_display }}</td></tr>
+            </table>
+        </div>
+
+        {% if inspection %}
+        <div class="print-section">
+            <h3>B. Inspection Details</h3>
+            <table class="print-table">
+                <tr><td>Inspection Date</td><td>{{ inspection.inspection_date|date:"F d, Y" }}</td></tr>
+                <tr><td>Inspected By</td><td>{{ inspection.inspected_by }}</td></tr>
+                <tr><td>Remarks</td><td>{{ inspection.remarks|default:"None" }}</td></tr>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if completion %}
+        <div class="print-section">
+            <h3>C. Completion Information</h3>
+            <table class="print-table">
+                <tr><td>Date Completed</td><td>{{ completion.date_completed|date:"F d, Y" }}</td></tr>
+                <tr><td>Time Required</td><td>{{ completion.time_required }}</td></tr>
+                <tr><td>Witnessed By</td><td>{{ completion.witnessed_by_name|default:"N/A" }}</td></tr>
+                <tr><td>Declogger No.</td><td>{{ completion.declogger_no|default:"N/A" }}</td></tr>
+                <tr><td>Fuel Consumption</td><td>{% if completion.fuel_consumption %}{{ completion.fuel_consumption }} {{ completion.fuel_unit }}{% else %}N/A{% endif %}</td></tr>
+                <tr><td>Driver</td><td>{{ completion.driver_name }}</td></tr>
+                {% if completion.helper1_name %}<tr><td>Helper 1</td><td>{{ completion.helper1_name }}</td></tr>{% endif %}
+                {% if completion.helper2_name %}<tr><td>Helper 2</td><td>{{ completion.helper2_name }}</td></tr>{% endif %}
+                {% if completion.helper3_name %}<tr><td>Helper 3</td><td>{{ completion.helper3_name }}</td></tr>{% endif %}
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="print-section">
+            <h3>D. Signatories</h3>
+            <div class="sig-row">
+                <div class="sig-block">
+                    <div class="sig-line">MAXIMO CONCEPTION</div>
+                    <div class="sig-title">Septage Management Coordinator</div>
+                </div>
+                <div class="sig-block">
+                    <div class="sig-line">NEFREDO CAMILO A. VILLARUBIA</div>
+                    <div class="sig-title">City-ENRO</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

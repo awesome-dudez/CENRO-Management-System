@@ -6,7 +6,7 @@
 <div class="dashboard-header">
     <div>
         <h2 style="font-size: 28px; margin-bottom: 5px;">📊 System Dashboard</h2>
-        <p class="welcome-text">Welcome back, <strong>{{ user.get_full_name|default:user.username }}</strong>. Here's your system overview.</p>
+        <p class="welcome-text">Welcome back, <strong>{{ user.get_full_name|default:user.username|title }}</strong>. Here's your system overview.</p>
     </div>
     <div class="dashboard-actions">
         <button class="btn btn-sm" onclick="window.print()">

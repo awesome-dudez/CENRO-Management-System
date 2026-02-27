@@ -31,7 +31,7 @@
                 <tr>
                     <td>{{ item.consumer.get_full_name }}</td>
                     <td>{{ item.consumer.consumer_profile.barangay }}</td>
-                    <td>{{ item.consumer.consumer_profile.address }}</td>
+                    <td>{{ item.consumer.consumer_profile.full_address }}</td>
                     <td>{{ item.last_declogging|default:"Never" }}</td>
                     <td>{{ item.next_declogging|default:"-" }}</td>
                 </tr>

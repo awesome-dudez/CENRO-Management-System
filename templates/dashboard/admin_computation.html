@@ -48,25 +48,29 @@
                 <div class="card-body">
                     <div class="charges-summary">
                         <div class="charge-item">
-                            <span>Tipping Fee (₱500/m³)</span>
-                            <span>₱{{ computation_result.tipping_fee|floatformat:2 }}</span>
+                            <span>Fixed Trucking Fee</span>
+                            <span>₱{{ computation_result.fixed_trucking|floatformat:2 }}</span>
+                        </div>
+                        <div class="charge-item">
+                            <span>Desludging Fee (₱500/m³)</span>
+                            <span>₱{{ computation_result.desludging_fee|floatformat:2 }}</span>
                         </div>
                         <div class="charge-item">
                             <span>Inspection Fee</span>
                             <span>₱{{ computation_result.inspection_fee|floatformat:2 }}</span>
                         </div>
+                        <div class="charge-item">
+                            <span>Meals & Transport</span>
+                            <span>₱{{ computation_result.meals_transport|floatformat:2 }}</span>
+                        </div>
                         {% if computation_result.location == 'outside' %}
                         <div class="charge-item">
-                            <span>Distance Cost ({{ computation_result.distance }}km × 2 × ₱20)</span>
+                            <span>Distance Cost (excess km × 2 × ₱20)</span>
                             <span>₱{{ computation_result.distance_cost|floatformat:2 }}</span>
                         </div>
                         <div class="charge-item">
                             <span>Wear & Tear (20%)</span>
                             <span>₱{{ computation_result.wear_tear|floatformat:2 }}</span>
-                        </div>
-                        <div class="charge-item">
-                            <span>Meals & Transport</span>
-                            <span>₱{{ computation_result.meals_transport|floatformat:2 }}</span>
                         </div>
                         {% endif %}
                         <div class="charge-item total">

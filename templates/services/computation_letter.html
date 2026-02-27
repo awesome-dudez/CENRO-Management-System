@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Computation Letter - Request #{{ sr.id }}{% endblock %}
+{% block content %}
+<style>
+    .letter-container { max-width: 800px; margin: 30px auto; padding: 20px; }
+    .letter-card {
+        background: white; border: 1px solid #ddd; border-radius: 8px;
+        padding: 40px 50px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    .letter-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2d3142; padding-bottom: 20px; }
+    .letter-header h2 { font-size: 20px; color: #2d3142; margin: 0 0 4px; }
+    .letter-header p { font-size: 13px; color: #666; margin: 0; }
+    .letter-addressee { margin-bottom: 24px; }
+    .letter-addressee p { margin: 2px 0; font-size: 14px; color: #2d3142; }
+    .letter-section { margin-bottom: 20px; }
+    .letter-section h4 { color: #1abc9c; font-size: 15px; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+    .breakdown-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .breakdown-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+    .breakdown-table td:last-child { text-align: right; font-weight: 500; }
+    .breakdown-table tr.total td { border-top: 2px solid #2d3142; font-weight: 700; font-size: 16px; color: #1abc9c; }
+    .breakdown-table tr.free td { color: #27ae60; font-weight: 700; }
+    .print-bar { display: flex; gap: 12px; justify-content: center; margin-top: 24px; }
+    .btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn-primary { background: #1abc9c; color: white; }
+    .btn-secondary { background: #e0e0e0; color: #2d3142; }
+    @media print {
+        .print-bar, header, footer, .top-nav, .admin-header, .toast-container { display: none !important; }
+        .letter-container { margin: 0; padding: 0; }
+        .letter-card { border: none; box-shadow: none; padding: 20px; }
+    }
+</style>
+
+<div class="letter-container">
+    <div class="letter-card" id="printArea">
+        <div class="letter-header">
+            <h2>COMPUTATION LETTER</h2>
+            <p>City Environment and Natural Resources Office (CENRO)</p>
+            <p>City of Bayawan, Negros Oriental</p>
+        </div>
+
+        <div class="letter-addressee">
+            <p><strong>JEZEBEL ESTI&Ntilde;OSO</strong></p>
+            <p>LRCO III</p>
+            <p style="margin-top:10px;">Date: {{ comp.created_at|date:"F d, Y" }}</p>
+        </div>
+
+        <div class="letter-section">
+            <h4>Service Details</h4>
+            <table class="breakdown-table">
+                <tr><td>Reference</td><td>ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</td></tr>
+                <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
+                <tr><td>Client</td><td>{{ sr.client_name }}</td></tr>
+                <tr><td>Address</td><td>{{ sr.address }}, {{ sr.barangay }}</td></tr>
+                <tr><td>BAWAD Member</td><td>{% if sr.connected_to_bawad %}Yes{% else %}No{% endif %}</td></tr>
+                <tr><td>Volume</td><td>{{ comp.cubic_meters }} cubic meters</td></tr>
+                {% if comp.distance_km %}<tr><td>Distance</td><td>{{ comp.distance_km }} km</td></tr>{% endif %}
+                <tr><td>Trips</td><td>{{ comp.trips }}</td></tr>
+            </table>
+        </div>
+
+        <div class="letter-section">
+            <h4>Declogging Fee Breakdown</h4>
+            <table class="breakdown-table">
+                <tr><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking }}</td></tr>
+                <tr><td>Desludging Fee ({{ comp.cubic_meters }} m&sup3;{% if comp.trips > 1 %}, {{ comp.trips }} trips{% endif %})</td><td>&#8369;{{ comp.desludging_fee }}</td></tr>
+                {% if comp.distance_charge %}<tr><td>Distance Charge (excess km)</td><td>&#8369;{{ comp.distance_charge }}</td></tr>{% endif %}
+                {% if comp.wear_charge %}<tr><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>{% endif %}
+                <tr><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
+                <tr><td>Inspection Fee</td><td>&#8369;{{ comp.inspection_charge }}</td></tr>
+                {% if comp.payment_status == "FREE" %}
+                <tr class="free"><td>BAWAD Discount (Free Service)</td><td>- &#8369;{{ comp.total_charge }}</td></tr>
+                <tr class="total"><td>TOTAL</td><td>&#8369;0.00</td></tr>
+                {% else %}
+                <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
+                {% endif %}
+            </table>
+        </div>
+
+        {% if comp.prepared_by %}
+        <div style="margin-top: 30px; font-size: 13px; color: #666;">
+            <p>Prepared by: {{ comp.prepared_by.get_full_name }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="print-bar">
+        <button class="btn btn-primary" onclick="window.print()">Print / Download PDF</button>
+        <a href="{% url 'services:request_detail' sr.pk %}" class="btn btn-secondary">Back to Request</a>
+    </div>
+</div>
+{% endblock %}

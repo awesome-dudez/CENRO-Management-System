@@ -1,3 +1,6 @@
+from datetime import datetime
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
@@ -5,7 +8,6 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-import uuid
 import json
 import time
 
@@ -13,142 +15,188 @@ from accounts.decorators import role_required
 from accounts.models import User
 from scheduling.models import Schedule
 
-from .forms import ServiceRequestForm, ServiceRequestStep1Form, ServiceRequestStep2Form, ServiceRequestStep3Form, ServiceRequestStep4Form
+from .forms import (
+    ServiceRequestForm,
+    ServiceRequestStep1Form,
+    ServiceRequestStep2Form,
+    ServiceRequestStep3Form,
+)
 from .location import detect_barangay_for_point
 from .geocode import address_in_bayawan, extract_barangay, reverse_geocode_osm
-from .models import Notification, ServiceRequest
+from .models import CompletionInfo, InspectionDetail, Notification, ServiceRequest
 
+
+# ---------------------------------------------------------------------------
+# Multi-step service request wizard (3 steps)
+# ---------------------------------------------------------------------------
 
 @login_required
 @role_required("CONSUMER")
 def create_request(request):
-    """Multi-step service request form"""
+    """3-step service request wizard."""
     step = request.GET.get("step", 1)
-    
     try:
         step = int(step)
     except ValueError:
         step = 1
-    
-    # Initialize session for multi-step form
+
     if "service_request_data" not in request.session:
         request.session["service_request_data"] = {}
-    
+
     form_data = request.session.get("service_request_data", {})
-    
-    # Handle form submission
+
     if request.method == "POST":
+        # ---- Step 1: Service Type ----
         if step == 1:
             form = ServiceRequestStep1Form(request.POST)
             if form.is_valid():
-                form_data.update({
-                    "first_name": form.cleaned_data["first_name"],
-                    "last_name": form.cleaned_data["last_name"],
-                    "mobile_number": form.cleaned_data["mobile_number"],
-                })
+                form_data["service_type"] = form.cleaned_data["service_type"]
                 request.session["service_request_data"] = form_data
                 return HttpResponseRedirect(reverse("services:create_request") + "?step=2")
-        
+
+        # ---- Step 2: Customer Request Form ----
         elif step == 2:
-            form = ServiceRequestStep2Form(request.POST)
+            form = ServiceRequestStep2Form(request.POST, request.FILES)
             if form.is_valid():
+                lat = form.cleaned_data.get("gps_latitude")
+                lon = form.cleaned_data.get("gps_longitude")
                 form_data.update({
-                    # Barangay is always auto-detected server-side from GPS point.
+                    "client_name": form.cleaned_data["client_name"],
+                    "request_date": str(form.cleaned_data["request_date"]),
+                    "contact_number": form.cleaned_data["contact_number"],
                     "barangay": form.cleaned_data["barangay"],
                     "address": form.cleaned_data.get("address") or "",
-                    "gps_latitude": form.cleaned_data.get("gps_latitude"),
-                    "gps_longitude": form.cleaned_data.get("gps_longitude"),
+                    "gps_latitude": float(lat) if lat is not None else None,
+                    "gps_longitude": float(lon) if lon is not None else None,
+                    "connected_to_bawad": form.cleaned_data["connected_to_bawad"],
+                    "public_private": form.cleaned_data["public_private"],
                 })
+                if form.cleaned_data.get("bawad_proof"):
+                    request.session["_bawad_proof_pending"] = True
+                if form.cleaned_data.get("client_signature"):
+                    request.session["_client_sig_pending"] = True
                 request.session["service_request_data"] = form_data
                 return HttpResponseRedirect(reverse("services:create_request") + "?step=3")
-        
+
+        # ---- Step 3: Review & Submit ----
         elif step == 3:
-            form = ServiceRequestStep3Form(request.POST, request.FILES)
-            if form.is_valid():
-                form_data.update({
-                    "service_type": form.cleaned_data["service_type"],
-                    "preferred_date": str(form.cleaned_data["preferred_date"]),
-                })
-                if form.cleaned_data.get("bawad_receipt"):
-                    request.session["bawad_receipt"] = form.cleaned_data.get("bawad_receipt")
-                request.session["service_request_data"] = form_data
-                return HttpResponseRedirect(reverse("services:create_request") + "?step=4")
-        
-        elif step == 4:
-            form = ServiceRequestStep4Form(request.POST)
+            form = ServiceRequestStep3Form(request.POST)
             if form.is_valid() and form_data:
-                # Create the service request
-                from datetime import datetime
-                from decimal import Decimal
-                
-                # Convert GPS coordinates from string to Decimal
                 gps_latitude = None
                 gps_longitude = None
-                
                 if form_data.get("gps_latitude"):
                     try:
-                        gps_latitude = Decimal(str(form_data.get("gps_latitude")))
+                        gps_latitude = Decimal(str(form_data["gps_latitude"]))
                     except (ValueError, TypeError):
                         pass
-                
                 if form_data.get("gps_longitude"):
                     try:
-                        gps_longitude = Decimal(str(form_data.get("gps_longitude")))
+                        gps_longitude = Decimal(str(form_data["gps_longitude"]))
                     except (ValueError, TypeError):
                         pass
-                
+
                 service_request = ServiceRequest.objects.create(
                     consumer=request.user,
-                    barangay=form_data.get("barangay"),
-                    address=form_data.get("address"),
-                    service_type=form_data.get("service_type", "DECLOGGING"),
-                    preferred_date=datetime.strptime(form_data.get("preferred_date"), "%Y-%m-%d").date(),
-                    preferred_time=timezone.now().time(),
+                    client_name=form_data.get("client_name", request.user.get_full_name()),
+                    request_date=datetime.strptime(form_data["request_date"], "%Y-%m-%d").date()
+                    if form_data.get("request_date")
+                    else timezone.now().date(),
+                    contact_number=form_data.get("contact_number", ""),
+                    barangay=form_data.get("barangay", ""),
+                    address=form_data.get("address", ""),
                     gps_latitude=gps_latitude,
                     gps_longitude=gps_longitude,
+                    service_type=form_data.get("service_type", "RESIDENTIAL_DESLUDGING"),
+                    connected_to_bawad=form_data.get("connected_to_bawad") == "YES",
+                    public_private=form_data.get("public_private", "PRIVATE"),
+                    status=ServiceRequest.Status.SUBMITTED,
                 )
-                
+
+                # Notify all admins
+                admin_users = User.objects.filter(role=User.Role.ADMIN)
+                for admin in admin_users:
+                    Notification.objects.create(
+                        user=admin,
+                        message=f"New {service_request.get_service_type_display()} request from {service_request.client_name}.",
+                        notification_type=Notification.NotificationType.REQUEST_SUBMITTED,
+                        related_request=service_request,
+                    )
+
+                # Notify consumer
                 Notification.objects.create(
                     user=request.user,
                     message=f"Your {service_request.get_service_type_display()} request has been submitted.",
+                    notification_type=Notification.NotificationType.STATUS_CHANGE,
+                    related_request=service_request,
                 )
-                
-                # Generate reference number
+
                 reference_number = f"ECO-{timezone.now().year}-{service_request.id % 1000:03d}"
-                
-                # Clear session
-                del request.session["service_request_data"]
-                
+
+                # Clean up session
+                request.session.pop("service_request_data", None)
+                request.session.pop("_bawad_proof_pending", None)
+                request.session.pop("_client_sig_pending", None)
+
                 messages.success(request, "Service request submitted successfully!")
                 return render(request, "services/request_success.html", {
                     "reference_number": reference_number,
-                    "service_request": service_request
+                    "service_request": service_request,
                 })
-    
-    # Prepare form based on step
+
+    # GET -- prepare form
     if step == 1:
-        form = ServiceRequestStep1Form(initial={
-            "first_name": request.user.first_name,
-            "last_name": request.user.last_name,
-        })
+        form = ServiceRequestStep1Form(initial={"service_type": form_data.get("service_type", "")})
     elif step == 2:
-        form = ServiceRequestStep2Form(initial=form_data)
+        from datetime import date as date_cls
+        default_contact = ""
+        try:
+            default_contact = request.user.consumer_profile.mobile_number or ""
+        except Exception:
+            pass
+        form = ServiceRequestStep2Form(initial={
+            "client_name": form_data.get("client_name", request.user.get_full_name()),
+            "request_date": form_data.get("request_date", str(date_cls.today())),
+            "contact_number": form_data.get("contact_number", default_contact),
+            "connected_to_bawad": form_data.get("connected_to_bawad", "NO"),
+            "public_private": form_data.get("public_private", "PRIVATE"),
+            "barangay": form_data.get("barangay", ""),
+            "address": form_data.get("address", ""),
+            "gps_latitude": form_data.get("gps_latitude"),
+            "gps_longitude": form_data.get("gps_longitude"),
+        })
     elif step == 3:
-        form = ServiceRequestStep3Form(initial=form_data)
-    elif step == 4:
-        form = ServiceRequestStep4Form()
+        form = ServiceRequestStep3Form()
     else:
         form = ServiceRequestStep1Form()
         step = 1
-    
+
+    owner_profile = {}
+    if step == 2:
+        owner_profile["client_name"] = request.user.get_full_name()
+        try:
+            cp = request.user.consumer_profile
+            owner_profile["contact_number"] = cp.mobile_number or ""
+            owner_profile["address"] = cp.full_address or ""
+            owner_profile["gps_latitude"] = float(cp.gps_latitude) if cp.gps_latitude else None
+            owner_profile["gps_longitude"] = float(cp.gps_longitude) if cp.gps_longitude else None
+        except Exception:
+            owner_profile["contact_number"] = ""
+            owner_profile["address"] = ""
+            owner_profile["gps_latitude"] = None
+            owner_profile["gps_longitude"] = None
+
     context = {
         "form": form,
         "step": step,
         "form_data": form_data,
+        "owner_profile_json": json.dumps(owner_profile),
     }
-    
     return render(request, "services/create_request_wizard.html", context)
 
+
+# ---------------------------------------------------------------------------
+# Reverse geocode proxy
+# ---------------------------------------------------------------------------
 
 _RG_CACHE: dict[str, tuple[float, dict]] = {}
 _RG_CACHE_TTL_SECONDS = 60 * 10
@@ -172,10 +220,6 @@ def _rg_cache_set(key: str, val: dict):
 
 @login_required
 def reverse_geocode(request):
-    """
-    Reverse geocode (lat, lon) via OSM Nominatim.
-    We proxy this server-side to set a proper User-Agent and avoid browser CORS issues.
-    """
     lat = request.GET.get("lat")
     lon = request.GET.get("lon")
     if not lat or not lon:
@@ -209,7 +253,7 @@ def reverse_geocode(request):
     payload = {
         "ok": True,
         "within_bayawan": within_bayawan,
-        "barangay": barangay,  # GeoJSON result preferred; fallback to OSM when available
+        "barangay": barangay,
         "display_name": display_name,
         "address": address,
     }
@@ -217,35 +261,50 @@ def reverse_geocode(request):
     return JsonResponse(payload)
 
 
+# ---------------------------------------------------------------------------
+# Service request views
+# ---------------------------------------------------------------------------
+
 @login_required
 def request_list(request):
     if request.user.is_admin():
-        requests = ServiceRequest.objects.all().select_related("consumer").order_by("-created_at")
+        requests_qs = ServiceRequest.objects.all().select_related("consumer").order_by("-created_at")
     elif request.user.is_staff_member():
-        requests = ServiceRequest.objects.filter(
-            schedule__assigned_staff=request.user
+        requests_qs = ServiceRequest.objects.filter(
+            assigned_inspector=request.user
         ).select_related("consumer").order_by("-created_at")
     else:
-        requests = ServiceRequest.objects.filter(consumer=request.user).order_by("-created_at")
-    return render(request, "services/request_list.html", {"requests": requests})
+        requests_qs = ServiceRequest.objects.filter(consumer=request.user).order_by("-created_at")
+    return render(request, "services/request_list.html", {"requests": requests_qs})
 
 
 @login_required
 def request_detail(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
-    if not request.user.is_admin() and service_request.consumer != request.user:
+    if (
+        not request.user.is_admin()
+        and not request.user.is_staff_member()
+        and service_request.consumer != request.user
+    ):
         messages.error(request, "You do not have permission to view this request.")
         return redirect("services:request_list")
-    return render(request, "services/request_detail.html", {"request": service_request})
+
+    staff_members = User.objects.filter(role__in=[User.Role.ADMIN, User.Role.STAFF])
+
+    context = {
+        "sr": service_request,
+        "staff_members": staff_members,
+    }
+    return render(request, "services/request_detail.html", context)
 
 
 @login_required
 def history(request):
     if request.user.is_admin():
-        requests = ServiceRequest.objects.all().select_related("consumer").order_by("-created_at")
+        requests_qs = ServiceRequest.objects.all().select_related("consumer").order_by("-created_at")
     else:
-        requests = ServiceRequest.objects.filter(consumer=request.user).order_by("-created_at")
-    return render(request, "services/history.html", {"requests": requests})
+        requests_qs = ServiceRequest.objects.filter(consumer=request.user).order_by("-created_at")
+    return render(request, "services/history.html", {"requests": requests_qs})
 
 
 @login_required
@@ -263,82 +322,256 @@ def client_records(request):
     barangays = User.objects.filter(role=User.Role.CONSUMER).values_list(
         "consumer_profile__barangay", flat=True
     ).distinct()
-    # Compute last and next declogging for each consumer
     consumer_data = []
     for consumer in consumers:
         last_declogging = (
             ServiceRequest.objects.filter(
                 consumer=consumer,
-                service_type=ServiceRequest.ServiceType.DECLOGGING,
-                status=ServiceRequest.Status.COMPLETED
+                service_type__in=[
+                    ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+                    ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+                ],
+                status=ServiceRequest.Status.COMPLETED,
             )
-            .order_by("-preferred_date")
+            .order_by("-request_date")
             .first()
         )
         next_declogging = None
         if last_declogging:
             from datetime import timedelta
-            next_declogging = last_declogging.preferred_date + timedelta(days=4 * 365)
+            next_declogging = last_declogging.request_date + timedelta(days=4 * 365)
         consumer_data.append({
             "consumer": consumer,
-            "last_declogging": last_declogging.preferred_date if last_declogging else None,
+            "last_declogging": last_declogging.request_date if last_declogging else None,
             "next_declogging": next_declogging,
         })
     context = {"consumer_data": consumer_data, "barangays": barangays}
     return render(request, "services/client_records.html", context)
 
 
+# ---------------------------------------------------------------------------
+# Inspection + Completion views
+# ---------------------------------------------------------------------------
+
 @login_required
-@role_required("ADMIN")
-def compute_fee(request, pk):
+@role_required("ADMIN", "STAFF")
+def submit_inspection(request, pk):
+    """Admin/Staff fills inspection details."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if request.method == "POST":
-        fee_amount = request.POST.get("fee_amount")
-        fee_notes = request.POST.get("fee_notes", "")
-        if fee_amount:
-            service_request.fee_amount = fee_amount
-            service_request.fee_notes = fee_notes
-            service_request.save()
-            Notification.objects.create(
-                user=service_request.consumer,
-                message=f"Fee computed for your {service_request.get_service_type_display()} request: ₱{fee_amount}",
-            )
-            messages.success(request, "Fee computed successfully.")
+        InspectionDetail.objects.update_or_create(
+            service_request=service_request,
+            defaults={
+                "inspection_date": request.POST.get("inspection_date"),
+                "inspected_by": request.POST.get("inspected_by", ""),
+                "remarks": request.POST.get("remarks", ""),
+            },
+        )
+        if request.FILES.get("inspector_signature"):
+            insp = service_request.inspection_detail
+            insp.inspector_signature = request.FILES["inspector_signature"]
+            insp.save()
+
+        service_request.status = ServiceRequest.Status.INSPECTED
+        service_request.save()
+
+        Notification.objects.create(
+            user=service_request.consumer,
+            message="Your service request has been inspected.",
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+        messages.success(request, "Inspection details saved.")
         return redirect("services:request_detail", pk=pk)
-    return render(request, "services/compute_fee.html", {"request": service_request})
+
+    return render(request, "services/inspection_form.html", {"sr": service_request})
 
 
 @login_required
-@role_required("ADMIN")
-def confirm_payment(request, pk):
+@role_required("ADMIN", "STAFF")
+def submit_completion(request, pk):
+    """Admin/Staff fills completion info, triggers computation generation."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if request.method == "POST":
+        completion, _ = CompletionInfo.objects.update_or_create(
+            service_request=service_request,
+            defaults={
+                "date_completed": request.POST.get("date_completed"),
+                "time_required": request.POST.get("time_required", ""),
+                "witnessed_by_name": request.POST.get("witnessed_by_name", ""),
+                "declogger_no": request.POST.get("declogger_no", ""),
+                "fuel_consumption": request.POST.get("fuel_consumption") or None,
+                "driver_name": request.POST.get("driver_name", ""),
+                "helper1_name": request.POST.get("helper1_name", ""),
+                "helper2_name": request.POST.get("helper2_name", ""),
+                "helper3_name": request.POST.get("helper3_name", ""),
+            },
+        )
+        for field_name in [
+            "witnessed_by_signature", "driver_signature",
+            "helper1_signature", "helper2_signature", "helper3_signature",
+        ]:
+            f = request.FILES.get(field_name)
+            if f:
+                setattr(completion, field_name, f)
+        completion.save()
+
+        # Auto-generate computation
+        _auto_generate_computation(service_request, request.user)
+
+        messages.success(request, "Completion info saved. Computation letter generated.")
+        return redirect("services:request_detail", pk=pk)
+
+    return render(request, "services/completion_form.html", {"sr": service_request})
+
+
+def _auto_generate_computation(service_request, admin_user):
+    """Create or update ServiceComputation after completion info is saved."""
+    from dashboard.models import ServiceComputation
+
+    completion = getattr(service_request, "completion_info", None)
+    is_outside = not service_request.is_within_bayawan
+
+    personnel = completion.personnel_count if completion else 4
+
+    comp, _ = ServiceComputation.objects.update_or_create(
+        service_request=service_request,
+        defaults={
+            "is_outside_bayawan": is_outside,
+            "cubic_meters": service_request.cubic_meters or Decimal("5"),
+            "distance_km": Decimal("0"),
+            "trips": 1,
+            "personnel_count": personnel,
+            "prepared_by": admin_user,
+        },
+    )
+    # save triggers calculate_charges
+    comp.save()
+
+    service_request.fee_amount = comp.total_charge
+    service_request.status = ServiceRequest.Status.COMPUTATION_SENT
+    service_request.save()
+
+    Notification.objects.create(
+        user=service_request.consumer,
+        message="Your computation letter is ready. You can now view and download it.",
+        notification_type=Notification.NotificationType.COMPUTATION_READY,
+        related_request=service_request,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Computation letter view
+# ---------------------------------------------------------------------------
+
+@login_required
+def view_computation(request, pk):
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if (
+        not request.user.is_admin()
+        and not request.user.is_staff_member()
+        and service_request.consumer != request.user
+    ):
+        messages.error(request, "Permission denied.")
+        return redirect("services:request_list")
+
+    computation = getattr(service_request, "computation", None)
+    if not computation:
+        messages.warning(request, "Computation not yet available.")
+        return redirect("services:request_detail", pk=pk)
+
+    return render(request, "services/computation_letter.html", {
+        "sr": service_request,
+        "comp": computation,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Customer receipt upload
+# ---------------------------------------------------------------------------
+
+@login_required
+def upload_receipt(request, pk):
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.consumer != request.user and not request.user.is_admin():
+        messages.error(request, "Permission denied.")
+        return redirect("services:request_list")
+
     if request.method == "POST":
         receipt = request.FILES.get("treasurer_receipt")
         if receipt:
             service_request.treasurer_receipt = receipt
             service_request.payment_confirmed_at = timezone.now()
+            service_request.status = ServiceRequest.Status.PAID
             service_request.save()
-            Notification.objects.create(
-                user=service_request.consumer,
-                message=f"Payment confirmed for your {service_request.get_service_type_display()} request.",
-            )
-            messages.success(request, "Payment confirmed successfully.")
-        return redirect("services:request_detail", pk=pk)
-    return render(request, "services/confirm_payment.html", {"request": service_request})
 
+            admin_users = User.objects.filter(role=User.Role.ADMIN)
+            for admin in admin_users:
+                Notification.objects.create(
+                    user=admin,
+                    message=f"Payment receipt uploaded by {service_request.client_name} for request #{service_request.id}.",
+                    notification_type=Notification.NotificationType.PAYMENT_UPLOADED,
+                    related_request=service_request,
+                )
+            messages.success(request, "Receipt uploaded successfully.")
+        else:
+            messages.error(request, "Please select a file to upload.")
+        return redirect("services:request_detail", pk=pk)
+
+    return render(request, "services/upload_receipt.html", {"sr": service_request})
+
+
+# ---------------------------------------------------------------------------
+# Print application
+# ---------------------------------------------------------------------------
+
+@login_required
+def print_application(request, pk):
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    inspection = getattr(service_request, "inspection_detail", None)
+    completion = getattr(service_request, "completion_info", None)
+    return render(request, "services/print_application.html", {
+        "sr": service_request,
+        "inspection": inspection,
+        "completion": completion,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Mark request complete
+# ---------------------------------------------------------------------------
 
 @login_required
 @role_required("ADMIN", "STAFF")
 def complete_request(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
-    if request.user.is_staff_member() and service_request.schedule.assigned_staff != request.user:
-        messages.error(request, "You can only complete requests assigned to you.")
-        return redirect("services:request_list")
     service_request.status = ServiceRequest.Status.COMPLETED
     service_request.save()
     Notification.objects.create(
         user=service_request.consumer,
         message=f"Your {service_request.get_service_type_display()} request has been completed.",
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
     )
     messages.success(request, "Request marked as completed.")
     return redirect("services:request_detail", pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+@login_required
+def notification_list(request):
+    notifications = Notification.objects.filter(user=request.user).order_by("-created_at")[:50]
+    return render(request, "services/notifications.html", {"notifications": notifications})
+
+
+@login_required
+def mark_notification_read(request, pk):
+    notif = get_object_or_404(Notification, pk=pk, user=request.user)
+    notif.is_read = True
+    notif.save()
+    if notif.related_request:
+        return redirect("services:request_detail", pk=notif.related_request.pk)
+    return redirect("services:notification_list")

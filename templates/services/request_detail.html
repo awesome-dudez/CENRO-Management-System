@@ -1,40 +1,205 @@
 {% extends "base.html" %}
-{% block title %}Request Details{% endblock %}
+{% block title %}Request #{{ sr.id }} Details{% endblock %}
 {% block content %}
-<div class="container">
-    <h1>Service Request #{{ request.id }}</h1>
-    <div class="detail-card">
-        <p><strong>Service Type:</strong> {{ request.get_service_type_display }}</p>
-        <p><strong>Consumer:</strong> {{ request.consumer.get_full_name }}</p>
-        <p><strong>Barangay:</strong> {{ request.barangay }}</p>
-        <p><strong>Address:</strong> {{ request.address }}</p>
-        <p><strong>Preferred Date:</strong> {{ request.preferred_date }}</p>
-        <p><strong>Preferred Time:</strong> {{ request.preferred_time }}</p>
-        <p><strong>Status:</strong> <span class="status-badge status-{{ request.status|lower }}">{{ request.get_status_display }}</span></p>
-        {% if request.fee_amount %}
-        <p><strong>Fee:</strong> ₱{{ request.fee_amount }}</p>
-        {% endif %}
-        {% if request.bawad_receipt %}
-        <p><strong>BAWAD Receipt:</strong> <a href="{{ request.bawad_receipt.url }}">View</a></p>
-        {% endif %}
-        {% if request.treasurer_receipt %}
-        <p><strong>Treasurer Receipt:</strong> <a href="{{ request.treasurer_receipt.url }}">View</a></p>
-        {% endif %}
-        {% if user.is_admin %}
-        <div class="action-buttons">
-            {% if not request.fee_amount %}
-            <a href="{% url 'services:compute_fee' request.pk %}" class="btn btn-warning">Compute Fee</a>
-            {% endif %}
-            {% if request.fee_amount and not request.payment_confirmed_at %}
-            <a href="{% url 'services:confirm_payment' request.pk %}" class="btn btn-info">Confirm Payment</a>
-            {% endif %}
-            {% if not request.schedule %}
-            <a href="{% url 'scheduling:create_schedule' request.pk %}" class="btn btn-success">Create Schedule</a>
-            {% endif %}
-            {% if request.status != 'COMPLETED' %}
-            <a href="{% url 'services:complete_request' request.pk %}" class="btn btn-primary">Mark Complete</a>
+<style>
+    .detail-container { max-width: 900px; margin: 30px auto; padding: 20px; }
+    .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 12px; }
+    .detail-header h1 { font-size: 24px; color: #2d3142; margin: 0; }
+    .status-pill { padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600; color: white; background: #6c757d; }
+    .status-pill.submitted { background: #f39c12; }
+    .status-pill.under_review { background: #3498db; }
+    .status-pill.inspection_scheduled { background: #9b59b6; }
+    .status-pill.inspected { background: #1abc9c; }
+    .status-pill.computation_sent { background: #e67e22; }
+    .status-pill.awaiting_payment { background: #e74c3c; }
+    .status-pill.paid { background: #27ae60; }
+    .status-pill.desludging_scheduled { background: #2980b9; }
+    .status-pill.completed { background: #2ecc71; }
+    .section-card { background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    .section-card h3 { margin-top: 0; color: #2d3142; font-size: 18px; border-bottom: 2px solid #1abc9c; padding-bottom: 10px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
+    .info-item label { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
+    .info-item span { font-size: 14px; color: #2d3142; font-weight: 500; }
+    .action-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+    .action-bar .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; color: white; display: inline-block; }
+    .btn-teal { background: #1abc9c; }
+    .btn-teal:hover { background: #16a085; }
+    .btn-blue { background: #3498db; }
+    .btn-blue:hover { background: #2980b9; }
+    .btn-orange { background: #e67e22; }
+    .btn-orange:hover { background: #d35400; }
+    .btn-green { background: #27ae60; }
+    .btn-green:hover { background: #219a52; }
+    .btn-purple { background: #9b59b6; }
+    .btn-purple:hover { background: #8e44ad; }
+    .btn-outline { background: transparent; border: 2px solid #1abc9c; color: #1abc9c; }
+    .btn-outline:hover { background: #1abc9c; color: white; }
+    .inline-form { display: inline; }
+    .assign-form { margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; }
+    .assign-form label { display: block; margin-bottom: 6px; font-weight: 600; color: #2d3142; }
+    .assign-form select, .assign-form input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; width: 100%; margin-bottom: 12px; }
+    .assign-form button { padding: 10px 24px; }
+</style>
+
+<div class="detail-container">
+    <div class="detail-header">
+        <h1>Service Request #{{ sr.id }}</h1>
+        <span class="status-pill {{ sr.status|lower }}">{{ sr.get_status_display }}</span>
+    </div>
+
+    <!-- Customer Information -->
+    <div class="section-card">
+        <h3>Customer Information</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Client Name</label><span>{{ sr.client_name }}</span></div>
+            <div class="info-item"><label>Consumer Account</label><span>{{ sr.consumer.get_full_name }}</span></div>
+            <div class="info-item"><label>Contact Number</label><span>{{ sr.contact_number }}</span></div>
+            <div class="info-item"><label>Request Date</label><span>{{ sr.request_date|date:"M d, Y" }}</span></div>
+            <div class="info-item"><label>Service Type</label><span>{{ sr.get_service_type_display }}</span></div>
+            <div class="info-item"><label>Public / Private</label><span>{{ sr.get_public_private_display }}</span></div>
+            <div class="info-item"><label>Connected to BAWAD</label><span>{% if sr.connected_to_bawad %}Yes{% else %}No{% endif %}</span></div>
+            {% if sr.bawad_proof %}
+            <div class="info-item"><label>BAWAD Proof</label><span><a href="{{ sr.bawad_proof.url }}" target="_blank">View Document</a></span></div>
             {% endif %}
         </div>
+    </div>
+
+    <!-- Location -->
+    <div class="section-card">
+        <h3>Service Location</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Barangay</label><span>{{ sr.barangay }}</span></div>
+            <div class="info-item"><label>Address</label><span>{{ sr.address|default:"N/A" }}</span></div>
+            {% if sr.gps_latitude and sr.gps_longitude %}
+            <div class="info-item"><label>GPS Coordinates</label><span>{{ sr.gps_latitude }}, {{ sr.gps_longitude }}</span></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Inspection Details (if exists) -->
+    {% if sr.inspection_detail %}
+    <div class="section-card">
+        <h3>Inspection Details</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Inspection Date</label><span>{{ sr.inspection_detail.inspection_date|date:"M d, Y" }}</span></div>
+            <div class="info-item"><label>Inspected By</label><span>{{ sr.inspection_detail.inspected_by }}</span></div>
+            <div class="info-item"><label>Remarks</label><span>{{ sr.inspection_detail.remarks|default:"None" }}</span></div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Completion Info (if exists) -->
+    {% if sr.completion_info %}
+    <div class="section-card">
+        <h3>Completion Information</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Date Completed</label><span>{{ sr.completion_info.date_completed|date:"M d, Y" }}</span></div>
+            <div class="info-item"><label>Time Required</label><span>{{ sr.completion_info.time_required }}</span></div>
+            <div class="info-item"><label>Witnessed By</label><span>{{ sr.completion_info.witnessed_by_name|default:"N/A" }}</span></div>
+            <div class="info-item"><label>Declogger No.</label><span>{{ sr.completion_info.declogger_no|default:"N/A" }}</span></div>
+            <div class="info-item"><label>Fuel Consumption</label><span>{% if sr.completion_info.fuel_consumption %}{{ sr.completion_info.fuel_consumption }} {{ sr.completion_info.fuel_unit }}{% else %}N/A{% endif %}</span></div>
+            <div class="info-item"><label>Driver</label><span>{{ sr.completion_info.driver_name }}</span></div>
+            {% if sr.completion_info.helper1_name %}
+            <div class="info-item"><label>Helper 1</label><span>{{ sr.completion_info.helper1_name }}</span></div>
+            {% endif %}
+            {% if sr.completion_info.helper2_name %}
+            <div class="info-item"><label>Helper 2</label><span>{{ sr.completion_info.helper2_name }}</span></div>
+            {% endif %}
+            {% if sr.completion_info.helper3_name %}
+            <div class="info-item"><label>Helper 3</label><span>{{ sr.completion_info.helper3_name }}</span></div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Computation -->
+    {% if sr.computation %}
+    <div class="section-card">
+        <h3>Computation</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Total Charge</label><span style="font-size:18px;color:#1abc9c;font-weight:700;">&#8369;{{ sr.computation.total_charge }}</span></div>
+            <div class="info-item"><label>Payment Status</label><span>{{ sr.computation.get_payment_status_display }}</span></div>
+        </div>
+        <div style="margin-top:12px;">
+            <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-outline" style="font-size:13px;">View Computation Letter</a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Payment -->
+    {% if sr.treasurer_receipt %}
+    <div class="section-card">
+        <h3>Payment Receipt</h3>
+        <div class="info-item"><label>Receipt</label><span><a href="{{ sr.treasurer_receipt.url }}" target="_blank">View Receipt</a></span></div>
+        {% if sr.payment_confirmed_at %}
+        <div class="info-item" style="margin-top:8px;"><label>Confirmed At</label><span>{{ sr.payment_confirmed_at|date:"M d, Y H:i" }}</span></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Scheduling -->
+    {% if sr.scheduled_desludging_date %}
+    <div class="section-card">
+        <h3>Desludging Schedule</h3>
+        <div class="info-item"><label>Scheduled Date</label><span style="font-size:16px;font-weight:600;">{{ sr.scheduled_desludging_date|date:"M d, Y" }}</span></div>
+    </div>
+    {% endif %}
+
+    <!-- Inspector Assignment -->
+    {% if sr.assigned_inspector %}
+    <div class="section-card">
+        <h3>Assigned Inspector</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Inspector</label><span>{{ sr.assigned_inspector.get_full_name }}</span></div>
+            {% if sr.inspection_date %}
+            <div class="info-item"><label>Inspection Date</label><span>{{ sr.inspection_date|date:"M d, Y" }}</span></div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ACTION BAR -->
+    <div class="action-bar">
+        <a href="{% url 'services:print_application' sr.pk %}" class="btn btn-outline" target="_blank">Print Application</a>
+
+        {% if user.is_admin or user.is_staff_member %}
+            {% if sr.status == "SUBMITTED" %}
+            <form method="post" action="{% url 'dashboard:approve_request' sr.pk %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-blue">Mark Under Review</button>
+            </form>
+            {% endif %}
+
+            {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
+            <a href="{% url 'dashboard:assign_inspector' sr.pk %}" class="btn btn-purple">Assign Inspector</a>
+            {% endif %}
+
+            {% if sr.status == "INSPECTION_SCHEDULED" %}
+            <a href="{% url 'services:submit_inspection' sr.pk %}" class="btn btn-teal">Fill Inspection</a>
+            {% endif %}
+
+            {% if sr.status == "INSPECTED" %}
+            <a href="{% url 'services:submit_completion' sr.pk %}" class="btn btn-orange">Fill Completion Info</a>
+            {% endif %}
+
+            {% if sr.status == "PAID" %}
+            <a href="{% url 'dashboard:schedule_desludging' sr.pk %}" class="btn btn-blue">Schedule Desludging</a>
+            {% endif %}
+
+            {% if sr.status == "DESLUDGING_SCHEDULED" %}
+            <form method="post" action="{% url 'services:complete_request' sr.pk %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-green">Mark Completed</button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        {% if sr.consumer == user %}
+            {% if sr.status == "COMPUTATION_SENT" or sr.status == "AWAITING_PAYMENT" %}
+            <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-orange">View Computation</a>
+            <a href="{% url 'services:upload_receipt' sr.pk %}" class="btn btn-green">Upload Payment Receipt</a>
+            {% endif %}
         {% endif %}
     </div>
 </div>

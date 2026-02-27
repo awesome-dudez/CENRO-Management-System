@@ -1,188 +1,176 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Consumer Registration{% endblock %}
 {% block content %}
 <div class="auth-container">
-    <div class="auth-card" style="max-width: 500px;">
+    <div class="auth-card" style="max-width: 560px;">
         <h1 style="color: #2d8659; text-align: center; margin-bottom: 30px;">User Account Registration</h1>
-        
+
         {% if form.non_field_errors %}
         <div class="alert alert-danger">
-            {% for error in form.non_field_errors %}
-                <p>{{ error }}</p>
-            {% endfor %}
+            {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
         </div>
         {% endif %}
-        
+
         <form method="post" class="auth-form" novalidate>
             {% csrf_token %}
-            
+
             <!-- Username -->
             <div class="form-group mb-3">
-                <label for="{{ form.username.id_for_label }}" class="form-label">Username <span class="required">*</span></label>
+                <label for="{{ form.username.id_for_label }}" class="form-label">Username <span class="req">*</span></label>
                 {{ form.username }}
-                {% if form.username.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.username.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="username-error" style="display:none;"></small>
-                {% endif %}
+                {% if form.username.errors %}<small class="text-danger d-block mt-1">{{ form.username.errors.0 }}</small>{% endif %}
                 <small class="form-text text-muted d-block mt-1">150 characters or fewer. Letters, digits and @/./+/-/_ only.</small>
             </div>
-            
-            <!-- First Name -->
-            <div class="form-group mb-3">
-                <label for="{{ form.first_name.id_for_label }}" class="form-label">First name <span class="required">*</span></label>
-                {{ form.first_name }}
-                {% if form.first_name.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.first_name.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="first_name-error" style="display:none;"></small>
-                {% endif %}
+
+            <!-- First Name / Last Name -->
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label for="{{ form.first_name.id_for_label }}" class="form-label">First name <span class="req">*</span></label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}<small class="text-danger d-block mt-1">{{ form.first_name.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.last_name.id_for_label }}" class="form-label">Last name <span class="req">*</span></label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}<small class="text-danger d-block mt-1">{{ form.last_name.errors.0 }}</small>{% endif %}
+                </div>
             </div>
-            
-            <!-- Last Name -->
-            <div class="form-group mb-3">
-                <label for="{{ form.last_name.id_for_label }}" class="form-label">Last name <span class="required">*</span></label>
-                {{ form.last_name }}
-                {% if form.last_name.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.last_name.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="last_name-error" style="display:none;"></small>
-                {% endif %}
+
+            <!-- Gender + Birthdate -->
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label class="form-label">Gender <span class="req">*</span></label>
+                    <div class="gender-toggle-group">
+                        {% for radio in form.gender %}
+                        <label class="gender-option">
+                            {{ radio.tag }}
+                            <span class="gender-icon">
+                                {% if radio.choice_label == "Male" %}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"/><line x1="14" y1="10" x2="21" y2="3"/><polyline points="15,3 21,3 21,9"/></svg>
+                                {% else %}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><line x1="12" y1="13" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+                                {% endif %}
+                            </span>
+                            <span>{{ radio.choice_label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% if form.gender.errors %}<small class="text-danger d-block mt-1">{{ form.gender.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.birthdate.id_for_label }}" class="form-label">Birthdate <span class="req">*</span></label>
+                    {{ form.birthdate }}
+                    {% if form.birthdate.errors %}<small class="text-danger d-block mt-1">{{ form.birthdate.errors.0 }}</small>{% endif %}
+                </div>
             </div>
-            
-            <!-- Email -->
-            <div class="form-group mb-3">
-                <label for="{{ form.email.id_for_label }}" class="form-label">Email address <span class="required">*</span></label>
-                {{ form.email }}
-                {% if form.email.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.email.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="email-error" style="display:none;"></small>
-                {% endif %}
-                <small class="form-text text-muted d-block mt-1">Enter a valid email (e.g. user@domain.com).</small>
+
+            <!-- Email + Mobile -->
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label for="{{ form.email.id_for_label }}" class="form-label">Email address <span class="req">*</span></label>
+                    {{ form.email }}
+                    {% if form.email.errors %}<small class="text-danger d-block mt-1">{{ form.email.errors.0 }}</small>{% endif %}
+                    <small class="form-text text-muted d-block mt-1">e.g. user@domain.com</small>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.mobile_number.id_for_label }}" class="form-label">Mobile Number <span class="req">*</span></label>
+                    {{ form.mobile_number }}
+                    {% if form.mobile_number.errors %}<small class="text-danger d-block mt-1">{{ form.mobile_number.errors.0 }}</small>{% endif %}
+                    <small class="form-text text-muted d-block mt-1">09XX-XXX-XXXX</small>
+                </div>
             </div>
-            
+
             <!-- Password -->
             <div class="form-group mb-3">
-                <label for="{{ form.password1.id_for_label }}" class="form-label">Password <span class="required">*</span></label>
+                <label for="{{ form.password1.id_for_label }}" class="form-label">Password <span class="req">*</span></label>
                 <div class="password-input-wrapper">
                     {{ form.password1 }}
-                    <button type="button" class="password-toggle" aria-label="Show password" data-target="{{ form.password1.id_for_label }}" title="Show password">👁</button>
+                    <button type="button" class="password-toggle" data-target="{{ form.password1.id_for_label }}">&#128065;</button>
                 </div>
-                {% if form.password1.errors %}
-                    <small class="text-danger d-block mt-1">
-                        {% for error in form.password1.errors %}
-                            {{ error }}<br>
-                        {% endfor %}
-                    </small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="password1-error" style="display:none;"></small>
-                {% endif %}
+                {% if form.password1.errors %}<small class="text-danger d-block mt-1">{% for e in form.password1.errors %}{{ e }}<br>{% endfor %}</small>{% endif %}
                 <small class="form-text text-muted d-block mt-2">
-                    <ul style="margin: 5px 0; padding-left: 20px;">
-                        <li>Your password can't be too similar to your other personal information.</li>
-                        <li>Your password must contain at least 8 characters.</li>
-                        <li>Your password can't be a commonly used password.</li>
-                        <li>Your password can't be entirely numeric.</li>
+                    <ul style="margin:5px 0;padding-left:20px;">
+                        <li>At least 8 characters.</li>
+                        <li>Can't be entirely numeric or a common password.</li>
                     </ul>
                 </small>
             </div>
-            
+
             <!-- Password Confirmation -->
             <div class="form-group mb-3">
-                <label for="{{ form.password2.id_for_label }}" class="form-label">Password confirmation <span class="required">*</span></label>
+                <label for="{{ form.password2.id_for_label }}" class="form-label">Confirm password <span class="req">*</span></label>
                 <div class="password-input-wrapper">
                     {{ form.password2 }}
-                    <button type="button" class="password-toggle" aria-label="Show password" data-target="{{ form.password2.id_for_label }}" title="Show password">👁</button>
+                    <button type="button" class="password-toggle" data-target="{{ form.password2.id_for_label }}">&#128065;</button>
                 </div>
-                {% if form.password2.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.password2.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="password2-error" style="display:none;"></small>
-                {% endif %}
-                <small class="form-text text-muted d-block mt-1">Enter the same password as before, for verification.</small>
+                {% if form.password2.errors %}<small class="text-danger d-block mt-1">{{ form.password2.errors.0 }}</small>{% endif %}
             </div>
-            
-            <!-- Location (Within Bayawan / Outside) -->
+
+            <!-- ===== ADDRESS SECTION ===== -->
+            <div class="section-divider">
+                <span>Address Information</span>
+            </div>
+
+            <!-- Address Mode Toggle -->
             <div class="form-group mb-3">
-                <label class="form-label">Location:</label>
-                <input type="hidden" name="location_type" id="id_location_type" value="{{ form.location_type.value|default:'within' }}">
-                <div class="location-toggle-group">
-                    <button type="button" class="location-toggle-btn active" data-value="within">Within Bayawan City</button>
-                    <button type="button" class="location-toggle-btn" data-value="outside">Outside</button>
+                <div class="address-mode-toggle">
+                    <button type="button" class="mode-btn active" data-mode="map">Use Map</button>
+                    <button type="button" class="mode-btn" data-mode="manual">Manual Input</button>
                 </div>
-                {% if form.location_type.errors %}
-                    <small class="text-danger">{{ form.location_type.errors.0 }}</small>
-                {% endif %}
             </div>
-            
-            <!-- Municipality (shown when Outside) -->
-            <div class="form-group mb-3" id="municipality-group" style="display: none;">
-                <label for="{{ form.municipality.id_for_label }}" class="form-label">Municipality <span class="required">*</span></label>
-                {{ form.municipality }}
-                {% if form.municipality.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.municipality.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="municipality-error" style="display:none;"></small>
-                {% endif %}
-                <small class="form-text text-muted d-block mt-1">Enter your municipality or city (required for locations outside Bayawan City).</small>
-            </div>
-            
-            <!-- Barangay (shown when Within) -->
-            <div class="form-group mb-3" id="barangay-group">
-                <label for="{{ form.barangay.id_for_label }}" class="form-label">Barangay <span class="required-within">*</span></label>
-                {{ form.barangay }}
-                {% if form.barangay.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.barangay.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="barangay-error" style="display:none;"></small>
-                {% endif %}
-            </div>
-            
-            <!-- Address -->
-            <div class="form-group mb-3">
-                <label for="{{ form.address.id_for_label }}" class="form-label">Address <span class="required">*</span></label>
-                {{ form.address }}
-                {% if form.address.errors %}
-                    <small class="text-danger d-block mt-1">{{ form.address.errors.0 }}</small>
-                {% else %}
-                    <small class="field-error-msg text-danger d-block mt-1" id="address-error" style="display:none;"></small>
-                {% endif %}
-            </div>
-            
-            <!-- Location Picker Map -->
-            <div class="form-group mb-3">
-                <label class="form-label">📍 Select Your Location <span style="color: #999;">(Optional)</span></label>
-                <small class="form-text text-muted d-block mb-2">
-                    Click on the map to mark your property location. This helps us calculate travel costs and find you easily.
-                </small>
-                
-                <!-- Map Container -->
-                <div id="map" style="height: 400px; border-radius: 5px; border: 2px solid #ddd; margin-bottom: 10px;"></div>
-                
-                <!-- Selected Coordinates Display -->
-                <div id="coordinates-display" style="padding: 10px; background: #f8f9fa; border-radius: 5px; margin-bottom: 10px; display: none;">
-                    <small>
-                        <strong>Selected Location:</strong><br>
-                        Latitude: <span id="lat-display">-</span><br>
-                        Longitude: <span id="lon-display">-</span>
-                    </small>
+
+            <!-- MAP MODE -->
+            <div id="map-mode-section">
+                <div class="form-group mb-2">
+                    <div class="map-toolbar">
+                        <button type="button" class="map-tool-btn" id="useDeviceLocation">
+                            <span style="font-size:16px;">&#128205;</span> Use My Location
+                        </button>
+                        <span class="map-hint">or click the map to drop a pin</span>
+                    </div>
+                    <div id="reg-map" style="height:320px;border-radius:8px;border:2px solid #2d8659;margin-bottom:8px;"></div>
+                    <div id="map-status-bar" class="map-status-bar" style="display:none;">
+                        <span id="map-status-text"></span>
+                        <button type="button" id="clearPinBtn" class="clear-pin-btn">Clear Pin</button>
+                    </div>
                 </div>
-                
-                <!-- Hidden Fields -->
-                {{ form.gps_latitude }}
-                {{ form.gps_longitude }}
-                
-                <!-- Clear Location Button -->
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-location" style="display: none;">
-                    Clear Location
-                </button>
             </div>
-            
+
+            <!-- Separate address fields (always visible, auto-filled from map or typed manually) -->
+            <div class="form-group mb-3">
+                <label for="{{ form.street_address.id_for_label }}" class="form-label">Street / House No. / Purok</label>
+                {{ form.street_address }}
+                {% if form.street_address.errors %}<small class="text-danger d-block mt-1">{{ form.street_address.errors.0 }}</small>{% endif %}
+            </div>
+
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label for="{{ form.barangay.id_for_label }}" class="form-label">Barangay <span class="req">*</span></label>
+                    {{ form.barangay }}
+                    {% if form.barangay.errors %}<small class="text-danger d-block mt-1">{{ form.barangay.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.municipality.id_for_label }}" class="form-label">City / Municipality <span class="req">*</span></label>
+                    {{ form.municipality }}
+                    {% if form.municipality.errors %}<small class="text-danger d-block mt-1">{{ form.municipality.errors.0 }}</small>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="{{ form.province.id_for_label }}" class="form-label">Province <span class="req">*</span></label>
+                {{ form.province }}
+                {% if form.province.errors %}<small class="text-danger d-block mt-1">{{ form.province.errors.0 }}</small>{% endif %}
+            </div>
+
+            <!-- Hidden GPS fields -->
+            {{ form.gps_latitude }}
+            {{ form.gps_longitude }}
+
             <button type="submit" class="btn btn-success w-100 mt-4">Register</button>
         </form>
-        
-        <p class="auth-link" style="text-align: center; margin-top: 20px;">
+
+        <p class="auth-link" style="text-align:center;margin-top:20px;">
             Already have an account? <a href="{% url 'accounts:login' %}">Login</a>
         </p>
     </div>
@@ -190,322 +178,270 @@
 
 <style>
     .auth-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        display: flex; justify-content: center; align-items: center;
         min-height: calc(100vh - 100px);
         background: linear-gradient(135deg, #2d8659 0%, #5fa89f 100%);
         padding: 20px;
     }
-    
     .auth-card {
-        background: white;
-        border-radius: 10px;
-        padding: 40px;
+        background: white; border-radius: 10px; padding: 40px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
-    
-    .form-label {
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 8px;
-    }
-    
+    .form-label { font-weight: 600; color: #333; margin-bottom: 8px; display: block; }
     .form-control {
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 10px 12px;
-        font-size: 14px;
+        border: 1px solid #ddd; border-radius: 5px;
+        padding: 10px 12px; font-size: 14px; width: 100%; box-sizing: border-box;
     }
-    
-    .form-control:focus {
-        border-color: #2d8659;
-        box-shadow: 0 0 0 0.2rem rgba(45, 134, 89, 0.25);
-    }
-    
+    .form-control:focus { border-color: #2d8659; box-shadow: 0 0 0 0.2rem rgba(45,134,89,0.25); outline: none; }
+    .form-control.is-invalid { border-color: #dc3545; box-shadow: 0 0 0 0.2rem rgba(220,53,69,0.25); }
     .btn-success {
-        background-color: #2d8659;
-        border-color: #2d8659;
-        font-weight: 600;
-        padding: 12px;
+        background-color: #2d8659; border-color: #2d8659; font-weight: 600;
+        padding: 12px; border: none; border-radius: 5px; color: white;
+        cursor: pointer; font-size: 16px;
     }
-    
-    .btn-success:hover {
-        background-color: #1f5c3d;
-        border-color: #1f5c3d;
+    .btn-success:hover { background-color: #1f5c3d; }
+    .auth-link { color: #666; }
+    .auth-link a { color: #2d8659; text-decoration: none; font-weight: 600; }
+    .auth-link a:hover { text-decoration: underline; }
+    .req { color: #dc3545; font-weight: 600; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    .gender-toggle-group { display: flex; gap: 8px; margin-top: 2px; }
+    .gender-option {
+        flex: 1; display: flex; align-items: center; gap: 6px;
+        padding: 9px 12px; border: 2px solid #ddd; border-radius: 6px;
+        cursor: pointer; font-size: 14px; font-weight: 500; color: #555;
+        transition: all 0.15s;
     }
-    
-    .auth-link {
-        color: #666;
+    .gender-option:hover { border-color: #2d8659; color: #2d8659; }
+    .gender-option input[type="radio"] { display: none; }
+    .gender-option:has(input:checked) {
+        border-color: #2d8659; background: #f0fdf4; color: #2d8659; font-weight: 600;
     }
-    
-    .auth-link a {
-        color: #2d8659;
-        text-decoration: none;
-        font-weight: 600;
-    }
-    
-    .auth-link a:hover {
-        text-decoration: underline;
-    }
-    
-    .location-toggle-group {
-        display: flex;
-        gap: 10px;
-        margin-top: 8px;
-    }
-    
-    .location-toggle-btn {
-        flex: 1;
-        padding: 10px 16px;
-        border: 2px solid #ddd;
-        border-radius: 5px;
-        background: white;
-        color: #666;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    
-    .location-toggle-btn:hover {
-        border-color: #2d8659;
-        color: #2d8659;
-    }
-    
-    .location-toggle-btn.active {
-        background: #2d8659;
-        border-color: #2d8659;
-        color: white;
-    }
-    
-    .required, .required-within {
-        color: #dc3545;
-        font-weight: 600;
-    }
-    
-    .form-control.is-invalid, .form-control.field-error {
-        border-color: #dc3545;
-        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
-    }
-    
-    .form-group.has-error .form-control {
-        border-color: #dc3545;
-    }
-    
-    .password-input-wrapper {
-        position: relative;
-        display: flex;
-        align-items: center;
-    }
-    
-    .password-input-wrapper .form-control {
-        flex: 1;
-        padding-right: 42px;
-    }
-    
+    .gender-icon { display: flex; align-items: center; }
+    .password-input-wrapper { position: relative; display: flex; align-items: center; }
+    .password-input-wrapper .form-control { flex: 1; padding-right: 42px; }
     .password-toggle {
-        position: absolute;
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-        background: none;
-        border: none;
-        padding: 6px;
-        cursor: pointer;
-        color: #666;
-        font-size: 18px;
-        line-height: 1;
-        border-radius: 4px;
+        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+        background: none; border: none; padding: 6px; cursor: pointer; color: #666;
+        font-size: 18px; line-height: 1; border-radius: 4px;
     }
-    
-    .password-toggle:hover {
-        color: #2d8659;
+    .password-toggle:hover { color: #2d8659; }
+
+    .section-divider {
+        display: flex; align-items: center; margin: 24px 0 16px;
+        font-weight: 700; color: #2d8659; font-size: 15px;
     }
+    .section-divider::before, .section-divider::after {
+        content: ''; flex: 1; height: 1px; background: #cde6d6;
+    }
+    .section-divider span { padding: 0 12px; }
+
+    .address-mode-toggle { display: flex; gap: 6px; }
+    .mode-btn {
+        flex: 1; padding: 8px 14px; border: 2px solid #e0e0e0; border-radius: 6px;
+        background: white; color: #666; font-weight: 600; font-size: 13px;
+        cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .mode-btn:hover { border-color: #2d8659; color: #2d8659; }
+    .mode-btn.active { background: #2d8659; border-color: #2d8659; color: white; }
+
+    .map-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .map-tool-btn {
+        padding: 8px 16px; background: #f0fdf4; border: 2px solid #2d8659;
+        border-radius: 6px; color: #2d8659; font-weight: 600; font-size: 13px;
+        cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+    }
+    .map-tool-btn:hover { background: #2d8659; color: white; }
+    .map-tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .map-hint { font-size: 13px; color: #999; }
+
+    .map-status-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 12px; background: #d4edda; border-radius: 6px; margin-bottom: 10px;
+        font-size: 13px; color: #155724;
+    }
+    .clear-pin-btn {
+        padding: 4px 12px; background: white; border: 1px solid #ccc; border-radius: 4px;
+        font-size: 12px; cursor: pointer; color: #dc3545; font-weight: 600;
+    }
+    .clear-pin-btn:hover { background: #dc3545; color: white; border-color: #dc3545; }
 </style>
 
-<!-- Leaflet Map Library -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Password visibility toggle
-        document.querySelectorAll('.password-toggle').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var targetId = this.getAttribute('data-target');
-                var input = document.getElementById(targetId);
-                if (!input) return;
-                if (input.type === 'password') {
-                    input.type = 'text';
-                    this.setAttribute('aria-label', 'Hide password');
-                    this.setAttribute('title', 'Hide password');
-                } else {
-                    input.type = 'password';
-                    this.setAttribute('aria-label', 'Show password');
-                    this.setAttribute('title', 'Show password');
-                }
-            });
+document.addEventListener('DOMContentLoaded', function() {
+
+    // ---- Password toggle ----
+    document.querySelectorAll('.password-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var input = document.getElementById(this.getAttribute('data-target'));
+            if (input) input.type = input.type === 'password' ? 'text' : 'password';
         });
-        
-        // Location toggle buttons - show/hide municipality vs barangay
-        const locationTypeInput = document.getElementById('{{ form.location_type.id_for_label }}');
-        const municipalityGroup = document.getElementById('municipality-group');
-        const municipalityInput = document.getElementById('{{ form.municipality.id_for_label }}');
-        const barangayGroup = document.getElementById('barangay-group');
-        const barangayInput = document.getElementById('{{ form.barangay.id_for_label }}');
-        
-        function updateLocationFields() {
-            if (!locationTypeInput) return;
-            const isOutside = locationTypeInput.value === 'outside';
-            if (municipalityGroup) municipalityGroup.style.display = isOutside ? 'block' : 'none';
-            if (barangayGroup) barangayGroup.style.display = isOutside ? 'none' : 'block';
-            if (municipalityInput && !isOutside) municipalityInput.value = '';
-            if (barangayInput && isOutside) barangayInput.value = '';
-        }
-        
-        const toggleBtns = document.querySelectorAll('.location-toggle-btn');
-        toggleBtns.forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                toggleBtns.forEach(function(b) { b.classList.remove('active'); });
-                btn.classList.add('active');
-                locationTypeInput.value = btn.dataset.value;
-                updateLocationFields();
-            });
-        });
-        updateLocationFields();
-        
-        const form = document.querySelector('.auth-form');
-        const errMap = {
-            '{{ form.username.id_for_label }}': 'username-error',
-            '{{ form.first_name.id_for_label }}': 'first_name-error',
-            '{{ form.last_name.id_for_label }}': 'last_name-error',
-            '{{ form.email.id_for_label }}': 'email-error',
-            '{{ form.password1.id_for_label }}': 'password1-error',
-            '{{ form.password2.id_for_label }}': 'password2-error',
-            '{{ form.municipality.id_for_label }}': 'municipality-error',
-            '{{ form.barangay.id_for_label }}': 'barangay-error',
-            '{{ form.address.id_for_label }}': 'address-error'
-        };
-        
-        function clearError(fieldId) {
-            const el = document.getElementById(fieldId);
-            const span = errMap[fieldId] ? document.getElementById(errMap[fieldId]) : null;
-            if (el) el.classList.remove('is-invalid', 'field-error');
-            if (span) { span.textContent = ''; span.style.display = 'none'; }
-        }
-        
-        document.querySelectorAll('.form-control').forEach(function(el) {
-            el.addEventListener('input', function() {
-                this.classList.remove('is-invalid', 'field-error');
-                const span = errMap[this.id] ? document.getElementById(errMap[this.id]) : null;
-                if (span) { span.textContent = ''; span.style.display = 'none'; }
-            });
-        });
-        
-        let map, marker;
-        const latField = document.getElementById('{{ form.gps_latitude.id_for_label }}');
-        const lonField = document.getElementById('{{ form.gps_longitude.id_for_label }}');
-        const coordinatesDisplay = document.getElementById('coordinates-display');
-        const latDisplay = document.getElementById('lat-display');
-        const lonDisplay = document.getElementById('lon-display');
-        const clearBtn = document.getElementById('clear-location');
-        
-        // Initialize map - centered on Bayawan City, Negros Oriental, Philippines
-        map = L.map('map').setView([9.1154, 123.4567], 13);
-        
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
-        
-        // Add search control (using a simple search box)
-        const searchContainer = L.Control.extend({
-            options: {
-                position: 'topleft'
-            },
-            onAdd: function(map) {
-                const div = L.DomUtil.create('div', 'leaflet-control leaflet-bar');
-                div.style.background = 'white';
-                div.style.padding = '5px';
-                div.style.borderRadius = '5px';
-                
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.placeholder = 'Search address...';
-                input.style.padding = '5px';
-                input.style.borderRadius = '3px';
-                input.style.border = '1px solid #ccc';
-                input.style.width = '200px';
-                
-                div.appendChild(input);
-                return div;
-            }
-        });
-        
-        new searchContainer().addTo(map);
-        
-        // Handle map clicks to set location
-        map.on('click', function(e) {
-            const lat = e.latlng.lat.toFixed(6);
-            const lon = e.latlng.lng.toFixed(6);
-            
-            // Remove existing marker
-            if (marker) {
-                map.removeLayer(marker);
-            }
-            
-            // Add new marker
-            marker = L.marker([lat, lon], {
-                icon: L.icon({
-                    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-                    shadowSize: [41, 41]
-                })
-            }).addTo(map).bindPopup('📍 Selected Location<br>Lat: ' + lat + '<br>Lon: ' + lon);
-            
-            marker.openPopup();
-            
-            // Update hidden fields
-            latField.value = lat;
-            lonField.value = lon;
-            
-            // Show coordinates display
-            latDisplay.textContent = lat;
-            lonDisplay.textContent = lon;
-            coordinatesDisplay.style.display = 'block';
-            clearBtn.style.display = 'inline-block';
-        });
-        
-        // Clear location button
-        clearBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            if (marker) {
-                map.removeLayer(marker);
-                marker = null;
-            }
-            latField.value = '';
-            lonField.value = '';
-            coordinatesDisplay.style.display = 'none';
-            clearBtn.style.display = 'none';
-        });
-        
-        // Load existing coordinates if available
-        if (latField.value && lonField.value) {
-            const existingLat = parseFloat(latField.value);
-            const existingLon = parseFloat(lonField.value);
-            
-            marker = L.marker([existingLat, existingLon]).addTo(map);
-            map.setView([existingLat, existingLon], 15);
-            
-            latDisplay.textContent = existingLat;
-            lonDisplay.textContent = existingLon;
-            coordinatesDisplay.style.display = 'block';
-            clearBtn.style.display = 'inline-block';
-        }
     });
+
+    // ---- Address mode toggle ----
+    var mapSection = document.getElementById('map-mode-section');
+
+    document.querySelectorAll('.mode-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.mode-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            if (btn.dataset.mode === 'map') {
+                mapSection.style.display = 'block';
+                setTimeout(function() { if (window._regMap) window._regMap.invalidateSize(); }, 100);
+            } else {
+                mapSection.style.display = 'none';
+            }
+        });
+    });
+
+    // ---- Clear errors on input ----
+    document.querySelectorAll('.form-control').forEach(function(el) {
+        el.addEventListener('input', function() { this.classList.remove('is-invalid'); });
+    });
+
+    // ---- Address field references ----
+    var streetField = document.getElementById('{{ form.street_address.id_for_label }}');
+    var barangayField = document.getElementById('{{ form.barangay.id_for_label }}');
+    var municipalityField = document.getElementById('{{ form.municipality.id_for_label }}');
+    var provinceField = document.getElementById('{{ form.province.id_for_label }}');
+    var latField = document.getElementById('{{ form.gps_latitude.id_for_label }}');
+    var lonField = document.getElementById('{{ form.gps_longitude.id_for_label }}');
+    var statusBar = document.getElementById('map-status-bar');
+    var statusText = document.getElementById('map-status-text');
+    var clearPinBtn = document.getElementById('clearPinBtn');
+
+    // ---- MAP SETUP ----
+    var BAYAWAN_CENTER = [9.366667, 122.800000];
+    var map = L.map('reg-map', { zoomControl: true }).setView(BAYAWAN_CENTER, 13);
+    window._regMap = map;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+
+    var pinIcon = L.divIcon({
+        className: 'reg-pin-icon',
+        html: '<div style="width:20px;height:20px;background:#2d8659;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>',
+        iconSize: [26, 26], iconAnchor: [13, 26],
+    });
+
+    var marker = null;
+
+    function placePin(lat, lon, panTo) {
+        if (!marker) {
+            marker = L.marker([lat, lon], { draggable: true, icon: pinIcon }).addTo(map);
+            marker.on('dragend', function() {
+                var pos = marker.getLatLng();
+                onPinPlaced(pos.lat, pos.lng);
+            });
+        } else {
+            marker.setLatLng([lat, lon]);
+        }
+        if (panTo) map.setView([lat, lon], 16);
+        onPinPlaced(lat, lon);
+    }
+
+    function onPinPlaced(lat, lon) {
+        latField.value = lat.toFixed(6);
+        lonField.value = lon.toFixed(6);
+        statusBar.style.display = 'flex';
+        statusText.textContent = 'Detecting address...';
+
+        var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lon + '&format=json&addressdetails=1&zoom=18';
+        fetch(url, { headers: { 'Accept-Language': 'en' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || !data.address) {
+                    statusText.textContent = 'Pin placed — could not detect address';
+                    return;
+                }
+                var a = data.address;
+
+                var road = a.road || a.pedestrian || a.footway || '';
+                var houseNo = a.house_number || '';
+                if (streetField) streetField.value = (houseNo ? houseNo + ' ' : '') + road;
+
+                var brgy = a.suburb || a.village || a.neighbourhood || a.quarter || '';
+                if (barangayField && brgy) barangayField.value = brgy;
+
+                var city = a.city || a.town || a.municipality || '';
+                if (municipalityField && city) municipalityField.value = city;
+
+                var prov = a.state || a.county || a.province || a.state_district || '';
+                if (provinceField && prov) provinceField.value = prov;
+
+                var withinBayawan = city.toLowerCase().indexOf('bayawan') !== -1;
+                var label = (brgy ? brgy + ', ' : '') + (city || '') + (prov ? ', ' + prov : '');
+                statusText.textContent = label || ('Pin: ' + lat.toFixed(5) + ', ' + lon.toFixed(5));
+                statusBar.style.background = withinBayawan ? '#d4edda' : '#fff3cd';
+                statusBar.style.color = withinBayawan ? '#155724' : '#856404';
+            })
+            .catch(function() {
+                statusText.textContent = 'Pin placed at ' + lat.toFixed(5) + ', ' + lon.toFixed(5);
+            });
+    }
+
+    map.on('click', function(e) { placePin(e.latlng.lat, e.latlng.lng, false); });
+
+    // ---- Device Geolocation ----
+    var deviceBtn = document.getElementById('useDeviceLocation');
+    deviceBtn.addEventListener('click', function() {
+        if (!navigator.geolocation) { alert('Geolocation is not supported by your browser.'); return; }
+        deviceBtn.disabled = true;
+        deviceBtn.textContent = 'Locating...';
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                placePin(pos.coords.latitude, pos.coords.longitude, true);
+                deviceBtn.disabled = false;
+                deviceBtn.innerHTML = '<span style="font-size:16px;">&#128205;</span> Use My Location';
+            },
+            function(err) {
+                alert('Could not get your location: ' + err.message);
+                deviceBtn.disabled = false;
+                deviceBtn.innerHTML = '<span style="font-size:16px;">&#128205;</span> Use My Location';
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    });
+
+    // ---- Clear pin ----
+    clearPinBtn.addEventListener('click', function() {
+        if (marker) { map.removeLayer(marker); marker = null; }
+        latField.value = ''; lonField.value = '';
+        statusBar.style.display = 'none';
+    });
+
+    // ---- Restore existing pin ----
+    if (latField.value && lonField.value) {
+        var eLat = parseFloat(latField.value);
+        var eLon = parseFloat(lonField.value);
+        if (!isNaN(eLat) && !isNaN(eLon)) placePin(eLat, eLon, true);
+    }
+
+    // ---- Load GeoJSON barangay boundaries ----
+    var GEOJSON_URL = "{% static 'data/barangay-boundaries.geojson' %}";
+    fetch(GEOJSON_URL).then(function(r) { return r.ok ? r.json() : null; }).then(function(geojson) {
+        if (!geojson || !geojson.features) return;
+        var features = geojson.features;
+        var preferred = features.find(function(f) { return (f.properties.name || '').toLowerCase().trim() === 'poblacion'; });
+        var off = { dLat: 0, dLon: 0 };
+        if (preferred) {
+            var ring = (preferred.geometry.type === 'Polygon') ? preferred.geometry.coordinates[0] : (preferred.geometry.coordinates[0] || [[]])[0];
+            if (ring && ring.length) {
+                var sLon = 0, sLat = 0;
+                ring.forEach(function(pt) { sLon += pt[0]; sLat += pt[1]; });
+                off = { dLon: BAYAWAN_CENTER[1] - sLon / ring.length, dLat: BAYAWAN_CENTER[0] - sLat / ring.length };
+            }
+        }
+        L.geoJSON(geojson, {
+            coordsToLatLng: function(c) { return L.latLng(c[1] + off.dLat, c[0] + off.dLon); },
+            style: { color: '#2d8659', weight: 2, opacity: 0.5, fill: true, fillColor: '#2d8659', fillOpacity: 0.06, interactive: false }
+        }).addTo(map);
+    }).catch(function() {});
+});
 </script>
 {% endblock %}

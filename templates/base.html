@@ -25,20 +25,26 @@
                 </div>
             </a>
             <nav class="top-nav-links">
-                <a href="{% url 'dashboard:home' %}" class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
-                    <span>🏠</span> Home
-                </a>
-                {% if not user.is_authenticated or not user.is_admin %}
-                <a href="{% url 'services:create_request' %}" class="nav-link {% if 'create_request' in request.resolver_match.url_name %}active{% endif %}">
-                    <span>📝</span> Request Service
-                </a>
-                <a href="{% url 'services:request_list' %}" class="nav-link {% if 'request_list' in request.resolver_match.url_name %}active{% endif %}">
-                    <span>📊</span> Track Status
-                </a>
-                {% endif %}
                 {% if user.is_authenticated and user.is_admin %}
                 <a href="{% url 'dashboard:admin_dashboard' %}" class="nav-link {% if 'admin' in request.resolver_match.url_name %}active{% endif %}">
                     <span>⚙️</span> Admin Portal
+                </a>
+                {% elif user.is_authenticated %}
+                <a href="{% url 'dashboard:home' %}" class="nav-link {% if request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'request_list' %}active{% endif %}">
+                    <span>🏠</span> Dashboard
+                </a>
+                <a href="{% url 'services:create_request' %}" class="nav-link {% if 'create_request' in request.resolver_match.url_name %}active{% endif %}">
+                    <span>📝</span> Service Request
+                </a>
+                <a href="{% url 'services:history' %}" class="nav-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}">
+                    <span>📋</span> Service History
+                </a>
+                <a href="{% url 'services:notification_list' %}" class="nav-link {% if request.resolver_match.url_name == 'notification_list' %}active{% endif %}" style="position:relative;">
+                    <span>🔔</span> Notifications
+                </a>
+                {% else %}
+                <a href="{% url 'dashboard:home' %}" class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+                    <span>🏠</span> Home
                 </a>
                 {% endif %}
                 {% if not user.is_authenticated %}
@@ -46,7 +52,18 @@
                 <a href="{% url 'accounts:consumer_register' %}" class="btn btn-primary">📋 Register</a>
                 {% else %}
                 <div class="user-section">
-                    <span class="user-name">👤 {{ user.get_full_name|default:user.username }}</span>
+                    <a href="{% url 'accounts:profile' %}" class="user-name-link" title="Edit Profile">
+                        <span class="user-avatar-sm">
+                            {% if user.profile_picture_url %}
+                            <img src="{{ user.profile_picture_url }}" alt="Profile">
+                            {% elif user.gender == 'FEMALE' %}
+                            <svg viewBox="0 0 100 100" width="32" height="32"><circle cx="50" cy="50" r="50" fill="#2d8659"/><ellipse cx="50" cy="38" rx="14" ry="16" fill="white"/><path d="M50 22 C32 22 30 40 32 46 Q34 36 42 31 Q46 29 50 29 Q54 29 58 31 Q66 36 68 46 C70 40 68 22 50 22Z" fill="white" opacity="0.5"/><path d="M27 82 Q27 60 50 56 Q73 60 73 82" fill="white"/></svg>
+                            {% else %}
+                            <svg viewBox="0 0 100 100" width="32" height="32"><circle cx="50" cy="50" r="50" fill="#2d8659"/><circle cx="50" cy="36" r="14" fill="white"/><path d="M27 82 Q27 58 50 54 Q73 58 73 82" fill="white"/></svg>
+                            {% endif %}
+                        </span>
+                        <span>{{ user.get_full_name|default:user.username|title }}</span>
+                    </a>
                     <a href="{% url 'accounts:logout' %}" class="btn-logout">Logout</a>
                 </div>
                 {% endif %}

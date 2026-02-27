@@ -967,17 +967,32 @@ select.form-control {
     text-decoration: underline;
 }
 
-/* User Section & Logout Button */
+/* User Section */
 .user-section {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
 }
 
-.user-name {
-    color: var(--dark-gray);
-    font-weight: 500;
-    font-size: 14px;
+.user-name-link {
+    display: flex; align-items: center; gap: 8px;
+    text-decoration: none; color: var(--dark-gray);
+    padding: 5px 10px; border-radius: 8px;
+    font-size: 14px; font-weight: 500;
+    transition: background 0.15s;
+}
+.user-name-link:hover {
+    background: #f0f7f3; color: var(--primary-green);
+}
+
+.user-avatar-sm {
+    width: 32px; height: 32px; border-radius: 50%;
+    overflow: hidden; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+.user-avatar-sm svg { display: block; }
+.user-avatar-sm img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
 }
 
 .btn-logout {

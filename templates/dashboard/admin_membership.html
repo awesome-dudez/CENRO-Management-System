@@ -67,7 +67,7 @@
                 <tr>
                     <td>{{ consumer.get_full_name|default:consumer.username }}</td>
                     <td>{{ consumer.consumer_profile.barangay|default:"-" }}</td>
-                    <td>{{ consumer.consumer_profile.address|default:"-" }}</td>
+                    <td>{{ consumer.consumer_profile.full_address|default:"-" }}</td>
                     <td>{{ consumer.email|default:"-" }}</td>
                     <td>1</td>
                     <td>
@@ -108,7 +108,7 @@
                 {% if consumer.service_requests.all %}
                 {% for req in consumer.service_requests.all|slice:":5" %}
                 <tr>
-                    <td>{{ req.preferred_date }}</td>
+                    <td>{{ req.request_date|date:"M d, Y" }}</td>
                     <td>{{ req.cubic_meters|default:"0" }} m³</td>
                     <td>-</td>
                     <td>{% if req.fee_amount %}Paid{% else %}Free (Member){% endif %}</td>

@@ -1,35 +1,44 @@
 {% extends "base.html" %}
 {% block title %}Service History{% endblock %}
 {% block content %}
+<style>
+    .container { max-width: 1000px; margin: 30px auto; padding: 20px; }
+    .container h1 { color: #2d3142; margin-bottom: 20px; }
+    .data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .data-table th { background: #2d3142; color: white; padding: 12px; text-align: left; font-size: 13px; }
+    .data-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+    .data-table tr:hover { background: #f8f9fa; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: white; background: #6c757d; }
+    .status-submitted { background: #f39c12; }
+    .status-completed { background: #2ecc71; }
+    .status-paid { background: #27ae60; }
+    .btn-sm { padding: 6px 14px; background: #3498db; color: white; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600; }
+</style>
 <div class="container">
     <h1>Service History</h1>
-    <div class="table-card">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Service Type</th>
-                    <th>Barangay</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for req in requests %}
-                <tr>
-                    <td>{{ req.preferred_date }}</td>
-                    <td>{{ req.get_service_type_display }}</td>
-                    <td>{{ req.barangay }}</td>
-                    <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
-                    <td><a href="{% url 'services:request_detail' req.pk %}" class="btn btn-sm">View</a></td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5">No history found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Service Type</th>
+                <th>Barangay</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests %}
+            <tr>
+                <td>{{ req.request_date|date:"M d, Y" }}</td>
+                <td>{{ req.get_service_type_display }}</td>
+                <td>{{ req.barangay }}</td>
+                <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
+                <td><a href="{% url 'services:request_detail' req.pk %}" class="btn-sm">View</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" style="text-align:center;padding:30px;color:#999;">No history found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}

@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 
 from .models import ServiceRequest
@@ -8,63 +10,96 @@ from .location import detect_barangay_for_point, nearest_barangay, within_servic
 class ServiceRequestForm(forms.ModelForm):
     class Meta:
         model = ServiceRequest
-        fields = ["barangay", "address", "service_type", "preferred_date", "preferred_time", "bawad_receipt", "notes"]
+        fields = ["barangay", "address", "service_type", "request_date", "notes"]
         widgets = {
             "barangay": forms.TextInput(attrs={"class": "form-control"}),
             "address": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "service_type": forms.Select(attrs={"class": "form-control"}),
-            "preferred_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "preferred_time": forms.TimeInput(attrs={"class": "form-control", "type": "time"}),
-            "bawad_receipt": forms.FileInput(attrs={"class": "form-control"}),
+            "request_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
         }
 
 
 class ServiceRequestStep1Form(forms.Form):
-    """Personal Information Step"""
-    first_name = forms.CharField(
-        max_length=30,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "First name"})
-    )
-    last_name = forms.CharField(
-        max_length=150,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Last name"})
-    )
-    mobile_number = forms.CharField(
-        max_length=20,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Mobile number"})
+    """Step 1 -- Service Type Selection"""
+
+    SERVICE_CHOICES = [
+        ("", "-- Select Service Type --"),
+        ("RESIDENTIAL_DESLUDGING", "Residential Septage Desludging"),
+        ("COMMERCIAL_DESLUDGING", "Commercial Septage Desludging"),
+        ("GRASS_CUTTING", "Grass Cutting"),
+    ]
+
+    service_type = forms.ChoiceField(
+        choices=SERVICE_CHOICES,
+        widget=forms.Select(attrs={"class": "form-control"}),
+        label="Select Service Type",
     )
 
 
 class ServiceRequestStep2Form(forms.Form):
-    """Location Step"""
+    """Step 2 -- Customer Request Form"""
 
-    # Auto-filled by GeoJSON point-in-polygon (no manual selection).
+    client_name = forms.CharField(
+        max_length=255,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Client / Establishment Name"}),
+        label="Client / Establishment Name",
+    )
+    request_date = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        label="Request Date",
+    )
+    address = forms.CharField(
+        required=False,
+        max_length=500,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "House number, Street name, near [Landmark] (optional)",
+        }),
+        label="Complete Address",
+    )
     barangay = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={"class": "form-control", "readonly": "readonly"}),
         help_text="Auto-detected from the pin location.",
     )
+    gps_latitude = forms.DecimalField(required=False, widget=forms.HiddenInput())
+    gps_longitude = forms.DecimalField(required=False, widget=forms.HiddenInput())
 
-    # Optional: user can refine landmark/house no. Reverse geocode may prefill.
-    address = forms.CharField(
-        required=False,
-        max_length=500,
-        widget=forms.TextInput(
-            attrs={
-                "class": "form-control",
-                "placeholder": "House number, Street name, near [Landmark] (optional)",
-            }
-        ),
+    contact_number = forms.CharField(
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "09XX-XXX-XXXX"}),
+        label="Contact Number",
     )
-    gps_latitude = forms.DecimalField(
-        required=False,
-        widget=forms.HiddenInput()
+    connected_to_bawad = forms.ChoiceField(
+        choices=[("NO", "No"), ("YES", "Yes")],
+        widget=forms.RadioSelect(attrs={"class": "bawad-radio"}),
+        label="Connected to BAWAD?",
+        initial="NO",
     )
-    gps_longitude = forms.DecimalField(
+    bawad_proof = forms.FileField(
         required=False,
-        widget=forms.HiddenInput()
+        widget=forms.FileInput(attrs={"class": "form-control"}),
+        label="Proof of BAWAD Affiliation",
     )
+    public_private = forms.ChoiceField(
+        choices=[("PRIVATE", "Private"), ("PUBLIC", "Public")],
+        widget=forms.RadioSelect(attrs={"class": "pub-priv-radio"}),
+        label="Public / Private",
+        initial="PRIVATE",
+    )
+    client_signature = forms.FileField(
+        required=False,
+        widget=forms.FileInput(attrs={"class": "form-control"}),
+        label="Client Signature (upload image)",
+    )
+
+    def clean_contact_number(self):
+        num = self.cleaned_data["contact_number"]
+        cleaned = re.sub(r"[\s\-()]", "", num)
+        if not re.match(r"^(\+63|0)?9\d{9}$", cleaned):
+            raise forms.ValidationError("Enter a valid Philippine mobile number (e.g. 09XX-XXX-XXXX).")
+        return cleaned
 
     def clean(self):
         cleaned = super().clean()
@@ -87,44 +122,22 @@ class ServiceRequestStep2Form(forms.Form):
             if not detected and within_service_bounds(lat_f, lon_f):
                 detected = nearest_barangay(lat_f, lon_f)
             if not detected:
-                raise forms.ValidationError(
-                    "Selected location is outside Bayawan City. Please move the pin inside the city boundary."
-                )
+                detected = "Outside Bayawan City"
 
         cleaned["barangay"] = detected
+
+        bawad = cleaned.get("connected_to_bawad")
+        if bawad == "YES" and not cleaned.get("bawad_proof") and not self.files.get("bawad_proof"):
+            self.add_error("bawad_proof", "Please upload proof of BAWAD affiliation.")
+
         return cleaned
 
 
 class ServiceRequestStep3Form(forms.Form):
-    """Service Details Step"""
-    SERVICE_CHOICES = [
-        ("", "Select service type"),
-        ("DECLOGGING", "Septage Desludging (Residential)"),
-        ("COMMERCIAL_DECLOGGING", "Septage Desludging (Commercial)"),
-        ("GRASS_CUTTING", "Grass Cutting Service"),
-    ]
-    
-    service_type = forms.ChoiceField(
-        choices=SERVICE_CHOICES,
-        widget=forms.Select(attrs={"class": "form-control"})
-    )
-    preferred_date = forms.DateField(
-        widget=forms.DateInput(attrs={
-            "class": "form-control",
-            "type": "date"
-        }),
-        help_text="Final schedule is subject to truck availability."
-    )
-    bawad_receipt = forms.FileField(
-        required=False,
-        widget=forms.FileInput(attrs={"class": "form-control"})
-    )
+    """Step 3 -- Review & Confirmation"""
 
-
-class ServiceRequestStep4Form(forms.Form):
-    """Confirmation Step"""
     terms = forms.BooleanField(
         required=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
-        label="I confirm that the information provided is correct."
+        label="I confirm that the information provided is correct.",
     )

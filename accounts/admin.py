@@ -13,5 +13,5 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(ConsumerProfile)
 class ConsumerProfileAdmin(admin.ModelAdmin):
-    list_display = ["user", "barangay", "address"]
-    search_fields = ["user__username", "barangay", "address"]
+    list_display = ["user", "barangay", "municipality", "province"]
+    search_fields = ["user__username", "barangay", "municipality", "province", "street_address"]

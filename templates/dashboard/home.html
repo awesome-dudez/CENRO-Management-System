@@ -2,16 +2,9 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="container">
-    <h1>Dashboard</h1>
+    <h1>Welcome, {{ user.get_full_name|default:user.username|title }}</h1>
+
     <div class="summary-cards">
-        <div class="summary-card card-declogging">
-            <h3>Declogging</h3>
-            <p class="count">{{ declogging_count }}</p>
-        </div>
-        <div class="summary-card card-grass">
-            <h3>Grass Cutting</h3>
-            <p class="count">{{ grass_count }}</p>
-        </div>
         <div class="summary-card card-pending">
             <h3>Pending</h3>
             <p class="count">{{ pending_count }}</p>
@@ -20,9 +13,15 @@
             <h3>Completed</h3>
             <p class="count">{{ completed_count }}</p>
         </div>
+        <div class="summary-card card-grass">
+            <h3>Total Requests</h3>
+            <p class="count">{{ total_count }}</p>
+        </div>
     </div>
-    <div class="calendar-section">
-        <h2>Upcoming Schedules (Next 30 Days)</h2>
+
+    {% if upcoming_schedules %}
+    <div class="calendar-section" style="margin-top: 30px;">
+        <h2>Upcoming Schedules</h2>
         <div class="table-card">
             <table class="data-table">
                 <thead>
@@ -31,7 +30,6 @@
                         <th>Time</th>
                         <th>Service</th>
                         <th>Barangay</th>
-                        <th>Consumer</th>
                         <th>Staff</th>
                     </tr>
                 </thead>
@@ -42,12 +40,44 @@
                         <td>{{ schedule.service_time }}</td>
                         <td>{{ schedule.service_request.get_service_type_display }}</td>
                         <td>{{ schedule.barangay }}</td>
-                        <td>{{ schedule.service_request.consumer.get_full_name }}</td>
                         <td>{{ schedule.assigned_staff.get_full_name|default:"Unassigned" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="calendar-section" style="margin-top: 30px;">
+        <h2>My Service Requests</h2>
+        <div class="table-card">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Service Type</th>
+                        <th>Barangay</th>
+                        <th>Request Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td>{{ req.id }}</td>
+                        <td>{{ req.get_service_type_display }}</td>
+                        <td>{{ req.barangay }}</td>
+                        <td>{{ req.request_date|date:"M d, Y" }}</td>
+                        <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
+                        <td>
+                            <a href="{% url 'services:request_detail' req.pk %}" class="btn btn-sm">View</a>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6">No upcoming schedules.</td>
+                        <td colspan="6">No requests yet. <a href="{% url 'services:create_request' %}">Create your first request</a>.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

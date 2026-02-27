@@ -9,31 +9,25 @@
         margin: 40px auto;
         padding: 20px;
     }
-    
     .wizard-header {
         text-align: center;
         margin-bottom: 40px;
     }
-    
     .wizard-header h1 {
         color: #2d3142;
         font-size: 28px;
         margin-bottom: 5px;
     }
-    
     .wizard-header p {
         color: #666;
         font-size: 16px;
     }
-    
-    /* Step Indicators */
     .step-indicators {
         display: flex;
         justify-content: space-between;
         margin-bottom: 40px;
         position: relative;
     }
-    
     .step-indicators::before {
         content: '';
         position: absolute;
@@ -44,14 +38,12 @@
         background: #e0e0e0;
         z-index: 0;
     }
-    
     .step-indicator {
         flex: 1;
         text-align: center;
         position: relative;
         z-index: 1;
     }
-    
     .step-number {
         width: 40px;
         height: 40px;
@@ -65,38 +57,26 @@
         font-weight: 600;
         font-size: 16px;
     }
-    
     .step-indicator.active .step-number {
         background: #1abc9c;
         color: white;
     }
-    
     .step-indicator.completed .step-number {
         background: #1abc9c;
         color: white;
     }
-    
-    .step-indicator.completed .step-number::after {
-        content: '✓';
-        position: absolute;
-    }
-    
     .step-label {
         font-size: 14px;
         color: #666;
         margin-top: 5px;
     }
-    
     .step-indicator.active .step-label {
         color: #1abc9c;
         font-weight: 600;
     }
-    
     .step-indicator.completed .step-label {
         color: #1abc9c;
     }
-    
-    /* Form Card */
     .form-card {
         background: white;
         border: 2px solid #1abc9c;
@@ -104,7 +84,6 @@
         padding: 40px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    
     .form-card h2 {
         color: #2d3142;
         font-size: 24px;
@@ -112,18 +91,15 @@
         border-bottom: 2px solid #1abc9c;
         padding-bottom: 15px;
     }
-    
     .form-group {
         margin-bottom: 20px;
     }
-    
     .form-group label {
         display: block;
         margin-bottom: 8px;
         color: #2d3142;
         font-weight: 600;
     }
-    
     .form-group input,
     .form-group select,
     .form-group textarea {
@@ -134,7 +110,6 @@
         font-size: 14px;
         font-family: inherit;
     }
-    
     .form-group input:focus,
     .form-group select:focus,
     .form-group textarea:focus {
@@ -142,156 +117,63 @@
         border-color: #1abc9c;
         box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.1);
     }
-    
     .form-help-text {
         color: #999;
         font-size: 13px;
         margin-top: 5px;
     }
-    
     .form-error {
         color: #e74c3c;
         font-size: 13px;
         margin-top: 5px;
     }
-    
     .form-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 20px;
     }
-    
     @media (max-width: 768px) {
-        .form-row {
-            grid-template-columns: 1fr;
-        }
-    }
-    
-    /* Map Container */
-    .map-image-container {
-        position: relative;
-        width: 100%;
-        max-width: 600px;
-        margin: 0 auto 20px;
-        border: 3px solid #1abc9c;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 4px 12px rgba(26, 188, 156, 0.2);
-        background: #f5f5f5;
-        cursor: crosshair;
-    }
-    
-    .map-image {
-        width: 100%;
-        height: auto;
-        display: block;
-    }
-    
-    .map-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        cursor: crosshair;
-    }
-    
-    .map-pin {
-        position: absolute;
-        transform: translate(-50%, -50%);
-        z-index: 10;
-        cursor: grab;
-    }
-    
-    .map-pin.dragging {
-        cursor: grabbing;
-    }
-    
-    .pin-marker {
-        font-size: 32px;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-        animation: pinBounce 0.5s ease-out;
-    }
-    
-    @keyframes pinBounce {
-        0% {
-            transform: scale(0) rotate(-45deg);
-        }
-        70% {
-            transform: scale(1.2) rotate(0deg);
-        }
-        100% {
-            transform: scale(1) rotate(0deg);
-        }
+        .form-row { grid-template-columns: 1fr; }
     }
 
-    @keyframes markerPulse {
-        0%, 100% {
-            box-shadow: 0 0 0 0 rgba(26, 188, 156, 0.7);
-        }
-        50% {
-            box-shadow: 0 0 0 10px rgba(26, 188, 156, 0);
-        }
+    /* Service type dropdown */
+    .form-group select.form-control {
+        appearance: auto;
+        cursor: pointer;
     }
-    
-    #map {
-        height: 400px;
-        border-radius: 8px;
-        border: 3px solid #1abc9c;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(26, 188, 156, 0.2);
-        position: relative;
+
+    /* Radio groups */
+    .radio-group {
+        display: flex;
+        gap: 20px;
+        margin-top: 6px;
     }
-    
-    @media (max-width: 768px) {
-        #map {
-            height: 350px;
-        }
+    .radio-group label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: normal;
+        cursor: pointer;
     }
-    
-    @media (max-width: 480px) {
-        #map {
-            height: 300px;
-        }
+    .radio-group input[type="radio"] {
+        width: auto;
+        accent-color: #1abc9c;
     }
-    
-    #coordinates-display {
-        padding: 20px;
-        background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-        border-left: 5px solid #1abc9c;
-        border-radius: 8px;
-        margin-bottom: 20px;
+
+    /* Conditional BAWAD proof */
+    .bawad-proof-section {
         display: none;
+        margin-top: 10px;
+        padding: 15px;
+        background: #fffbe6;
+        border: 1px solid #ffe58f;
+        border-radius: 6px;
     }
-    
-    #coordinates-display.active {
+    .bawad-proof-section.visible {
         display: block;
-        animation: slideDown 0.3s ease-out;
-    }
-    
-    @keyframes slideDown {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    #coordinates-display small {
-        display: block;
-        color: #2d3142;
-        margin: 8px 0;
-        font-size: 14px;
-        line-height: 1.6;
-    }
-    
-    #coordinates-display small strong {
-        color: #1abc9c;
-        font-weight: 700;
     }
 
-    /* Lalamove Center-Crosshair Mode */
+    /* Map styles */
     #map-container {
         position: relative;
         width: 100%;
@@ -301,14 +183,13 @@
         overflow: hidden;
         margin-bottom: 16px;
     }
-
     .pin-info-card {
         position: absolute;
         min-width: 220px;
         max-width: 280px;
-        background: #ffffff;
+        background: #fff;
         border-radius: 10px;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 10px 24px rgba(0,0,0,0.15);
         padding: 10px 12px;
         transform: translate(-50%, -110%);
         opacity: 0;
@@ -316,11 +197,7 @@
         pointer-events: none;
         z-index: 600;
     }
-
-    .pin-info-card.active {
-        opacity: 1;
-    }
-
+    .pin-info-card.active { opacity: 1; }
     .pin-info-card::after {
         content: '';
         position: absolute;
@@ -329,592 +206,213 @@
         transform: translateX(-50%);
         border-width: 8px 8px 0 8px;
         border-style: solid;
-        border-color: #ffffff transparent transparent transparent;
+        border-color: #fff transparent transparent transparent;
     }
-
-    .pin-info-title {
-        font-size: 14px;
-        font-weight: 700;
-        color: #2d3142;
-        margin-bottom: 4px;
-    }
-
-    .pin-info-coords {
-        font-size: 12px;
-        color: #1abc9c;
-        font-family: 'Courier New', monospace;
-        margin-bottom: 4px;
-    }
-
-    .pin-info-address {
-        font-size: 12px;
-        color: #666;
-        margin-bottom: 6px;
-    }
-
+    .pin-info-title { font-size: 14px; font-weight: 700; color: #2d3142; margin-bottom: 4px; }
+    .pin-info-coords { font-size: 12px; color: #1abc9c; font-family: 'Courier New', monospace; margin-bottom: 4px; }
+    .pin-info-address { font-size: 12px; color: #666; margin-bottom: 6px; }
     .pin-info-status {
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 8px;
-        border-radius: 12px;
-        display: inline-block;
-        background: #f0f0f0;
-        color: #666;
+        font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 12px;
+        display: inline-block; background: #f0f0f0; color: #666;
     }
-
-    .pin-info-status.valid {
-        background: #d4edda;
-        color: #155724;
-    }
-
-    .pin-info-status.invalid {
-        background: #f8d7da;
-        color: #721c24;
-    }
-
-    .pin-marker-icon {
-        width: 30px;
-        height: 42px;
-        position: relative;
-    }
-
+    .pin-info-status.valid { background: #d4edda; color: #155724; }
+    .pin-info-status.invalid { background: #f8d7da; color: #721c24; }
+    .pin-marker-icon { width: 30px; height: 42px; position: relative; }
     .pin-marker-head {
-        width: 20px;
-        height: 20px;
-        background: #1abc9c;
-        border: 3px solid #ffffff;
-        border-radius: 50% 50% 50% 0;
-        transform: rotate(-45deg);
-        position: absolute;
-        left: 5px;
-        top: 4px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        width: 20px; height: 20px; background: #1abc9c; border: 3px solid #fff;
+        border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+        position: absolute; left: 5px; top: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     }
-
     .pin-marker-head::after {
-        content: '';
-        width: 8px;
-        height: 8px;
-        background: #ffffff;
-        border-radius: 50%;
-        position: absolute;
-        top: 4px;
-        left: 4px;
+        content: ''; width: 8px; height: 8px; background: #fff; border-radius: 50%;
+        position: absolute; top: 4px; left: 4px;
     }
-
     .pin-marker-pulse {
-        position: absolute;
-        left: 50%;
-        bottom: 2px;
-        width: 10px;
-        height: 10px;
-        background: rgba(26, 188, 156, 0.35);
-        border-radius: 50%;
-        transform: translateX(-50%);
+        position: absolute; left: 50%; bottom: 2px;
+        width: 10px; height: 10px; background: rgba(26,188,156,0.35);
+        border-radius: 50%; transform: translateX(-50%);
         animation: markerPulse 1.6s ease-out infinite;
     }
-
-    /* Fixed center crosshair overlay */
-    .map-center-crosshair {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 500;
-        pointer-events: none;
+    @keyframes markerPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(26,188,156,0.7); }
+        50% { box-shadow: 0 0 0 10px rgba(26,188,156,0); }
     }
-
-    .crosshair-pin {
-        width: 40px;
-        height: 50px;
-        background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDQwIDUwIj48cGF0aCBkPSJNMjAgMEM5IDE0IDAgOCAwIDIwYzAgMTQgMjAgMzAgMjAgMzBzMjAtMTYgMjAtMzBjMC0xMi05LTIwLTIwLTIweiIgZmlsbD0iIzFhYmM5YyIvPjxjaXJjbGUgY3g9IjIwIiBjeT0iMjAiIHI9IjgiIGZpbGw9IiNmZmYiLz48L3N2Zz4=') center/contain no-repeat;
-        animation: pinPulse 1.5s ease-in-out infinite;
-    }
-
-    .crosshair-ring {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 60px;
-        height: 60px;
-        border: 2px solid #1abc9c;
-        border-radius: 50%;
-        opacity: 0.3;
-        animation: ringExpand 1.5s ease-in-out infinite;
-    }
-
-    @keyframes pinPulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-    }
-
-    @keyframes ringExpand {
-        0% { width: 60px; height: 60px; opacity: 0.3; }
-        100% { width: 100px; height: 100px; opacity: 0; }
-    }
-
-    /* Location info panel at bottom */
-    #location-info-panel {
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-        padding: 16px;
-        margin-bottom: 20px;
-    }
-
-    .location-info-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
-    }
-
-    .location-barangay {
-        font-size: 18px;
-        font-weight: 700;
-        color: #2d3142;
-    }
-
-    .location-status {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .location-status.valid {
-        background: #d4edda;
-        color: #155724;
-    }
-
-    .location-status.invalid {
-        background: #f8d7da;
-        color: #721c24;
-    }
-
-    .location-coords {
-        font-size: 13px;
-        color: #666;
-        font-family: 'Courier New', monospace;
-        margin-bottom: 12px;
-    }
-
-    /* Prominent confirm button */
-    .confirm-location-btn {
-        width: 100%;
-        padding: 16px;
-        background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 16px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 12px rgba(26, 188, 156, 0.3);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-    }
-
-    .confirm-location-btn:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(26, 188, 156, 0.4);
-    }
-
-    .confirm-location-btn:active {
-        transform: translateY(0);
-    }
-
-    .confirm-location-btn:disabled {
-        background: #ccc;
-        cursor: not-allowed;
-        box-shadow: none;
-    }
-
-    .card-header {
-        display: flex;
-        gap: 12px;
-        padding: 12px;
-        border-bottom: 1px solid #f0f0f0;
-        position: relative;
-    }
-
-    .card-thumbnail {
-        width: 80px;
-        height: 80px;
-        border-radius: 8px;
-        overflow: hidden;
-        flex-shrink: 0;
-        background: #f0f0f0;
-    }
-
-    .card-thumbnail img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .card-header-info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-
-    .card-place-name {
-        font-size: 16px;
-        font-weight: 600;
-        color: #2d3142;
-        margin: 0;
-    }
-
-    .card-place-address {
-        font-size: 13px;
-        color: #999;
-        margin: 4px 0 0;
-    }
-
-    .card-close {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: none;
-        border: none;
-        font-size: 20px;
-        cursor: pointer;
-        color: #999;
-        padding: 0;
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .card-close:hover {
-        color: #2d3142;
-    }
-
-    .card-body {
-        padding: 12px;
-        border-bottom: 1px solid #f0f0f0;
-    }
-
-    .card-coordinates {
-        font-size: 13px;
-        color: #666;
-        font-family: 'Courier New', monospace;
-        margin: 0;
-    }
-
-    .card-actions {
-        display: flex;
-        gap: 8px;
-        padding: 12px;
-        justify-content: flex-end;
-    }
-
-    .card-action-btn {
-        background: none;
-        border: none;
-        padding: 8px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: background 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .card-action-btn:hover {
-        background: #f0f0f0;
-    }
-
-    .card-action-btn.primary {
-        background: #1abc9c;
-        color: white;
-        font-weight: 600;
-    }
-
-    .card-action-btn.primary:hover {
-        background: #16a085;
-    }
-
-    /* Bottom sheet toggle button */
-    .bottom-sheet-toggle {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 500;
-    }
-    
     .map-instructions {
-        padding: 12px;
-        background: #fff3cd;
-        border-left: 4px solid #ffc107;
-        border-radius: 5px;
-        margin-bottom: 15px;
-        font-size: 13px;
-        color: #856404;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107;
+        border-radius: 5px; margin-bottom: 15px; font-size: 13px; color: #856404;
+        display: flex; align-items: center; gap: 10px;
     }
-    
-    .map-instructions.success {
-        background: #d4edda;
-        border-left-color: #28a745;
-        color: #155724;
-    }
-    
+    .map-instructions.success { background: #d4edda; border-left-color: #28a745; color: #155724; }
     .map-status-badge {
-        display: inline-block;
-        padding: 4px 12px;
-        background: #1abc9c;
-        color: white;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        margin-left: auto;
+        display: inline-block; padding: 4px 12px; background: #1abc9c; color: white;
+        border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: auto;
     }
-
-    .map-status-badge.valid {
-        background: #28a745;
-    }
-
-    .map-status-badge.invalid {
-        background: #dc3545;
-    }
-
+    .map-status-badge.valid { background: #28a745; }
+    .map-status-badge.invalid { background: #dc3545; }
     .location-validation {
-        padding: 10px 12px;
-        border-radius: 6px;
-        background: #f8f9fa;
-        color: #666;
-        font-size: 13px;
-        margin-bottom: 18px;
+        padding: 10px 12px; border-radius: 6px; background: #f8f9fa;
+        color: #666; font-size: 13px; margin-bottom: 18px;
     }
+    .location-validation.valid { background: #d4edda; color: #155724; }
+    .location-validation.invalid { background: #f8d7da; color: #721c24; }
 
-    .location-validation.valid {
-        background: #d4edda;
-        color: #155724;
-    }
+    /* Summary table */
+    .summary-table { width: 100%; border-collapse: collapse; }
+    .summary-table td { padding: 10px 12px; border-bottom: 1px solid #e8e8e8; font-size: 14px; }
+    .summary-table td:first-child { font-weight: 600; color: #555; width: 40%; }
+    .summary-table td:last-child { color: #2d3142; }
 
-    .location-validation.invalid {
-        background: #f8d7da;
-        color: #721c24;
-    }
-    
-    .coordinate-field-group {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-        margin-bottom: 15px;
-    }
-    
-    @media (max-width: 768px) {
-        .coordinate-field-group {
-            grid-template-columns: 1fr;
-        }
-    }
-    
-    .coordinate-field {
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .coordinate-field label {
-        font-size: 12px;
-        font-weight: 600;
-        color: #666;
-        margin-bottom: 5px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .coordinate-field-value {
-        padding: 12px;
-        background: #f5f5f5;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        color: #1abc9c;
-        font-weight: 600;
-        word-break: break-all;
-    }
-    
-    /* File Upload */
-    .file-upload-area {
-        border: 2px dashed #ddd;
-        border-radius: 5px;
-        padding: 30px;
-        text-align: center;
-        background: #f9f9f9;
-        cursor: pointer;
-        transition: all 0.3s;
-    }
-    
-    .file-upload-area:hover {
-        border-color: #1abc9c;
-        background: #f0fdf4;
-    }
-    
-    .file-upload-area.dragging {
-        border-color: #1abc9c;
-        background: #f0fdf4;
-    }
-    
-    .file-upload-icon {
-        font-size: 40px;
-        margin-bottom: 10px;
-    }
-    
     /* Buttons */
     .button-group {
-        display: flex;
-        gap: 15px;
-        justify-content: space-between;
-        margin-top: 40px;
+        display: flex; gap: 15px; justify-content: space-between; margin-top: 40px;
     }
-    
     .btn {
-        padding: 12px 30px;
+        padding: 12px 30px; border: none; border-radius: 5px;
+        font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s;
+        text-decoration: none; display: inline-block;
+    }
+    .btn-secondary { background: #e0e0e0; color: #2d3142; }
+    .btn-secondary:hover { background: #d0d0d0; }
+    .btn-primary { background: #1abc9c; color: white; margin-left: auto; }
+    .btn-primary:hover { background: #16a085; }
+    .btn-primary:disabled { background: #bdc3c7; cursor: not-allowed; }
+    .checkbox-group { display: flex; align-items: center; margin-top: 20px; }
+    .checkbox-group input { width: auto; margin-right: 10px; }
+    .checkbox-group label { margin: 0; font-weight: normal; }
+
+    /* Requester toggle */
+    .requester-toggle-section {
+        margin-bottom: 28px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+    }
+    .form-group-label {
+        display: block;
+        font-weight: 600;
+        color: #2d3142;
+        font-size: 15px;
+    }
+    .requester-toggle {
+        display: flex;
+        gap: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px solid #1abc9c;
+    }
+    .req-toggle-btn {
+        flex: 1;
+        padding: 12px 16px;
         border: none;
-        border-radius: 5px;
+        background: #fff;
+        color: #2d3142;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.2s;
+        text-align: center;
     }
-    
-    .btn-secondary {
-        background: #e0e0e0;
-        color: #2d3142;
+    .req-toggle-btn:first-child {
+        border-right: 1px solid #1abc9c;
     }
-    
-    .btn-secondary:hover {
-        background: #d0d0d0;
-    }
-    
-    .btn-primary {
+    .req-toggle-btn.active {
         background: #1abc9c;
         color: white;
-        margin-left: auto;
     }
-    
-    .btn-primary:hover {
-        background: #16a085;
-    }
-    
-    .btn-primary:disabled {
-        background: #bdc3c7;
-        cursor: not-allowed;
-    }
-    
-    .checkbox-group {
-        display: flex;
-        align-items: center;
-        margin-top: 20px;
-    }
-    
-    .checkbox-group input {
-        width: auto;
-        margin-right: 10px;
-    }
-    
-    .checkbox-group label {
-        margin: 0;
-        font-weight: normal;
+    .req-toggle-btn:hover:not(.active) {
+        background: #f0fdf4;
     }
 </style>
 
 <div class="wizard-container">
     <div class="wizard-header">
-        <h1>Request Service</h1>
-        <p>Submit a new request for CENRO services.</p>
+        <h1>Septage Management Services</h1>
+        <p>Submit a new service request to CENRO - City of Bayawan.</p>
     </div>
-    
+
     <!-- Step Indicators -->
     <div class="step-indicators">
         <div class="step-indicator {% if step == 1 %}active{% elif step > 1 %}completed{% endif %}">
             <div class="step-number">{% if step > 1 %}&#10003;{% else %}1{% endif %}</div>
-            <div class="step-label">Personal Info</div>
+            <div class="step-label">Service Type</div>
         </div>
         <div class="step-indicator {% if step == 2 %}active{% elif step > 2 %}completed{% endif %}">
             <div class="step-number">{% if step > 2 %}&#10003;{% else %}2{% endif %}</div>
-            <div class="step-label">Location</div>
+            <div class="step-label">Request Details</div>
         </div>
-        <div class="step-indicator {% if step == 3 %}active{% elif step > 3 %}completed{% endif %}">
-            <div class="step-number">{% if step > 3 %}&#10003;{% else %}3{% endif %}</div>
-            <div class="step-label">Service Details</div>
-        </div>
-        <div class="step-indicator {% if step == 4 %}active{% elif step > 4 %}completed{% endif %}">
-            <div class="step-number">{% if step > 4 %}&#10003;{% else %}4{% endif %}</div>
-            <div class="step-label">Confirmation</div>
+        <div class="step-indicator {% if step == 3 %}active{% endif %}">
+            <div class="step-number">3</div>
+            <div class="step-label">Review &amp; Submit</div>
         </div>
     </div>
 
     <!-- Form Card -->
     <div class="form-card">
+
         {% if step == 1 %}
-            <h2>Personal Information</h2>
-            <form method="post" class="wizard-form">
-                {% csrf_token %}
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="{{ form.first_name.id_for_label }}">First Name</label>
-                        {{ form.first_name }}
-                        {% if form.first_name.errors %}
-                            <div class="form-error">{{ form.first_name.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                    <div class="form-group">
-                        <label for="{{ form.last_name.id_for_label }}">Last Name</label>
-                        {{ form.last_name }}
-                        {% if form.last_name.errors %}
-                            <div class="form-error">{{ form.last_name.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="{{ form.mobile_number.id_for_label }}">Mobile Number</label>
-                    {{ form.mobile_number }}
-                    {% if form.mobile_number.errors %}
-                        <div class="form-error">{{ form.mobile_number.errors.0 }}</div>
-                    {% endif %}
-                    <div class="form-help-text">We will send status updates to this number.</div>
-                </div>
-                
-                <div class="button-group">
-                    <button type="button" class="btn btn-secondary" onclick="window.history.back()">Back</button>
-                    <button type="submit" class="btn btn-primary">Next Step →</button>
-                </div>
-            </form>
-        
+        <!-- ==================== STEP 1: Service Type ==================== -->
+        <h2>Select Service Type</h2>
+        <form method="post" class="wizard-form" novalidate>
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_service_type">Service Type <span style="color:red">*</span></label>
+                {{ form.service_type }}
+                {% if form.service_type.errors %}
+                    <div class="form-error" style="margin-top:8px;">{{ form.service_type.errors.0 }}</div>
+                {% endif %}
+                <div class="form-help-text">Choose the type of service you need.</div>
+            </div>
+            <div class="button-group">
+                <a href="{% url 'dashboard:home' %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Next Step &rarr;</button>
+            </div>
+        </form>
+
         {% elif step == 2 %}
-            <h2>Service Location</h2>
-            <form method="post" class="wizard-form">
-                {% csrf_token %}
-                
-                <!-- Map Instructions -->
+        <!-- ==================== STEP 2: Customer Request Form ==================== -->
+        <h2>Customer Request Form</h2>
+        <form method="post" enctype="multipart/form-data" class="wizard-form" novalidate>
+            {% csrf_token %}
+
+            <!-- Requester toggle -->
+            <div class="requester-toggle-section">
+                <label class="form-group-label" style="margin-bottom:8px;">Who is this request for?</label>
+                <div class="requester-toggle">
+                    <button type="button" class="req-toggle-btn active" data-value="owner" id="btnOwner">I am the account owner</button>
+                    <button type="button" class="req-toggle-btn" data-value="other" id="btnOther">Registering for another person</button>
+                </div>
+            </div>
+
+            {% if form.non_field_errors %}
+            <div class="form-error" style="margin-bottom:15px;">
+                {% for error in form.non_field_errors %}{{ error }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_client_name">Client / Establishment Name <span style="color:red">*</span></label>
+                    {{ form.client_name }}
+                    {% if form.client_name.errors %}<div class="form-error">{{ form.client_name.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="id_request_date">Request Date <span style="color:red">*</span></label>
+                    {{ form.request_date }}
+                    {% if form.request_date.errors %}<div class="form-error">{{ form.request_date.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Map Location -->
+            <div class="form-group">
+                <label>Service Location <span style="color:red">*</span></label>
                 <div class="map-instructions" id="mapInstructions">
-                    <span>Click the map to drop a pin, then drag the pin to refine the location.</span>
+                    <span>Click the map to drop a pin, then drag to refine.</span>
                     <span class="map-status-badge" id="mapStatusBadge">Waiting for pin</span>
                 </div>
-                
-                <!-- Google Maps-style pin picker -->
-                <label style="display: block; margin-bottom: 10px; color: #2d3142; font-weight: 600;">Service Location Map</label>
                 <div id="map-container">
-                    <div id="map" style="width: 100%; height: 100%;"></div>
+                    <div id="map" style="width:100%;height:100%;"></div>
                     <div id="pin-info-card" class="pin-info-card">
                         <div class="pin-info-title" id="pinInfoBarangay">Select a location</div>
                         <div class="pin-info-coords" id="pinInfoCoords">--</div>
@@ -922,122 +420,162 @@
                         <div class="pin-info-status" id="pinInfoStatus">Place the pin inside Bayawan City</div>
                     </div>
                 </div>
-
                 <div class="location-validation" id="locationValidation">
                     Place the pin inside Bayawan City to continue.
                 </div>
-
                 {{ form.gps_latitude }}
                 {{ form.gps_longitude }}
-                
-                <div class="form-group">
-                    <label for="{{ form.barangay.id_for_label }}">Barangay</label>
-                    {{ form.barangay }}
-                    {% if form.barangay.errors %}
-                        <div class="form-error">{{ form.barangay.errors.0 }}</div>
-                    {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_barangay">Barangay</label>
+                {{ form.barangay }}
+            </div>
+
+            <div class="form-group">
+                <label for="id_address">Complete Address / Landmark</label>
+                {{ form.address }}
+                {% if form.address.errors %}<div class="form-error">{{ form.address.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_contact_number">Contact Number <span style="color:red">*</span></label>
+                {{ form.contact_number }}
+                {% if form.contact_number.errors %}<div class="form-error">{{ form.contact_number.errors.0 }}</div>{% endif %}
+                <div class="form-help-text">Philippine mobile format: 09XX-XXX-XXXX</div>
+            </div>
+
+            <div class="form-group">
+                <label>Connected to BAWAD? <span style="color:red">*</span></label>
+                <div class="radio-group" id="bawadRadioGroup">
+                    {% for choice in form.connected_to_bawad %}
+                    <label>{{ choice.tag }} {{ choice.choice_label }}</label>
+                    {% endfor %}
                 </div>
-                
-                <div class="form-group">
-                    <label for="{{ form.address.id_for_label }}">Complete Address / Landmark</label>
-                    {{ form.address }}
-                    {% if form.address.errors %}
-                        <div class="form-error">{{ form.address.errors.0 }}</div>
-                    {% endif %}
+                {% if form.connected_to_bawad.errors %}<div class="form-error">{{ form.connected_to_bawad.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="bawad-proof-section" id="bawadProofSection">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label for="id_bawad_proof">Upload Proof of BAWAD Affiliation <span style="color:red">*</span></label>
+                    {{ form.bawad_proof }}
+                    {% if form.bawad_proof.errors %}<div class="form-error">{{ form.bawad_proof.errors.0 }}</div>{% endif %}
+                    <div class="form-help-text">Upload your BAWAD certificate or latest bill.</div>
                 </div>
-                
-                <div class="button-group">
-                    <a href="?step=1" class="btn btn-secondary">Back</a>
-                    <button type="submit" class="btn btn-primary">Next Step →</button>
+            </div>
+
+            <div class="form-group">
+                <label>Public / Private <span style="color:red">*</span></label>
+                <div class="radio-group">
+                    {% for choice in form.public_private %}
+                    <label>{{ choice.tag }} {{ choice.choice_label }}</label>
+                    {% endfor %}
                 </div>
-            </form>
-        
+            </div>
+
+            <div class="form-group">
+                <label for="id_client_signature">Client Signature (upload image)</label>
+                {{ form.client_signature }}
+                {% if form.client_signature.errors %}<div class="form-error">{{ form.client_signature.errors.0 }}</div>{% endif %}
+                <div class="form-help-text">Upload a photo or scan of your signature.</div>
+            </div>
+
+            <div class="button-group">
+                <a href="?step=1" class="btn btn-secondary">&larr; Back</a>
+                <button type="submit" class="btn btn-primary">Next Step &rarr;</button>
+            </div>
+        </form>
+
         {% elif step == 3 %}
-            <h2>Service Details</h2>
-            <form method="post" enctype="multipart/form-data" class="wizard-form">
-                {% csrf_token %}
-                
-                <div class="form-group">
-                    <label for="{{ form.service_type.id_for_label }}">Type of Service</label>
-                    {{ form.service_type }}
-                    {% if form.service_type.errors %}
-                        <div class="form-error">{{ form.service_type.errors.0 }}</div>
-                    {% endif %}
-                </div>
-                
-                <div class="form-group">
-                    <label for="{{ form.preferred_date.id_for_label }}">Preferred Date</label>
-                    {{ form.preferred_date }}
-                    {% if form.preferred_date.errors %}
-                        <div class="form-error">{{ form.preferred_date.errors.0 }}</div>
-                    {% endif %}
-                    <div class="form-help-text">{{ form.preferred_date.help_text }}</div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Upload Proof of Payment (Optional)</label>
-                    <div class="file-upload-area" id="fileUploadArea">
-                        <div class="file-upload-icon">📤</div>
-                        <div>Drag & drop or click to upload receipt</div>
-                        <small>Supports JPG, PNG, PDF</small>
-                    </div>
-                    {{ form.bawad_receipt }}
-                    {% if form.bawad_receipt.errors %}
-                        <div class="form-error">{{ form.bawad_receipt.errors.0 }}</div>
-                    {% endif %}
-                </div>
-                
-                <div class="button-group">
-                    <a href="?step=2" class="btn btn-secondary">Back</a>
-                    <button type="submit" class="btn btn-primary">Next Step →</button>
-                </div>
-            </form>
-        
-        {% elif step == 4 %}
-            <h2>Confirmation</h2>
-            <form method="post" class="wizard-form">
-                {% csrf_token %}
-                
-                <div style="background: #f0fdf4; padding: 20px; border-radius: 5px; margin-bottom: 30px;">
-                    <h3 style="margin-top: 0; color: #2d3142;">Request Summary</h3>
-                    <table style="width: 100%;">
-                        <tr>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #ddd;"><strong>Name:</strong></td>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #ddd;">{{ form_data.first_name }} {{ form_data.last_name }}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #ddd;"><strong>Barangay:</strong></td>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #ddd;">{{ form_data.barangay }}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #ddd;"><strong>Address:</strong></td>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #ddd;">{{ form_data.address }}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 0;"><strong>Service Type:</strong></td>
-                            <td style="padding: 8px 0;">{{ form_data.service_type }}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <div class="checkbox-group">
-                    {{ form.terms }}
-                    <label for="{{ form.terms.id_for_label }}">{{ form.terms.label }}</label>
-                </div>
-                {% if form.terms.errors %}
-                    <div class="form-error">{{ form.terms.errors.0 }}</div>
-                {% endif %}
-                
-                <div class="button-group">
-                    <a href="?step=3" class="btn btn-secondary">Back</a>
-                    <button type="submit" class="btn btn-primary">Submit Request</button>
-                </div>
-            </form>
+        <!-- ==================== STEP 3: Review & Submit ==================== -->
+        <h2>Review &amp; Submit</h2>
+        <form method="post" class="wizard-form" novalidate>
+            {% csrf_token %}
+
+            <div style="background:#f0fdf4;padding:24px;border-radius:8px;margin-bottom:30px;">
+                <h3 style="margin-top:0;color:#2d3142;">Request Summary</h3>
+                <table class="summary-table">
+                    <tr><td>Service Type</td><td>{{ form_data.service_type }}</td></tr>
+                    <tr><td>Client Name</td><td>{{ form_data.client_name }}</td></tr>
+                    <tr><td>Request Date</td><td>{{ form_data.request_date }}</td></tr>
+                    <tr><td>Barangay</td><td>{{ form_data.barangay }}</td></tr>
+                    <tr><td>Address</td><td>{{ form_data.address|default:"N/A" }}</td></tr>
+                    <tr><td>Contact Number</td><td>{{ form_data.contact_number }}</td></tr>
+                    <tr><td>Connected to BAWAD</td><td>{{ form_data.connected_to_bawad }}</td></tr>
+                    <tr><td>Public / Private</td><td>{{ form_data.public_private }}</td></tr>
+                </table>
+            </div>
+
+            <div class="checkbox-group">
+                {{ form.terms }}
+                <label for="{{ form.terms.id_for_label }}">{{ form.terms.label }}</label>
+            </div>
+            {% if form.terms.errors %}
+                <div class="form-error">{{ form.terms.errors.0 }}</div>
+            {% endif %}
+
+            <div class="button-group">
+                <a href="?step=2" class="btn btn-secondary">&larr; Back</a>
+                <button type="submit" class="btn btn-primary">Submit Request</button>
+            </div>
+        </form>
         {% endif %}
     </div>
 </div>
 
+{# Step 1 is now a simple dropdown, no extra JS needed #}
+
+{# Owner toggle + BAWAD conditional proof + Map JS #}
 {% if step == 2 %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var ownerProfile = {{ owner_profile_json|safe }};
+    var btnOwner = document.getElementById('btnOwner');
+    var btnOther = document.getElementById('btnOther');
+    var clientNameInput = document.getElementById('id_client_name');
+    var contactInput = document.getElementById('id_contact_number');
+    var addressInput = document.querySelector('input[name="address"]');
+
+    function setRequesterMode(mode) {
+        btnOwner.classList.toggle('active', mode === 'owner');
+        btnOther.classList.toggle('active', mode === 'other');
+        if (mode === 'owner') {
+            if (clientNameInput && ownerProfile.client_name) clientNameInput.value = ownerProfile.client_name;
+            if (contactInput && ownerProfile.contact_number) contactInput.value = ownerProfile.contact_number;
+            if (addressInput && ownerProfile.address) { addressInput.value = ownerProfile.address; window.lastAutoAddress = ownerProfile.address; }
+            if (ownerProfile.gps_latitude && ownerProfile.gps_longitude) {
+                var latField = document.querySelector('input[name="gps_latitude"]');
+                var lonField = document.querySelector('input[name="gps_longitude"]');
+                if (latField && lonField) {
+                    latField.value = ownerProfile.gps_latitude.toFixed(6);
+                    lonField.value = ownerProfile.gps_longitude.toFixed(6);
+                    if (typeof placeMarker === 'function') placeMarker(ownerProfile.gps_latitude, ownerProfile.gps_longitude, true);
+                }
+            }
+        } else {
+            if (clientNameInput) clientNameInput.value = '';
+            if (contactInput) contactInput.value = '';
+            if (addressInput) { addressInput.value = ''; window.lastAutoAddress = ''; }
+        }
+    }
+
+    if (btnOwner) btnOwner.addEventListener('click', function() { setRequesterMode('owner'); });
+    if (btnOther) btnOther.addEventListener('click', function() { setRequesterMode('other'); });
+
+    var radios = document.querySelectorAll('[name="connected_to_bawad"]');
+    var proofSection = document.getElementById('bawadProofSection');
+    function toggleBawad() {
+        var val = document.querySelector('[name="connected_to_bawad"]:checked');
+        if (val && val.value === 'YES') {
+            proofSection.classList.add('visible');
+        } else {
+            proofSection.classList.remove('visible');
+        }
+    }
+    radios.forEach(function(r) { r.addEventListener('change', toggleBawad); });
+    toggleBawad();
+});
+</script>
 <script>
     const REVERSE_GEOCODE_URL = "{% url 'services:reverse_geocode' %}";
     const GEOJSON_URL = "{% static 'data/barangay-boundaries.geojson' %}";
@@ -1051,82 +589,46 @@
     let marker = null;
     let isLocationValid = false;
     let addressTouched = false;
-    let lastAutoAddress = '';
+    window.lastAutoAddress = window.lastAutoAddress || '';
     let geocodeSeq = 0;
 
     function computeGeoJSONOffset(geojson) {
         const features = geojson.features || [];
-
         const centroidFromFeature = (feature) => {
             if (!feature || !feature.geometry) return null;
             const geom = feature.geometry;
             let ring = null;
-            if (geom.type === 'Polygon' && geom.coordinates && geom.coordinates.length) {
-                ring = geom.coordinates[0];
-            } else if (geom.type === 'MultiPolygon' && geom.coordinates && geom.coordinates.length) {
-                ring = geom.coordinates[0][0];
-            }
+            if (geom.type === 'Polygon' && geom.coordinates && geom.coordinates.length) ring = geom.coordinates[0];
+            else if (geom.type === 'MultiPolygon' && geom.coordinates && geom.coordinates.length) ring = geom.coordinates[0][0];
             if (!ring || !ring.length) return null;
-            let sumLon = 0;
-            let sumLat = 0;
-            for (const pt of ring) {
-                sumLon += Number(pt[0]);
-                sumLat += Number(pt[1]);
-            }
-            return {
-                lon: sumLon / ring.length,
-                lat: sumLat / ring.length,
-            };
+            let sumLon = 0, sumLat = 0;
+            for (const pt of ring) { sumLon += Number(pt[0]); sumLat += Number(pt[1]); }
+            return { lon: sumLon / ring.length, lat: sumLat / ring.length };
         };
-
-        const preferred = features.find((f) => {
+        const preferred = features.find(f => {
             const name = (f.properties && f.properties.name ? String(f.properties.name) : '').trim().toLowerCase();
             return name === 'poblacion';
         });
-
         if (preferred) {
             const centroid = centroidFromFeature(preferred);
-            if (centroid && Number.isFinite(centroid.lon) && Number.isFinite(centroid.lat)) {
-                return {
-                    dLon: BAYAWAN_CENTER.lon - centroid.lon,
-                    dLat: BAYAWAN_CENTER.lat - centroid.lat,
-                };
-            }
+            if (centroid && Number.isFinite(centroid.lon) && Number.isFinite(centroid.lat))
+                return { dLon: BAYAWAN_CENTER.lon - centroid.lon, dLat: BAYAWAN_CENTER.lat - centroid.lat };
         }
-
         let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-
         const bump = (lon, lat) => {
             const x = Number(lon), y = Number(lat);
             if (!Number.isFinite(x) || !Number.isFinite(y)) return;
             minLon = Math.min(minLon, x); maxLon = Math.max(maxLon, x);
             minLat = Math.min(minLat, y); maxLat = Math.max(maxLat, y);
         };
-
         const walk = (coords, type) => {
             if (!coords) return;
-            if (type === 'Polygon') {
-                for (const ring of coords) for (const pt of ring) bump(pt[0], pt[1]);
-            } else if (type === 'MultiPolygon') {
-                for (const poly of coords) for (const ring of poly) for (const pt of ring) bump(pt[0], pt[1]);
-            }
+            if (type === 'Polygon') for (const ring of coords) for (const pt of ring) bump(pt[0], pt[1]);
+            else if (type === 'MultiPolygon') for (const poly of coords) for (const ring of poly) for (const pt of ring) bump(pt[0], pt[1]);
         };
-
-        for (const f of features) {
-            const g = f.geometry || {};
-            walk(g.coordinates, g.type);
-        }
-
-        if (!Number.isFinite(minLon) || !Number.isFinite(minLat)) {
-            return { dLat: 0, dLon: 0 };
-        }
-
-        const centerLon = (minLon + maxLon) / 2;
-        const centerLat = (minLat + maxLat) / 2;
-        return {
-            dLon: BAYAWAN_CENTER.lon - centerLon,
-            dLat: BAYAWAN_CENTER.lat - centerLat,
-        };
+        for (const f of features) { const g = f.geometry || {}; walk(g.coordinates, g.type); }
+        if (!Number.isFinite(minLon) || !Number.isFinite(minLat)) return { dLat: 0, dLon: 0 };
+        return { dLon: BAYAWAN_CENTER.lon - (minLon + maxLon) / 2, dLat: BAYAWAN_CENTER.lat - (minLat + maxLat) / 2 };
     }
 
     async function loadBarangayGeoJSON() {
@@ -1137,121 +639,61 @@
                 barangayGeoJSONOffset = computeGeoJSONOffset(barangayGeoJSON);
                 barangayCentroids = computeBarangayCentroids(barangayGeoJSON);
             }
-        } catch (err) {
-            console.warn('Failed to load barangay GeoJSON:', err);
-        }
+        } catch (err) { console.warn('Failed to load barangay GeoJSON:', err); }
     }
 
     function computeBarangayCentroids(geojson) {
         const results = [];
-        const features = geojson.features || [];
-        for (const feature of features) {
+        for (const feature of (geojson.features || [])) {
             const props = feature.properties || {};
             const name = props.name;
             const geom = feature.geometry || {};
             let ring = null;
-            if (geom.type === 'Polygon' && geom.coordinates && geom.coordinates.length) {
-                ring = geom.coordinates[0];
-            } else if (geom.type === 'MultiPolygon' && geom.coordinates && geom.coordinates.length) {
-                ring = geom.coordinates[0][0];
-            }
+            if (geom.type === 'Polygon' && geom.coordinates && geom.coordinates.length) ring = geom.coordinates[0];
+            else if (geom.type === 'MultiPolygon' && geom.coordinates && geom.coordinates.length) ring = geom.coordinates[0][0];
             if (!name || !ring || !ring.length) continue;
-            let sumLon = 0;
-            let sumLat = 0;
-            for (const pt of ring) {
-                sumLon += Number(pt[0]);
-                sumLat += Number(pt[1]);
-            }
-            results.push({
-                name: String(name),
-                lon: sumLon / ring.length,
-                lat: sumLat / ring.length,
-            });
+            let sumLon = 0, sumLat = 0;
+            for (const pt of ring) { sumLon += Number(pt[0]); sumLat += Number(pt[1]); }
+            results.push({ name: String(name), lon: sumLon / ring.length, lat: sumLat / ring.length });
         }
         return results;
     }
 
-    function nearestBarangay(pointLon, pointLat) {
-        if (!barangayCentroids || !barangayCentroids.length) return null;
-        let best = null;
-        let bestDist = null;
-        for (const item of barangayCentroids) {
-            const d = (item.lat - pointLat) * (item.lat - pointLat) + (item.lon - pointLon) * (item.lon - pointLon);
-            if (bestDist === null || d < bestDist) {
-                bestDist = d;
-                best = item.name;
-            }
-        }
-        return best;
-    }
-
-    function withinServiceBounds(lat, lon) {
-        return Math.abs(lat - BAYAWAN_CENTER.lat) <= SERVICE_BOUNDS.lat &&
-            Math.abs(lon - BAYAWAN_CENTER.lon) <= SERVICE_BOUNDS.lon;
-    }
-
     function pointInRing(x, y, ring) {
-        let inside = false;
-        const n = ring.length;
-        if (n < 3) return false;
+        let inside = false; const n = ring.length; if (n < 3) return false;
         let j = n - 1;
-        for (let i = 0; i < n; i += 1) {
-            const xi = Number(ring[i][0]);
-            const yi = Number(ring[i][1]);
-            const xj = Number(ring[j][0]);
-            const yj = Number(ring[j][1]);
-            const intersect = (yi > y) !== (yj > y) &&
-                (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-16) + xi);
-            if (intersect) inside = !inside;
+        for (let i = 0; i < n; i++) {
+            const xi = Number(ring[i][0]), yi = Number(ring[i][1]);
+            const xj = Number(ring[j][0]), yj = Number(ring[j][1]);
+            if ((yi > y) !== (yj > y) && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-16) + xi)) inside = !inside;
             j = i;
         }
         return inside;
     }
-
     function pointInPolygon(x, y, polygon) {
         if (!polygon || !polygon.length) return false;
         if (!pointInRing(x, y, polygon[0])) return false;
-        for (let i = 1; i < polygon.length; i += 1) {
-            if (pointInRing(x, y, polygon[i])) return false;
-        }
+        for (let i = 1; i < polygon.length; i++) if (pointInRing(x, y, polygon[i])) return false;
         return true;
     }
-
     function pointInFeature(x, y, feature) {
-        const geometry = feature.geometry || {};
-        if (geometry.type === 'Polygon') {
-            return pointInPolygon(x, y, geometry.coordinates || []);
-        }
-        if (geometry.type === 'MultiPolygon') {
-            return (geometry.coordinates || []).some((poly) => pointInPolygon(x, y, poly));
-        }
+        const g = feature.geometry || {};
+        if (g.type === 'Polygon') return pointInPolygon(x, y, g.coordinates || []);
+        if (g.type === 'MultiPolygon') return (g.coordinates || []).some(p => pointInPolygon(x, y, p));
         return false;
     }
 
     function detectBarangayFromGeoJSON(lat, lon) {
-        if (!barangayGeoJSON || !barangayGeoJSON.features) {
-            return null;
-        }
-
-        const pointLon = lon - barangayGeoJSONOffset.dLon;
-        const pointLat = lat - barangayGeoJSONOffset.dLat;
+        if (!barangayGeoJSON || !barangayGeoJSON.features) return null;
+        const pLon = lon - barangayGeoJSONOffset.dLon, pLat = lat - barangayGeoJSONOffset.dLat;
         const hasTurf = typeof turf !== 'undefined' && turf.booleanPointInPolygon;
-        const turfPoint = hasTurf ? turf.point([pointLon, pointLat]) : null;
-
+        const turfPoint = hasTurf ? turf.point([pLon, pLat]) : null;
         for (const feature of barangayGeoJSON.features) {
             try {
-                if (hasTurf) {
-                    if (turf.booleanPointInPolygon(turfPoint, feature)) {
-                        return feature.properties.name;
-                    }
-                } else if (pointInFeature(pointLon, pointLat, feature)) {
-                    return feature.properties.name;
-                }
-            } catch (err) {
-                continue;
-            }
+                if (hasTurf) { if (turf.booleanPointInPolygon(turfPoint, feature)) return feature.properties.name; }
+                else if (pointInFeature(pLon, pLat, feature)) return feature.properties.name;
+            } catch (err) { continue; }
         }
-
         return null;
     }
 
@@ -1260,26 +702,17 @@
         try {
             const resp = await fetch(url, { method: 'GET' });
             let data = null;
-            try {
-                data = await resp.json();
-            } catch (err) {
-                data = null;
-            }
-            if (!resp.ok) {
-                return data;
-            }
+            try { data = await resp.json(); } catch (e) { data = null; }
+            if (!resp.ok) return data;
             return data && data.ok ? data : null;
-        } catch (err) {
-            return null;
-        }
+        } catch (err) { return null; }
     }
 
     function formatAddressFromReverseGeocode(payload) {
         if (!payload) return null;
         if (payload.display_name) return payload.display_name;
         const addr = payload.address || {};
-        const parts = [addr.house_number, addr.road, addr.suburb, addr.city || addr.town || addr.municipality, addr.state];
-        return parts.filter(Boolean).join(', ') || null;
+        return [addr.house_number, addr.road, addr.suburb, addr.city || addr.town || addr.municipality, addr.state].filter(Boolean).join(', ') || null;
     }
 
     function updatePinCardPosition() {
@@ -1294,28 +727,21 @@
         const badge = document.getElementById('mapStatusBadge');
         const validation = document.getElementById('locationValidation');
         const instructions = document.getElementById('mapInstructions');
-
         if (badge) {
             badge.textContent = valid ? 'Inside Bayawan City' : 'Outside Bayawan City';
             badge.classList.toggle('valid', valid);
             badge.classList.toggle('invalid', !valid);
         }
-
         if (validation) {
             if (valid) {
                 validation.textContent = barangay ? `Detected barangay: ${barangay}` : 'Detected barangay: Unknown';
-                validation.classList.add('valid');
-                validation.classList.remove('invalid');
+                validation.classList.add('valid'); validation.classList.remove('invalid');
             } else {
-                validation.textContent = 'Selected location is outside Bayawan City. Please move the pin inside the city boundary.';
-                validation.classList.add('invalid');
-                validation.classList.remove('valid');
+                validation.textContent = 'Location is outside Bayawan City. Additional travel fees may apply.';
+                validation.classList.add('invalid'); validation.classList.remove('valid');
             }
         }
-
-        if (instructions) {
-            instructions.classList.toggle('success', valid);
-        }
+        if (instructions) instructions.classList.toggle('success', valid);
     }
 
     function updatePinInfoCard(lat, lon, barangay, address, valid) {
@@ -1324,8 +750,7 @@
         const coords = document.getElementById('pinInfoCoords');
         const addr = document.getElementById('pinInfoAddress');
         const status = document.getElementById('pinInfoStatus');
-
-        if (title) title.textContent = barangay || (valid ? 'Unknown Barangay' : 'Outside Bayawan City');
+        if (title) title.textContent = barangay || 'Outside Bayawan City';
         if (coords) coords.textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
         if (addr) addr.textContent = address || 'Address will appear here';
         if (status) {
@@ -1333,57 +758,37 @@
             status.classList.toggle('valid', valid);
             status.classList.toggle('invalid', !valid);
         }
-
         if (card) card.classList.add('active');
         updatePinCardPosition();
     }
 
     async function handleLocationChange(lat, lon, fields) {
         const { latField, lonField, barangayInput, addressInput } = fields;
-
         latField.value = lat.toFixed(6);
         lonField.value = lon.toFixed(6);
-
         const detectedBarangay = detectBarangayFromGeoJSON(lat, lon);
-        isLocationValid = Boolean(detectedBarangay);
-
-        if (barangayInput) {
-            barangayInput.value = detectedBarangay || '';
-            barangayInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
-        updateStatusUI(isLocationValid, detectedBarangay);
-        updatePinInfoCard(lat, lon, detectedBarangay, isLocationValid ? 'Detecting address...' : null, isLocationValid);
-
+        isLocationValid = true;
+        if (barangayInput) { barangayInput.value = detectedBarangay || ''; barangayInput.dispatchEvent(new Event('change', { bubbles: true })); }
+        updateStatusUI(Boolean(detectedBarangay), detectedBarangay);
+        updatePinInfoCard(lat, lon, detectedBarangay, 'Detecting address...', Boolean(detectedBarangay));
         const seq = ++geocodeSeq;
         const payload = await reverseGeocode(lat, lon);
         if (seq !== geocodeSeq) return;
-
         const serverBarangay = payload && payload.barangay ? payload.barangay : null;
         const serverWithin = payload && typeof payload.within_bayawan === 'boolean' ? payload.within_bayawan : null;
-        const pointLon = lon - barangayGeoJSONOffset.dLon;
-        const pointLat = lat - barangayGeoJSONOffset.dLat;
-        const insideBounds = withinServiceBounds(lat, lon);
-        const fallbackBarangay = (!detectedBarangay && (serverWithin || insideBounds)) ? nearestBarangay(pointLon, pointLat) : null;
-        const finalBarangay = detectedBarangay || serverBarangay || fallbackBarangay;
-        isLocationValid = Boolean(finalBarangay) && (serverWithin !== false || insideBounds || Boolean(detectedBarangay));
-
-        if (barangayInput) {
-            barangayInput.value = finalBarangay || '';
-            barangayInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
-        updateStatusUI(isLocationValid, finalBarangay);
-
+        const withinCity = Boolean(detectedBarangay) || (serverWithin === true && Boolean(serverBarangay));
+        const finalBarangay = withinCity ? (detectedBarangay || serverBarangay) : 'Outside Bayawan City';
+        isLocationValid = true;
+        if (barangayInput) { barangayInput.value = finalBarangay || ''; barangayInput.dispatchEvent(new Event('change', { bubbles: true })); }
+        updateStatusUI(withinCity, finalBarangay);
         const formatted = formatAddressFromReverseGeocode(payload);
         if (formatted) {
-            if (addressInput && (!addressTouched || !addressInput.value || addressInput.value === lastAutoAddress)) {
-                addressInput.value = formatted;
-                lastAutoAddress = formatted;
+            if (addressInput && (!addressTouched || !addressInput.value || addressInput.value === window.lastAutoAddress)) {
+                addressInput.value = formatted; window.lastAutoAddress = formatted;
             }
-            updatePinInfoCard(lat, lon, finalBarangay, formatted, isLocationValid);
+            updatePinInfoCard(lat, lon, finalBarangay, formatted, withinCity);
         } else {
-            updatePinInfoCard(lat, lon, finalBarangay, null, isLocationValid);
+            updatePinInfoCard(lat, lon, finalBarangay, null, withinCity);
         }
     }
 
@@ -1393,55 +798,33 @@
         const barangayInput = document.querySelector('input[name="barangay"]');
         const addressInput = document.querySelector('input[name="address"]');
         const wizardForm = document.querySelector('.wizard-form');
-
         if (!latField || !lonField) return;
+        if (addressInput) addressInput.addEventListener('input', function() { addressTouched = true; });
 
-        if (addressInput) {
-            addressInput.addEventListener('input', function() {
-                addressTouched = true;
-            });
-        }
+        mapInstance = L.map('map', { zoomControl: true, attributionControl: true }).setView([BAYAWAN_CENTER.lat, BAYAWAN_CENTER.lon], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OpenStreetMap contributors', maxZoom: 19 }).addTo(mapInstance);
 
-        loadBarangayGeoJSON().then(() => {
+        loadBarangayGeoJSON().then(function() {
+            if (barangayGeoJSON && barangayGeoJSON.features) {
+                var off = barangayGeoJSONOffset;
+                L.geoJSON(barangayGeoJSON, {
+                    coordsToLatLng: function(coords) { return L.latLng(coords[1] + off.dLat, coords[0] + off.dLon); },
+                    style: { color: '#1abc9c', weight: 2, opacity: 0.6, fill: true, fillColor: '#1abc9c', fillOpacity: 0.08, interactive: false }
+                }).addTo(mapInstance);
+            }
             if (marker) {
-                const pos = marker.getLatLng();
+                var pos = marker.getLatLng();
                 handleLocationChange(pos.lat, pos.lng, { latField, lonField, barangayInput, addressInput });
             }
         });
 
-        mapInstance = L.map('map', {
-            zoomControl: true,
-            attributionControl: true,
-        }).setView([BAYAWAN_CENTER.lat, BAYAWAN_CENTER.lon], 13);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: 'OpenStreetMap contributors',
-            maxZoom: 19,
-        }).addTo(mapInstance);
-
-        L.rectangle(
-            [[BAYAWAN_CENTER.lat - 0.05, BAYAWAN_CENTER.lon - 0.05], [BAYAWAN_CENTER.lat + 0.05, BAYAWAN_CENTER.lon + 0.05]],
-            {
-                color: '#1abc9c',
-                weight: 2,
-                opacity: 0.5,
-                fill: true,
-                fillColor: '#1abc9c',
-                fillOpacity: 0.08,
-                dashArray: '5, 5',
-                interactive: false
-            }
-        ).addTo(mapInstance);
-
         const pinIcon = L.divIcon({
             className: 'pin-marker-icon',
             html: '<div class="pin-marker-head"></div><div class="pin-marker-pulse"></div>',
-            iconSize: [30, 42],
-            iconAnchor: [15, 42],
-            popupAnchor: [0, -36],
+            iconSize: [30, 42], iconAnchor: [15, 42], popupAnchor: [0, -36],
         });
 
-        function placeMarker(lat, lon, panToPin) {
+        window.placeMarker = function placeMarker(lat, lon, panToPin) {
             if (!marker) {
                 marker = L.marker([lat, lon], { draggable: true, icon: pinIcon, autoPan: true }).addTo(mapInstance);
                 marker.on('drag', function() {
@@ -1454,61 +837,31 @@
                     const pos = marker.getLatLng();
                     handleLocationChange(pos.lat, pos.lng, { latField, lonField, barangayInput, addressInput });
                 });
-            } else {
-                marker.setLatLng([lat, lon]);
-            }
-
-            if (panToPin) {
-                mapInstance.panTo([lat, lon]);
-            }
-
+            } else { marker.setLatLng([lat, lon]); }
+            if (panToPin) mapInstance.panTo([lat, lon]);
             handleLocationChange(lat, lon, { latField, lonField, barangayInput, addressInput });
         }
 
-        mapInstance.on('click', function(e) {
-            placeMarker(e.latlng.lat, e.latlng.lng, true);
-        });
-
+        mapInstance.on('click', function(e) { placeMarker(e.latlng.lat, e.latlng.lng, true); });
         mapInstance.on('move', updatePinCardPosition);
         mapInstance.on('zoom', updatePinCardPosition);
 
         if (latField.value && lonField.value) {
             const lat = parseFloat(latField.value);
             const lon = parseFloat(lonField.value);
-            if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-                mapInstance.setView([lat, lon], 15);
-                placeMarker(lat, lon, false);
-            }
+            if (!Number.isNaN(lat) && !Number.isNaN(lon)) { mapInstance.setView([lat, lon], 15); placeMarker(lat, lon, false); }
         }
 
         if (wizardForm) {
             wizardForm.addEventListener('submit', function(evt) {
-                const latVal = latField.value;
-                const lonVal = lonField.value;
-                const detectedBarangay = barangayInput ? (barangayInput.value || '').trim() : '';
-
-                if (!latVal || !lonVal) {
-                    evt.preventDefault();
-                    alert('Please drop a pin on the map before continuing.');
-                    return;
-                }
-
-                if (!isLocationValid || !detectedBarangay) {
-                    evt.preventDefault();
-                    alert('Selected location is outside Bayawan City. Please move the pin inside the city boundary.');
-                }
+                if (!latField.value || !lonField.value) { evt.preventDefault(); alert('Please drop a pin on the map before continuing.'); return; }
+                if (!barangayInput.value || !barangayInput.value.trim()) barangayInput.value = 'Outside Bayawan City';
             });
         }
 
-        window.addEventListener('resize', function() {
-            setTimeout(function() {
-                mapInstance.invalidateSize();
-                updatePinCardPosition();
-            }, 100);
-        });
+        window.addEventListener('resize', function() { setTimeout(function() { mapInstance.invalidateSize(); updatePinCardPosition(); }, 100); });
     });
 </script>
 {% endif %}
-
 
 {% endblock %}

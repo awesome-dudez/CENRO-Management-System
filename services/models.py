@@ -11,63 +11,182 @@ User = settings.AUTH_USER_MODEL
 
 class ServiceRequest(models.Model):
     class ServiceType(models.TextChoices):
-        DECLOGGING = "DECLOGGING", "Septage Declogging"
+        RESIDENTIAL_DESLUDGING = "RESIDENTIAL_DESLUDGING", "Residential Septage Desludging"
+        COMMERCIAL_DESLUDGING = "COMMERCIAL_DESLUDGING", "Commercial Septage Desludging"
         GRASS_CUTTING = "GRASS_CUTTING", "Grass Cutting"
 
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
+        SUBMITTED = "SUBMITTED", "Submitted"
+        UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
+        INSPECTION_SCHEDULED = "INSPECTION_SCHEDULED", "Inspection Scheduled"
+        INSPECTED = "INSPECTED", "Inspected"
+        COMPUTATION_SENT = "COMPUTATION_SENT", "Computation Sent"
+        AWAITING_PAYMENT = "AWAITING_PAYMENT", "Awaiting Payment"
+        PAID = "PAID", "Paid"
+        DESLUDGING_SCHEDULED = "DESLUDGING_SCHEDULED", "Desludging Scheduled"
         COMPLETED = "COMPLETED", "Completed"
 
+    class PublicPrivate(models.TextChoices):
+        PUBLIC = "PUBLIC", "Public"
+        PRIVATE = "PRIVATE", "Private"
+
     consumer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="service_requests")
+    client_name = models.CharField(max_length=255, help_text="Client / Establishment Name")
+    request_date = models.DateField(default=timezone.now)
+    contact_number = models.CharField(max_length=20)
+
     barangay = models.CharField(max_length=255)
     address = models.CharField(max_length=500)
-    service_type = models.CharField(max_length=20, choices=ServiceType.choices)
-    preferred_date = models.DateField()
-    preferred_time = models.TimeField()
-    bawad_receipt = models.FileField(upload_to="bawad_receipts/", null=True, blank=True)
-    notes = models.TextField(blank=True)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    # GPS Coordinates for location picker
     gps_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     gps_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
-    # Computed by admin
+    service_type = models.CharField(max_length=30, choices=ServiceType.choices)
+    connected_to_bawad = models.BooleanField(default=False)
+    bawad_proof = models.FileField(upload_to="bawad_proofs/", null=True, blank=True)
+    public_private = models.CharField(
+        max_length=10,
+        choices=PublicPrivate.choices,
+        default=PublicPrivate.PRIVATE,
+    )
+    client_signature = models.FileField(upload_to="client_signatures/", null=True, blank=True)
+
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=25, choices=Status.choices, default=Status.SUBMITTED)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    assigned_inspector = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inspections_assigned",
+        limit_choices_to={"role__in": ["ADMIN", "STAFF"]},
+    )
+    inspection_date = models.DateField(null=True, blank=True)
+    scheduled_desludging_date = models.DateField(null=True, blank=True)
+
     fee_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     fee_notes = models.CharField(max_length=255, blank=True)
-
-    # Treasurer payment confirmation
     treasurer_receipt = models.FileField(upload_to="treasurer_receipts/", null=True, blank=True)
     payment_confirmed_at = models.DateTimeField(null=True, blank=True)
-    
-    # Cubic meters for declogging services
     cubic_meters = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, default=0)
 
     def __str__(self) -> str:
         return f"{self.get_service_type_display()} - {self.consumer} ({self.barangay})"
 
     @property
-    def is_within_4_year_cycle(self) -> bool:
-        if self.service_type != self.ServiceType.DECLOGGING:
-            return True
-        # Check if there was a completed declogging in the last 4 years
-        four_years_ago = timezone.now().date() - timedelta(days=4 * 365)
-        return not ServiceRequest.objects.filter(
-            consumer=self.consumer,
-            service_type=self.ServiceType.DECLOGGING,
-            status=self.Status.COMPLETED,
-            preferred_date__gte=four_years_ago,
-        ).exists()
+    def is_within_bayawan(self) -> bool:
+        return self.barangay and self.barangay != "Outside Bayawan City"
+
+    @property
+    def bawad_free_eligible(self) -> bool:
+        """BAWAD members get free service if < 5 m3 used within 4-year cycle."""
+        if not self.connected_to_bawad:
+            return False
+        from dashboard.models import ConfigurableRate
+        limit = ConfigurableRate.get("bawad_free_limit_m3", 5)
+        cycle_years = ConfigurableRate.get("bawad_cycle_years", 4)
+        cutoff = timezone.now().date() - timedelta(days=int(cycle_years) * 365)
+        used = (
+            ServiceRequest.objects.filter(
+                consumer=self.consumer,
+                service_type__in=[
+                    self.ServiceType.RESIDENTIAL_DESLUDGING,
+                    self.ServiceType.COMMERCIAL_DESLUDGING,
+                ],
+                status=self.Status.COMPLETED,
+                request_date__gte=cutoff,
+            )
+            .exclude(pk=self.pk)
+            .aggregate(total=models.Sum("cubic_meters"))["total"]
+            or 0
+        )
+        return used < limit
+
+
+class InspectionDetail(models.Model):
+    service_request = models.OneToOneField(
+        ServiceRequest, on_delete=models.CASCADE, related_name="inspection_detail"
+    )
+    inspection_date = models.DateField()
+    inspected_by = models.CharField(max_length=255)
+    inspector_signature = models.FileField(upload_to="inspector_signatures/", null=True, blank=True)
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"Inspection for {self.service_request} on {self.inspection_date}"
+
+
+class CompletionInfo(models.Model):
+    service_request = models.OneToOneField(
+        ServiceRequest, on_delete=models.CASCADE, related_name="completion_info"
+    )
+    date_completed = models.DateField()
+    time_required = models.CharField(max_length=100, help_text="e.g. 2 hours 30 mins")
+    witnessed_by_name = models.CharField(max_length=255, blank=True)
+    witnessed_by_signature = models.FileField(upload_to="witness_signatures/", null=True, blank=True)
+    declogger_no = models.CharField(max_length=50, blank=True)
+    fuel_consumption = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    fuel_unit = models.CharField(max_length=20, default="liters")
+
+    driver_name = models.CharField(max_length=255)
+    driver_signature = models.FileField(upload_to="driver_signatures/", null=True, blank=True)
+
+    helper1_name = models.CharField(max_length=255, blank=True)
+    helper1_signature = models.FileField(upload_to="helper_signatures/", null=True, blank=True)
+    helper2_name = models.CharField(max_length=255, blank=True)
+    helper2_signature = models.FileField(upload_to="helper_signatures/", null=True, blank=True)
+    helper3_name = models.CharField(max_length=255, blank=True)
+    helper3_signature = models.FileField(upload_to="helper_signatures/", null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"Completion for {self.service_request} on {self.date_completed}"
+
+    @property
+    def personnel_count(self) -> int:
+        count = 1  # driver
+        if self.helper1_name:
+            count += 1
+        if self.helper2_name:
+            count += 1
+        if self.helper3_name:
+            count += 1
+        return count
 
 
 class Notification(models.Model):
+    class NotificationType(models.TextChoices):
+        REQUEST_SUBMITTED = "REQUEST_SUBMITTED", "Request Submitted"
+        INSPECTOR_ASSIGNED = "INSPECTOR_ASSIGNED", "Inspector Assigned"
+        COMPUTATION_READY = "COMPUTATION_READY", "Computation Ready"
+        PAYMENT_UPLOADED = "PAYMENT_UPLOADED", "Payment Uploaded"
+        DESLUDGING_SCHEDULED = "DESLUDGING_SCHEDULED", "Desludging Scheduled"
+        STATUS_CHANGE = "STATUS_CHANGE", "Status Change"
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     message = models.CharField(max_length=500)
+    notification_type = models.CharField(
+        max_length=30,
+        choices=NotificationType.choices,
+        default=NotificationType.STATUS_CHANGE,
+    )
+    related_request = models.ForeignKey(
+        ServiceRequest,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="notifications",
+    )
+    link = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
 
+    class Meta:
+        ordering = ["-created_at"]
+
     def __str__(self) -> str:
         return f"Notification for {self.user}: {self.message[:50]}"
-

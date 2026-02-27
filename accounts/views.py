@@ -3,8 +3,8 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 
-from .forms import ConsumerRegistrationForm, LoginForm, StaffRegistrationForm
-from .models import User
+from .forms import ConsumerRegistrationForm, LoginForm, ProfileUpdateForm, StaffRegistrationForm
+from .models import ConsumerProfile, User
 
 
 def login_view(request):
@@ -61,6 +61,49 @@ def staff_register(request):
     else:
         form = StaffRegistrationForm()
     return render(request, "accounts/staff_register.html", {"form": form})
+
+
+@login_required
+def profile(request):
+    user = request.user
+    prof, _ = ConsumerProfile.objects.get_or_create(user=user)
+
+    if request.method == "POST":
+        form = ProfileUpdateForm(request.POST, request.FILES)
+        if form.is_valid():
+            user.first_name = form.cleaned_data["first_name"]
+            user.last_name = form.cleaned_data["last_name"]
+            user.email = form.cleaned_data["email"]
+            user.save()
+
+            if form.cleaned_data.get("profile_picture"):
+                prof.profile_picture = form.cleaned_data["profile_picture"]
+            prof.gender = form.cleaned_data.get("gender") or "MALE"
+            prof.birthdate = form.cleaned_data.get("birthdate")
+            prof.mobile_number = form.cleaned_data["mobile_number"]
+            prof.street_address = form.cleaned_data.get("street_address") or ""
+            prof.barangay = form.cleaned_data["barangay"]
+            prof.municipality = form.cleaned_data["municipality"]
+            prof.province = form.cleaned_data["province"]
+            prof.save()
+
+            messages.success(request, "Your profile has been updated.")
+            return redirect("accounts:profile")
+    else:
+        form = ProfileUpdateForm(initial={
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "gender": prof.gender,
+            "birthdate": prof.birthdate.isoformat() if prof.birthdate else "",
+            "email": user.email,
+            "mobile_number": prof.mobile_number,
+            "street_address": prof.street_address,
+            "barangay": prof.barangay,
+            "municipality": prof.municipality,
+            "province": prof.province,
+        })
+
+    return render(request, "accounts/profile.html", {"form": form, "profile": prof})
 
 
 @login_required

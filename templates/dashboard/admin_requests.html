@@ -1,93 +1,75 @@
 {% extends "base.html" %}
-{% block title %}Admin Requests{% endblock %}
+{% block title %}Admin - Requests{% endblock %}
 {% block content %}
-<!-- Secondary Navigation Tabs -->
-<nav class="secondary-nav-tabs">
-    <a href="?tab=pending" class="secondary-tab {% if active_tab == 'pending' %}active{% endif %}">
-        Pending Requests
-    </a>
-    <a href="?tab=approved" class="secondary-tab {% if active_tab == 'approved' %}active{% endif %}">
-        Approved
-    </a>
-    <a href="{% url 'dashboard:admin_schedule' %}" class="secondary-tab {% if active_tab == 'schedule' %}active{% endif %}">
-        Schedule
-    </a>
-    <a href="?tab=completed" class="secondary-tab {% if active_tab == 'completed' %}active{% endif %}">
-        Completed
-    </a>
-</nav>
+<style>
+    .requests-container { max-width: 1100px; margin: 20px auto; padding: 20px; }
+    .sub-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: #f0f0f0; border-radius: 8px; padding: 4px; }
+    .sub-tab { padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; color: #555; transition: all 0.2s; }
+    .sub-tab:hover { background: #e0e0e0; }
+    .sub-tab.active { background: #1abc9c; color: white; }
+    .data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .data-table th { background: #2d3142; color: white; padding: 12px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .data-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+    .data-table tr:hover { background: #f8f9fa; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: white; }
+    .status-submitted { background: #f39c12; }
+    .status-under_review { background: #3498db; }
+    .status-inspection_scheduled { background: #9b59b6; }
+    .status-inspected { background: #1abc9c; }
+    .status-computation_sent { background: #e67e22; }
+    .status-awaiting_payment { background: #e74c3c; }
+    .status-paid { background: #27ae60; }
+    .status-desludging_scheduled { background: #2980b9; }
+    .status-completed { background: #2ecc71; }
+    .btn-sm { padding: 6px 14px; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; color: white; }
+    .btn-view { background: #3498db; }
+    .btn-approve { background: #27ae60; }
+</style>
 
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">
-            {% if active_tab == 'pending' %}Pending Requests
-            {% elif active_tab == 'approved' %}Approved Requests
-            {% elif active_tab == 'schedule' %}Scheduled Services
-            {% elif active_tab == 'completed' %}Completed Service Records
-            {% else %}All Requests
-            {% endif %}
-        </h3>
-        <p class="card-subtitle">
-            {% if active_tab == 'completed' %}Records finalized after CENRO personnel reporting{% endif %}
-        </p>
+<div class="requests-container">
+    <div class="sub-tabs">
+        <a href="?tab=pending" class="sub-tab {% if active_tab == 'pending' %}active{% endif %}">Pending</a>
+        <a href="?tab=inspection" class="sub-tab {% if active_tab == 'inspection' %}active{% endif %}">Inspection</a>
+        <a href="?tab=computation" class="sub-tab {% if active_tab == 'computation' %}active{% endif %}">Computation</a>
+        <a href="?tab=schedule" class="sub-tab {% if active_tab == 'schedule' %}active{% endif %}">Scheduling</a>
+        <a href="?tab=completed" class="sub-tab {% if active_tab == 'completed' %}active{% endif %}">Completed</a>
     </div>
-    
-    <div class="table-responsive">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Ref ID</th>
-                    <th>Customer</th>
-                    <th>Barangay</th>
-                    <th>Service</th>
-                    {% if active_tab == 'completed' %}
-                    <th>Cubic Measurement</th>
-                    <th>Date Finished</th>
-                    {% else %}
-                    <th>Date</th>
-                    <th>Status</th>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Client</th>
+                <th>Service</th>
+                <th>Barangay</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests %}
+            <tr>
+                <td>#{{ req.id }}</td>
+                <td>{{ req.client_name }}</td>
+                <td>{{ req.get_service_type_display }}</td>
+                <td>{{ req.barangay }}</td>
+                <td>{{ req.request_date|date:"M d, Y" }}</td>
+                <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
+                <td>
+                    <a href="{% url 'services:request_detail' req.pk %}" class="btn-sm btn-view">View</a>
+                    {% if req.status == "SUBMITTED" %}
+                    <form method="post" action="{% url 'dashboard:approve_request' req.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-sm btn-approve">Review</button>
+                    </form>
                     {% endif %}
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for req in requests %}
-                <tr>
-                    <td>ECO-{{ req.id|stringformat:"03d" }}</td>
-                    <td>{{ req.consumer.get_full_name|default:req.consumer.username }}</td>
-                    <td>{{ req.barangay }}</td>
-                    <td>{{ req.get_service_type_display }}</td>
-                    {% if active_tab == 'completed' %}
-                    <td>{{ req.cubic_meters|default:"0" }} m³</td>
-                    <td>{{ req.preferred_date }}</td>
-                    {% else %}
-                    <td>{{ req.preferred_date }}</td>
-                    <td>
-                        <span class="status-badge status-{{ req.status|lower }}">
-                            {% if active_tab == 'approved' %}Queuing{% else %}{{ req.get_status_display }}{% endif %}
-                        </span>
-                    </td>
-                    {% endif %}
-                    <td>
-                        {% if active_tab == 'pending' %}
-                        <form method="post" action="{% url 'dashboard:approve_request' req.pk %}" style="display: inline;">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-success btn-sm">Approve</button>
-                        </form>
-                        {% else %}
-                        <a href="{% url 'services:request_detail' req.pk %}" class="btn btn-sm">View</a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="{% if active_tab == 'completed' %}7{% else %}8{% endif %}">
-                        No {% if active_tab == 'pending' %}pending{% elif active_tab == 'approved' %}approved{% elif active_tab == 'schedule' %}scheduled{% elif active_tab == 'completed' %}completed{% endif %} requests found.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">No requests in this category.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}

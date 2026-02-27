@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}My Profile{% endblock %}
+{% block content %}
+<div class="profile-container">
+    <div class="profile-card">
+        <div class="profile-header">
+            <div class="profile-avatar-wrapper">
+                <div class="profile-avatar" id="avatarPreview">
+                    {% if profile.profile_picture %}
+                    <img src="{{ profile.profile_picture.url }}" alt="Profile" id="avatarImg">
+                    {% elif profile.gender == 'FEMALE' %}
+                    <svg viewBox="0 0 100 100" width="80" height="80" id="avatarSvg"><circle cx="50" cy="50" r="50" fill="#2d8659"/><ellipse cx="50" cy="38" rx="16" ry="18" fill="white"/><path d="M50 20 C30 20 28 40 30 48 Q32 36 40 30 Q45 28 50 28 Q55 28 60 30 Q68 36 70 48 C72 40 70 20 50 20Z" fill="white" opacity="0.5"/><path d="M25 85 Q25 60 50 56 Q75 60 75 85" fill="white"/></svg>
+                    {% else %}
+                    <svg viewBox="0 0 100 100" width="80" height="80" id="avatarSvg"><circle cx="50" cy="50" r="50" fill="#2d8659"/><circle cx="50" cy="36" r="15" fill="white"/><path d="M25 85 Q25 58 50 54 Q75 58 75 85" fill="white"/></svg>
+                    {% endif %}
+                </div>
+                <label for="id_profile_picture" class="avatar-upload-btn" title="Change photo">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </label>
+            </div>
+            <div>
+                <h1 class="profile-name">{{ request.user.get_full_name|default:request.user.username|title }}</h1>
+                <span class="profile-role">{{ request.user.get_role_display }}</span>
+            </div>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger" style="margin-bottom:16px;">
+            {% for error in form.non_field_errors %}<p style="margin:0;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            <!-- Hidden file input (triggered by camera icon) -->
+            <div style="display:none;">{{ form.profile_picture }}</div>
+
+            <div class="section-label">Personal Information</div>
+
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label for="{{ form.first_name.id_for_label }}" class="form-label">First Name <span class="req">*</span></label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}<small class="text-danger">{{ form.first_name.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.last_name.id_for_label }}" class="form-label">Last Name <span class="req">*</span></label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}<small class="text-danger">{{ form.last_name.errors.0 }}</small>{% endif %}
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label class="form-label">Gender <span class="req">*</span></label>
+                    <div class="gender-toggle-group">
+                        {% for radio in form.gender %}
+                        <label class="gender-option">
+                            {{ radio.tag }}
+                            <span class="gender-icon">
+                                {% if radio.choice_label == "Male" %}
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"/><line x1="14" y1="10" x2="21" y2="3"/><polyline points="15,3 21,3 21,9"/></svg>
+                                {% else %}
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><line x1="12" y1="13" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+                                {% endif %}
+                            </span>
+                            <span>{{ radio.choice_label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% if form.gender.errors %}<small class="text-danger">{{ form.gender.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.birthdate.id_for_label }}" class="form-label">Birthdate</label>
+                    {{ form.birthdate }}
+                    {% if form.birthdate.errors %}<small class="text-danger">{{ form.birthdate.errors.0 }}</small>{% endif %}
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label for="{{ form.email.id_for_label }}" class="form-label">Email <span class="req">*</span></label>
+                    {{ form.email }}
+                    {% if form.email.errors %}<small class="text-danger">{{ form.email.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.mobile_number.id_for_label }}" class="form-label">Mobile Number <span class="req">*</span></label>
+                    {{ form.mobile_number }}
+                    {% if form.mobile_number.errors %}<small class="text-danger">{{ form.mobile_number.errors.0 }}</small>{% endif %}
+                </div>
+            </div>
+
+            <div class="section-label" style="margin-top:20px;">Address</div>
+
+            <div class="form-group mb-3">
+                <label for="{{ form.street_address.id_for_label }}" class="form-label">Street / House No. / Purok</label>
+                {{ form.street_address }}
+                {% if form.street_address.errors %}<small class="text-danger">{{ form.street_address.errors.0 }}</small>{% endif %}
+            </div>
+
+            <div class="two-col">
+                <div class="form-group mb-3">
+                    <label for="{{ form.barangay.id_for_label }}" class="form-label">Barangay <span class="req">*</span></label>
+                    {{ form.barangay }}
+                    {% if form.barangay.errors %}<small class="text-danger">{{ form.barangay.errors.0 }}</small>{% endif %}
+                </div>
+                <div class="form-group mb-3">
+                    <label for="{{ form.municipality.id_for_label }}" class="form-label">City / Municipality <span class="req">*</span></label>
+                    {{ form.municipality }}
+                    {% if form.municipality.errors %}<small class="text-danger">{{ form.municipality.errors.0 }}</small>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-3">
+                <label for="{{ form.province.id_for_label }}" class="form-label">Province <span class="req">*</span></label>
+                {{ form.province }}
+                {% if form.province.errors %}<small class="text-danger">{{ form.province.errors.0 }}</small>{% endif %}
+            </div>
+
+            <div style="display:flex;gap:12px;margin-top:24px;">
+                <button type="submit" class="btn-save">Save Changes</button>
+                <a href="{% url 'dashboard:home' %}" class="btn-cancel">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.profile-container { max-width: 640px; margin: 40px auto; padding: 0 20px; }
+.profile-card {
+    background: white; border-radius: 12px; padding: 32px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+.profile-header {
+    display: flex; align-items: center; gap: 20px;
+    margin-bottom: 28px; padding-bottom: 20px;
+    border-bottom: 1px solid #e8e8e8;
+}
+.profile-avatar-wrapper { position: relative; flex-shrink: 0; }
+.profile-avatar {
+    width: 80px; height: 80px; border-radius: 50%; overflow: hidden;
+    background: #f0f0f0; display: flex; align-items: center; justify-content: center;
+}
+.profile-avatar img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.profile-avatar svg { display: block; }
+.avatar-upload-btn {
+    position: absolute; bottom: 0; right: 0;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #2d8659; border: 2px solid white;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.15s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.avatar-upload-btn:hover { background: #1f5c3d; }
+.profile-name { font-size: 22px; font-weight: 700; color: #222; margin: 0; }
+.profile-role {
+    font-size: 13px; color: #2d8659; font-weight: 600;
+    background: #e8f5e9; padding: 2px 10px; border-radius: 10px;
+}
+.section-label {
+    font-size: 14px; font-weight: 700; color: #2d8659;
+    margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.form-label { font-weight: 600; color: #333; margin-bottom: 6px; display: block; font-size: 14px; }
+.form-control {
+    border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px;
+    font-size: 14px; width: 100%; box-sizing: border-box;
+}
+.form-control:focus { border-color: #2d8659; box-shadow: 0 0 0 0.2rem rgba(45,134,89,0.2); outline: none; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.req { color: #dc3545; font-weight: 600; }
+.text-danger { color: #dc3545; font-size: 13px; display: block; margin-top: 4px; }
+
+.gender-toggle-group { display: flex; gap: 8px; margin-top: 2px; }
+.gender-option {
+    flex: 1; display: flex; align-items: center; gap: 6px;
+    padding: 9px 12px; border: 2px solid #ddd; border-radius: 6px;
+    cursor: pointer; font-size: 14px; font-weight: 500; color: #555;
+    transition: all 0.15s;
+}
+.gender-option:hover { border-color: #2d8659; color: #2d8659; }
+.gender-option input[type="radio"] { display: none; }
+.gender-option:has(input:checked) {
+    border-color: #2d8659; background: #f0fdf4; color: #2d8659; font-weight: 600;
+}
+.gender-icon { display: flex; align-items: center; }
+
+.btn-save {
+    background: #2d8659; color: white; border: none; border-radius: 6px;
+    padding: 11px 28px; font-weight: 600; font-size: 15px; cursor: pointer;
+}
+.btn-save:hover { background: #1f5c3d; }
+.btn-cancel {
+    background: white; color: #666; border: 2px solid #ddd; border-radius: 6px;
+    padding: 11px 28px; font-weight: 600; font-size: 15px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center;
+}
+.btn-cancel:hover { border-color: #999; color: #333; }
+.alert-danger {
+    background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+    padding: 12px 16px; border-radius: 6px;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var fileInput = document.getElementById('id_profile_picture');
+    var preview = document.getElementById('avatarPreview');
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            var file = this.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File too large. Maximum size is 5 MB.');
+                this.value = '';
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                preview.innerHTML = '<img src="' + e.target.result + '" alt="Preview" id="avatarImg" style="width:100%;height:100%;object-fit:cover;display:block;">';
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+});
+</script>
+{% endblock %}

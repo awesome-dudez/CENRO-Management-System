@@ -7,15 +7,16 @@ from services.models import ServiceRequest
 
 class ServiceComputationForm(forms.ModelForm):
     """Form for computing service charges"""
-    
+
     class Meta:
         model = ServiceComputation
         fields = [
             'charge_category',
             'cubic_meters',
+            'trips',
+            'personnel_count',
             'is_outside_bayawan',
             'distance_km',
-            'meals_transport_charge',
             'payment_status',
         ]
         widgets = {
@@ -25,16 +26,13 @@ class ServiceComputationForm(forms.ModelForm):
                 'step': '0.01',
                 'placeholder': 'Cubic meters',
             }),
+            'trips': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            'personnel_count': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
             'is_outside_bayawan': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'distance_km': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'step': '0.01',
                 'placeholder': 'Distance in km',
-            }),
-            'meals_transport_charge': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.01',
-                'placeholder': 'Meals & Transport charge',
             }),
             'payment_status': forms.Select(attrs={'class': 'form-control'}),
         }

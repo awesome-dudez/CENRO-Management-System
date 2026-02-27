@@ -1,44 +1,58 @@
 {% extends "base.html" %}
 {% block title %}Service Requests{% endblock %}
 {% block content %}
+<style>
+    .container { max-width: 1000px; margin: 30px auto; padding: 20px; }
+    .container h1 { color: #2d3142; margin-bottom: 20px; }
+    .btn-new { display: inline-block; padding: 10px 20px; background: #1abc9c; color: white; border-radius: 6px; text-decoration: none; font-weight: 600; margin-bottom: 20px; }
+    .data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .data-table th { background: #2d3142; color: white; padding: 12px; text-align: left; font-size: 13px; }
+    .data-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+    .data-table tr:hover { background: #f8f9fa; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: white; background: #6c757d; }
+    .status-submitted { background: #f39c12; }
+    .status-under_review { background: #3498db; }
+    .status-inspection_scheduled { background: #9b59b6; }
+    .status-inspected { background: #1abc9c; }
+    .status-computation_sent { background: #e67e22; }
+    .status-awaiting_payment { background: #e74c3c; }
+    .status-paid { background: #27ae60; }
+    .status-desludging_scheduled { background: #2980b9; }
+    .status-completed { background: #2ecc71; }
+    .btn-sm { padding: 6px 14px; background: #3498db; color: white; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600; }
+</style>
 <div class="container">
     <h1>Service Requests</h1>
     {% if user.is_consumer %}
-    <a href="{% url 'services:create_request' %}" class="btn btn-primary">+ New Request</a>
+    <a href="{% url 'services:create_request' %}" class="btn-new">+ New Request</a>
     {% endif %}
-    <div class="table-card">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Service Type</th>
-                    <th>Barangay</th>
-                    <th>Consumer</th>
-                    <th>Preferred Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for req in requests %}
-                <tr>
-                    <td>{{ req.id }}</td>
-                    <td>{{ req.get_service_type_display }}</td>
-                    <td>{{ req.barangay }}</td>
-                    <td>{{ req.consumer.get_full_name }}</td>
-                    <td>{{ req.preferred_date }}</td>
-                    <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
-                    <td>
-                        <a href="{% url 'services:request_detail' req.pk %}" class="btn btn-sm">View</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="7">No requests found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Service Type</th>
+                <th>Barangay</th>
+                <th>Client</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests %}
+            <tr>
+                <td>#{{ req.id }}</td>
+                <td>{{ req.get_service_type_display }}</td>
+                <td>{{ req.barangay }}</td>
+                <td>{{ req.client_name|default:req.consumer.get_full_name }}</td>
+                <td>{{ req.request_date|date:"M d, Y" }}</td>
+                <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
+                <td><a href="{% url 'services:request_detail' req.pk %}" class="btn-sm">View</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">No requests found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}

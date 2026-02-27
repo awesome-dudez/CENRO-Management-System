@@ -41,7 +41,7 @@
             <tbody>
                 {% for req in service_requests %}
                 <tr>
-                    <td>{{ req.preferred_date }}</td>
+                    <td>{{ req.request_date|date:"M d, Y" }}</td>
                     <td>{{ req.cubic_meters|default:"0" }} m³</td>
                     <td>{{ remaining_balance|floatformat:2 }} m³ / 5 m³</td>
                     <td>{% if req.fee_amount %}Paid (₱{{ req.fee_amount }}){% else %}Free (Member){% endif %}</td>

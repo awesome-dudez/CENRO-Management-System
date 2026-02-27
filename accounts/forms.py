@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
@@ -32,29 +34,44 @@ class ConsumerRegistrationForm(UserCreationForm):
             "required": "This field is required.",
         },
     )
+    gender = forms.ChoiceField(
+        choices=ConsumerProfile.Gender.choices,
+        required=True,
+        widget=forms.RadioSelect(attrs={"class": "gender-radio"}),
+    )
+    birthdate = forms.DateField(
+        required=True,
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        error_messages={"required": "Birthdate is required."},
+    )
+    mobile_number = forms.CharField(
+        max_length=20,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "09XX-XXX-XXXX"}),
+        error_messages={"required": "Mobile number is required."},
+    )
+    street_address = forms.CharField(
+        max_length=500,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "House No., Street, Purok/Sitio"}),
+    )
     barangay = forms.CharField(
         max_length=255,
-        required=False,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Barangay"})
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Barangay"}),
+        error_messages={"required": "Barangay is required."},
     )
     municipality = forms.CharField(
         max_length=255,
-        required=False,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Municipality/City"})
-    )
-    address = forms.CharField(
-        max_length=500,
         required=True,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Full address"})
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "City / Municipality"}),
+        error_messages={"required": "City / Municipality is required."},
     )
-    location_type = forms.ChoiceField(
-        choices=[
-            ("within", "Within Bayawan City"),
-            ("outside", "Outside"),
-        ],
+    province = forms.CharField(
+        max_length=255,
         required=True,
-        initial="within",
-        widget=forms.HiddenInput(attrs={"id": "id_location_type"}),
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Province"}),
+        error_messages={"required": "Province is required."},
     )
     gps_latitude = forms.DecimalField(
         required=False,
@@ -80,16 +97,15 @@ class ConsumerRegistrationForm(UserCreationForm):
                 cls = field.widget.attrs.get("class", "")
                 field.widget.attrs["class"] = f"{cls} is-invalid".strip()
 
+    def clean_mobile_number(self):
+        num = self.cleaned_data.get("mobile_number", "")
+        cleaned = re.sub(r"[\s\-()]", "", num)
+        if not re.match(r"^(\+63|0)?9\d{9}$", cleaned):
+            raise forms.ValidationError("Enter a valid Philippine mobile number (e.g. 09XX-XXX-XXXX).")
+        return cleaned
+
     def clean(self):
         cleaned_data = super().clean()
-        location_type = cleaned_data.get("location_type") or "within"
-        municipality = (cleaned_data.get("municipality") or "").strip()
-        if location_type == "outside" and not municipality:
-            self.add_error("municipality", "Municipality is required when you are outside Bayawan City.")
-        elif location_type == "within":
-            barangay = (cleaned_data.get("barangay") or "").strip()
-            if not barangay:
-                self.add_error("barangay", "Barangay is required when you are within Bayawan City.")
         return cleaned_data
 
     def save(self, commit=True):
@@ -101,14 +117,82 @@ class ConsumerRegistrationForm(UserCreationForm):
             user.save()
             ConsumerProfile.objects.create(
                 user=user,
-                location_type=self.cleaned_data["location_type"],
+                gender=self.cleaned_data.get("gender") or "MALE",
+                birthdate=self.cleaned_data.get("birthdate"),
+                mobile_number=self.cleaned_data.get("mobile_number") or "",
+                street_address=self.cleaned_data.get("street_address") or "",
                 barangay=self.cleaned_data.get("barangay") or "",
                 municipality=self.cleaned_data.get("municipality") or "",
-                address=self.cleaned_data["address"],
+                province=self.cleaned_data.get("province") or "",
                 gps_latitude=self.cleaned_data.get("gps_latitude"),
                 gps_longitude=self.cleaned_data.get("gps_longitude"),
             )
         return user
+
+
+class ProfileUpdateForm(forms.Form):
+    """Allows a consumer to update their personal information."""
+
+    profile_picture = forms.ImageField(
+        required=False,
+        widget=forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
+    )
+    first_name = forms.CharField(
+        max_length=30,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    last_name = forms.CharField(
+        max_length=150,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    gender = forms.ChoiceField(
+        choices=ConsumerProfile.Gender.choices,
+        required=True,
+        widget=forms.RadioSelect(attrs={"class": "gender-radio"}),
+    )
+    birthdate = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+    )
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={"class": "form-control"}),
+        error_messages={"invalid": "Please enter a valid email address."},
+    )
+    mobile_number = forms.CharField(
+        max_length=20,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "09XX-XXX-XXXX"}),
+    )
+    street_address = forms.CharField(
+        max_length=500,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "House No., Street, Purok/Sitio"}),
+    )
+    barangay = forms.CharField(
+        max_length=255,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    municipality = forms.CharField(
+        max_length=255,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    province = forms.CharField(
+        max_length=255,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+
+    def clean_mobile_number(self):
+        num = self.cleaned_data.get("mobile_number", "")
+        cleaned = re.sub(r"[\s\-()]", "", num)
+        if not re.match(r"^(\+63|0)?9\d{9}$", cleaned):
+            raise forms.ValidationError("Enter a valid Philippine mobile number (e.g. 09XX-XXX-XXXX).")
+        return cleaned
 
 
 class StaffRegistrationForm(UserCreationForm):
