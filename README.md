@@ -13,8 +13,8 @@ It manages **septage declogging** and **grass cutting services**, including:
 ## Tech Stack
 
 - **Backend**: Python, Django
-- **Database (production)**: MySQL
-- **Database (development/offline)**: SQLite
+- **Database (default)**: SQLite (no setup required)
+- **Database (optional)**: PostgreSQL (set `USE_POSTGRES=1` and `POSTGRES_*` env vars)
 - **Frontend**: HTML5, modern CSS (eco-friendly theme), JavaScript
 
 ## Project Structure
@@ -44,16 +44,18 @@ pip install -r requirements.txt
 
 ### 3. Database configuration
 
-By default, the project uses **SQLite** for local development.
+By default, the project uses **SQLite** (`db.sqlite3` in the project root). No setup required.
 
-To use **MySQL** (recommended for production), set the following environment variables:
+To use **PostgreSQL** instead, set `USE_POSTGRES=1` and:
 
-- `USE_MYSQL=1`
-- `MYSQL_NAME`
-- `MYSQL_USER`
-- `MYSQL_PASSWORD`
-- `MYSQL_HOST` (default: `localhost`)
-- `MYSQL_PORT` (default: `3306`)
+- `POSTGRES_DB` (default: `cenro_mgmt`)
+- `POSTGRES_USER` (default: `postgres`)
+- `POSTGRES_PASSWORD`
+- `POSTGRES_HOST` (default: `localhost`)
+- `POSTGRES_PORT` (default: `5432`)
+
+Example (PowerShell):  
+`$env:USE_POSTGRES="1"; $env:POSTGRES_PASSWORD="yourpassword"`
 
 ### 4. Run migrations and create a superuser
 
