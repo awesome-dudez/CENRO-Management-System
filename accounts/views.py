@@ -1,10 +1,15 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 
 from .forms import ConsumerRegistrationForm, LoginForm, ProfileUpdateForm, StaffRegistrationForm
 from .models import ConsumerProfile, User
+
+logger = logging.getLogger(__name__)
 
 
 def login_view(request):
@@ -35,12 +40,25 @@ def consumer_register(request):
     if request.method == "POST":
         form = ConsumerRegistrationForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, "Registration successful! Welcome to EcoTrack.")
-            if user.role == User.Role.ADMIN:
-                return redirect("dashboard:admin_dashboard")
-            return redirect("dashboard:home")
+            try:
+                with transaction.atomic():
+                    user = form.save()
+                login(request, user)
+                messages.success(request, "Registration successful! Welcome to EcoTrack.")
+                if user.role == User.Role.ADMIN:
+                    return redirect("dashboard:admin_dashboard")
+                return redirect("dashboard:home")
+            except IntegrityError as e:
+                logger.exception("Registration IntegrityError: %s", e)
+                if "username" in str(e).lower() or "unique" in str(e).lower():
+                    messages.error(request, "That username or email is already in use. Please choose another.")
+                else:
+                    messages.error(request, "A user with that username or email already exists. Please try again.")
+                return render(request, "accounts/consumer_register.html", {"form": form})
+            except Exception as e:
+                logger.exception("Registration failed: %s", e)
+                messages.error(request, "Registration failed. Please try again or contact support.")
+                return render(request, "accounts/consumer_register.html", {"form": form})
         messages.error(request, "Please fix the errors below and try again.")
     else:
         form = ConsumerRegistrationForm()
