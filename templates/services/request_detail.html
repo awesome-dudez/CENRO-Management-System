@@ -40,6 +40,9 @@
     .assign-form label { display: block; margin-bottom: 6px; font-weight: 600; color: #2d3142; }
     .assign-form select, .assign-form input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; width: 100%; margin-bottom: 12px; }
     .assign-form button { padding: 10px 24px; }
+    #request-detail-map { width: 100%; height: 320px; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; margin-top: 16px; }
+    .request-detail-no-map { margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; color: #666; font-size: 14px; }
+    @media (max-width: 600px) { #request-detail-map { height: 260px; } }
 </style>
 
 <div class="detail-container">
@@ -75,6 +78,28 @@
             <div class="info-item"><label>GPS Coordinates</label><span>{{ sr.gps_latitude }}, {{ sr.gps_longitude }}</span></div>
             {% endif %}
         </div>
+        {% if sr.location_photo_1 or sr.location_photo_2 %}
+        <div style="margin-top:16px;">
+            <label style="font-size:12px;color:#999;text-transform:uppercase;display:block;margin-bottom:8px;">Location photos</label>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;">
+                {% if sr.location_photo_1 %}
+                <a href="{{ sr.location_photo_1.url }}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:200px;">
+                    <img src="{{ sr.location_photo_1.url }}" alt="Location photo 1" style="width:200px;height:150px;object-fit:cover;display:block;">
+                </a>
+                {% endif %}
+                {% if sr.location_photo_2 %}
+                <a href="{{ sr.location_photo_2.url }}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:200px;">
+                    <img src="{{ sr.location_photo_2.url }}" alt="Location photo 2" style="width:200px;height:150px;object-fit:cover;display:block;">
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% if sr.gps_latitude and sr.gps_longitude %}
+        <div id="request-detail-map" class="request-detail-map-container" aria-label="Map of service location"></div>
+        {% else %}
+        <div class="request-detail-no-map" id="request-detail-no-map">No map location provided for this request.</div>
+        {% endif %}
     </div>
 
     <!-- Inspection Details (if exists) -->
@@ -210,4 +235,32 @@
         {% endif %}
     </div>
 </div>
+
+{% if sr.gps_latitude and sr.gps_longitude %}
+<script>
+(function() {
+    var mapEl = document.getElementById('request-detail-map');
+    if (!mapEl || typeof L === 'undefined') return;
+    var lat = {{ sr.gps_latitude }};
+    var lng = {{ sr.gps_longitude }};
+    var clientName = "{{ sr.client_name|default:""|escapejs }}";
+    var serviceType = "{{ sr.get_service_type_display|default:""|escapejs }}";
+    var address = "{{ sr.address|default:""|escapejs }}";
+    var requestId = "{{ sr.id }}";
+    var popupHtml = '<div class="request-detail-popup" style="min-width:200px;font-size:13px;">' +
+        '<strong style="display:block;margin-bottom:6px;">Request #' + requestId + '</strong>' +
+        '<div style="margin-bottom:4px;"><strong>Client:</strong> ' + (clientName || '—') + '</div>' +
+        '<div style="margin-bottom:4px;"><strong>Service:</strong> ' + (serviceType || '—') + '</div>' +
+        '<div><strong>Address:</strong> ' + (address || '—') + '</div>' +
+        '</div>';
+    var map = L.map(mapEl, { attributionControl: true }).setView([lat, lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+    }).addTo(map);
+    var marker = L.marker([lat, lng]).addTo(map).bindPopup(popupHtml);
+    map.invalidateSize();
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import dj_database_url
+from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,7 +33,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "cenro_mgmt.middleware.LoginRequiredMiddleware",  # Enforce login requirement
+    "cenro_mgmt.middleware.LoginRequiredMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
 ROOT_URLCONF = "cenro_mgmt.urls"
@@ -55,28 +58,22 @@ TEMPLATES = [
 WSGI_APPLICATION = "cenro_mgmt.wsgi.application"
 
 
-def _mysql_or_sqlite():
-    use_mysql = os.getenv("USE_MYSQL") == "1"
-    if not use_mysql:
-        return {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
+def _get_database_config():
+    """
+    Use DATABASE_URL if set (e.g. on Render); otherwise SQLite for local dev.
+    Render provides DATABASE_URL when you add a PostgreSQL database.
+    """
+    database_url = config("DATABASE_URL", default=None)
+    if database_url:
+        return dj_database_url.parse(database_url)
     return {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("MYSQL_NAME", "cenro_mgmt"),
-        "USER": os.getenv("MYSQL_USER", "root"),
-        "PASSWORD": os.getenv("MYSQL_PASSWORD", ""),
-        "HOST": os.getenv("MYSQL_HOST", "localhost"),
-        "PORT": os.getenv("MYSQL_PORT", "3306"),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 
 
 DATABASES = {
-    "default": _mysql_or_sqlite(),
+    "default": _get_database_config(),
 }
 
 AUTH_USER_MODEL = "accounts.User"

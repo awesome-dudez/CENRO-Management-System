@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Admin Dashboard - ECO-TRACK{% endblock %}
+{% block admin_subtitle %}System Dashboard{% endblock %}
 {% block content %}
+<div class="admin-dashboard-page">
 
 <!-- Dashboard Header -->
 <div class="dashboard-header">
     <div>
-        <h2 style="font-size: 28px; margin-bottom: 5px;">📊 System Dashboard</h2>
-        <p class="welcome-text">Welcome back, <strong>{{ user.get_full_name|default:user.username|title }}</strong>. Here's your system overview.</p>
+        <h2>📊 System Dashboard</h2>
+        <p class="welcome-text">Welcome back, <strong>{{ user.get_full_name|default:user.username|title }}</strong>. Here’s what’s happening across your services.</p>
     </div>
     <div class="dashboard-actions">
         <button class="btn btn-sm" onclick="window.print()">
@@ -152,30 +154,53 @@
 </div>
 
 <!-- System Information -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
+<div class="dashboard-bottom-grid">
     <div class="card">
         <div class="card-header">
-            <h4 class="card-title">🔒 Quick Actions</h4>
+            <h4 class="card-title">Quick Actions</h4>
+            <p class="card-subtitle">Shortcuts to common tasks</p>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <a href="{% url 'dashboard:admin_requests' %}" class="btn btn-primary" style="width: 100%;">Manage Requests</a>
-            <a href="{% url 'dashboard:admin_membership' %}" class="btn btn-primary" style="width: 100%;">Manage Members</a>
-            <a href="{% url 'dashboard:admin_computation' %}" class="btn btn-primary" style="width: 100%;">Compute Charges</a>
-            <a href="{% url 'dashboard:admin_declogging_app' %}" class="btn btn-primary" style="width: 100%;">Declogging Apps</a>
+        <div class="quick-actions-grid">
+            <a href="{% url 'dashboard:admin_requests' %}" class="quick-action-btn">
+                <span class="quick-action-icon">📋</span>
+                Manage Requests
+            </a>
+            <a href="{% url 'dashboard:admin_membership' %}" class="quick-action-btn">
+                <span class="quick-action-icon">👥</span>
+                Manage Members
+            </a>
+            <a href="{% url 'dashboard:admin_computation' %}" class="quick-action-btn">
+                <span class="quick-action-icon">💰</span>
+                Compute Charges
+            </a>
         </div>
     </div>
     
     <div class="card">
         <div class="card-header">
-            <h4 class="card-title">📊 System Status</h4>
+            <h4 class="card-title">System Status</h4>
+            <p class="card-subtitle">Current system health</p>
         </div>
-        <div style="line-height: 2;">
-            <p><strong>Status:</strong> <span class="status-badge status-approved">Operational</span></p>
-            <p><strong>Database:</strong> <span class="status-badge status-completed">Active</span></p>
-            <p><strong>Server:</strong> <span class="status-badge status-completed">Running</span></p>
-            <p><strong>Last Sync:</strong> Just now</p>
+        <div class="system-status-grid">
+            <div class="system-status-item">
+                <strong>Status</strong>
+                <span class="status-badge status-approved">Operational</span>
+            </div>
+            <div class="system-status-item">
+                <strong>Database</strong>
+                <span class="status-badge status-completed">Active</span>
+            </div>
+            <div class="system-status-item">
+                <strong>Server</strong>
+                <span class="status-badge status-completed">Running</span>
+            </div>
+            <div class="system-status-item">
+                <strong>Last Sync</strong>
+                <span style="color: var(--text-gray); font-size: 0.9rem;">Just now</span>
+            </div>
         </div>
     </div>
+</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

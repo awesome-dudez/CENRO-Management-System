@@ -9,10 +9,14 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.views.decorators.csrf import ensure_csrf_cookie
 import io
 import json
 import time
+import os
+from uuid import uuid4
 
 from accounts.decorators import role_required
 from accounts.models import User
@@ -64,11 +68,13 @@ def create_request(request):
             if form.is_valid():
                 lat = form.cleaned_data.get("gps_latitude")
                 lon = form.cleaned_data.get("gps_longitude")
+                loc_mode = form.cleaned_data.get("location_mode") or "PIN"
                 form_data.update({
                     "client_name": form.cleaned_data["client_name"],
                     "request_date": str(form.cleaned_data["request_date"]),
                     "contact_number": form.cleaned_data["contact_number"],
-                    "barangay": form.cleaned_data["barangay"],
+                    "location_mode": loc_mode,
+                    "barangay": form.cleaned_data.get("barangay") or "",
                     "address": form.cleaned_data.get("address") or "",
                     "gps_latitude": float(lat) if lat is not None else None,
                     "gps_longitude": float(lon) if lon is not None else None,
@@ -79,6 +85,20 @@ def create_request(request):
                     request.session["_bawad_proof_pending"] = True
                 if form.cleaned_data.get("client_signature"):
                     request.session["_client_sig_pending"] = True
+                if loc_mode == "TEXT":
+                    photo_paths = []
+                    for key in ("location_photo_1", "location_photo_2"):
+                        f = request.FILES.get(key)
+                        if f:
+                            ext = os.path.splitext(f.name)[1] or ".jpg"
+                            if ext.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                                ext = ".jpg"
+                            path = f"location_photos/temp/{uuid4()}{ext}"
+                            default_storage.save(path, ContentFile(f.read()))
+                            photo_paths.append(path)
+                    form_data["_location_photos"] = photo_paths
+                else:
+                    form_data.pop("_location_photos", None)
                 request.session["service_request_data"] = form_data
                 return HttpResponseRedirect(reverse("services:create_request") + "?step=3")
 
@@ -106,6 +126,7 @@ def create_request(request):
                     if form_data.get("request_date")
                     else timezone.now().date(),
                     contact_number=form_data.get("contact_number", ""),
+                    location_mode=form_data.get("location_mode", "PIN"),
                     barangay=form_data.get("barangay", ""),
                     address=form_data.get("address", ""),
                     gps_latitude=gps_latitude,
@@ -115,6 +136,19 @@ def create_request(request):
                     public_private=form_data.get("public_private", "PRIVATE"),
                     status=ServiceRequest.Status.SUBMITTED,
                 )
+                photo_paths = form_data.get("_location_photos") or []
+                for i, path in enumerate(photo_paths[:2]):
+                    if default_storage.exists(path):
+                        with default_storage.open(path, "rb") as fp:
+                            name = os.path.basename(path)
+                            if i == 0:
+                                service_request.location_photo_1.save(name, ContentFile(fp.read()), save=True)
+                            else:
+                                service_request.location_photo_2.save(name, ContentFile(fp.read()), save=True)
+                        try:
+                            default_storage.delete(path)
+                        except Exception:
+                            pass
 
                 # Notify all admins
                 admin_users = User.objects.filter(role=User.Role.ADMIN)
@@ -140,6 +174,7 @@ def create_request(request):
                 request.session.pop("service_request_data", None)
                 request.session.pop("_bawad_proof_pending", None)
                 request.session.pop("_client_sig_pending", None)
+                request.session.pop("_location_photos", None)
 
                 messages.success(request, "Service request submitted successfully!")
                 return render(request, "services/request_success.html", {
@@ -160,6 +195,7 @@ def create_request(request):
             "client_name": form_data.get("client_name", request.user.get_full_name()),
             "request_date": form_data.get("request_date", str(next_business_day())),
             "contact_number": form_data.get("contact_number", default_contact),
+            "location_mode": form_data.get("location_mode", "PIN"),
             "connected_to_bawad": form_data.get("connected_to_bawad", "NO"),
             "public_private": form_data.get("public_private", "PRIVATE"),
             "barangay": form_data.get("barangay", ""),

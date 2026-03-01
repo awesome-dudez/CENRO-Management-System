@@ -1,0 +1,519 @@
+/**
+ * Consumer-responsive.css
+ * Mobile-first responsive styles for non-admin users (Consumer view).
+ * Ensures the system is accessible on both mobile and desktop for Consumers.
+ *
+ * Architecture:
+ * - Scope: Only body.consumer-view (set when user is not admin or not authenticated).
+ * - Mobile-first: Base rules target small screens; min-width media queries enhance for larger.
+ * - Breakpoints: 576px (sm), 768px (md), 992px (lg).
+ * - Touch: Interactive elements min 44px height; 16px font on inputs to avoid iOS zoom.
+ * - Accessibility: focus-visible outlines, prefers-reduced-motion, aria on mobile nav.
+ */
+
+/* ============================================
+   CONSUMER VIEW ONLY – scoped to body.consumer-view
+   ============================================ */
+
+.consumer-view .nav-toggle {
+    display: none; /* hidden by default; shown below 768px in this file */
+}
+
+/* ---- Mobile-first base (default = small screens) ---- */
+@media (max-width: 767px) {
+    .consumer-view .nav-toggle {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 5px;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: background 0.2s;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .consumer-view .nav-toggle:hover,
+    .consumer-view .nav-toggle:focus-visible {
+        background: rgba(30, 122, 77, 0.1);
+    }
+    .consumer-view .nav-toggle-bar {
+        display: block;
+        width: 22px;
+        height: 2.5px;
+        background: var(--dark-gray, #2c3e50);
+        border-radius: 2px;
+        transition: transform 0.25s, opacity 0.25s;
+    }
+    .consumer-view.mobile-nav-open .nav-toggle-bar:nth-child(1) {
+        transform: translateY(7.5px) rotate(45deg);
+    }
+    .consumer-view.mobile-nav-open .nav-toggle-bar:nth-child(2) {
+        opacity: 0;
+    }
+    .consumer-view.mobile-nav-open .nav-toggle-bar:nth-child(3) {
+        transform: translateY(-7.5px) rotate(-45deg);
+    }
+
+    .consumer-view .top-nav-links {
+        display: none;
+    }
+
+    .consumer-view .nav-container {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .consumer-view .logo {
+        font-size: 18px;
+    }
+    .consumer-view .logo-icon {
+        font-size: 26px;
+    }
+    .consumer-view .logo-subtitle {
+        font-size: 10px;
+    }
+
+    /* Mobile nav overlay */
+    .consumer-view .mobile-nav-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9998;
+        visibility: hidden;
+        opacity: 0;
+        transition: visibility 0.25s, opacity 0.25s;
+        pointer-events: none;
+    }
+    .consumer-view .mobile-nav-overlay[aria-hidden="false"] {
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .consumer-view .mobile-nav-drawer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: min(320px, 88vw);
+        max-width: 100%;
+        height: 100%;
+        background: var(--white, #fff);
+        box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        will-change: transform;
+    }
+    .consumer-view.mobile-nav-open .mobile-nav-drawer {
+        transform: translateX(0);
+    }
+    .consumer-view .mobile-nav-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--medium-gray, #d9dcd9);
+    }
+    .consumer-view .mobile-nav-close {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        font-size: 28px;
+        line-height: 1;
+        color: var(--dark-gray, #2c3e50);
+        cursor: pointer;
+        border-radius: 8px;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .consumer-view .mobile-nav-close:hover,
+    .consumer-view .mobile-nav-close:focus-visible {
+        background: var(--light-gray, #f1f3f2);
+    }
+    .consumer-view .mobile-nav-links {
+        padding: 16px 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .consumer-view .mobile-nav-link {
+        display: block;
+        padding: 14px 20px;
+        min-height: 48px;
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--dark-gray, #2c3e50);
+        text-decoration: none;
+        transition: background 0.15s;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .consumer-view .mobile-nav-link:hover,
+    .consumer-view .mobile-nav-link:focus-visible {
+        background: rgba(30, 122, 77, 0.08);
+        color: var(--primary-green, #1e7a4d);
+    }
+    .consumer-view .mobile-nav-logout {
+        color: #c0392b;
+        margin-top: 8px;
+        border-top: 1px solid var(--medium-gray, #eee);
+    }
+    .consumer-view .mobile-nav-register {
+        background: var(--primary-green, #1e7a4d);
+        color: var(--white, #fff);
+        margin: 12px 20px 0;
+        border-radius: 8px;
+        text-align: center;
+    }
+    .consumer-view .mobile-nav-register:hover,
+    .consumer-view .mobile-nav-register:focus-visible {
+        background: var(--secondary-green, #2d9e6d);
+        color: #fff;
+    }
+    .consumer-view .mobile-nav-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 9997;
+        background: rgba(0,0,0,0.4);
+        visibility: hidden;
+        opacity: 0;
+        transition: visibility 0.25s, opacity 0.25s;
+        pointer-events: none;
+    }
+    .consumer-view .mobile-nav-backdrop[aria-hidden="false"] {
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* Main content – comfortable padding and touch-friendly spacing */
+    .consumer-view .main-content {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 24px;
+        padding-top: 8px;
+    }
+
+    /* Summary cards – single column on small screens */
+    .consumer-view .summary-cards {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+    .consumer-view .summary-card {
+        padding: 18px 20px;
+        min-height: auto;
+    }
+    .consumer-view .summary-card h3 {
+        font-size: 13px;
+    }
+    .consumer-view .summary-card .count {
+        font-size: 28px;
+    }
+
+    /* Tables – horizontal scroll with touch */
+    .consumer-view .table-card {
+        margin-left: -16px;
+        margin-right: -16px;
+        border-radius: 0;
+        overflow: hidden;
+    }
+    .consumer-view .table-card .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        overflow-y: visible;
+    }
+    .consumer-view .data-table {
+        min-width: 560px;
+    }
+    .consumer-view .data-table th,
+    .consumer-view .data-table td {
+        padding: 12px 10px;
+        font-size: 13px;
+    }
+
+    /* Request list cards (mobile-friendly alternative to table) */
+    .consumer-view .request-cards {
+        display: block;
+    }
+    .consumer-view .request-card-item {
+        background: var(--white, #fff);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 4px solid var(--primary-green, #1e7a4d);
+    }
+    .consumer-view .request-card-item .req-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-bottom: 10px;
+        font-size: 13px;
+        color: var(--text-gray, #5a6c6d);
+    }
+    .consumer-view .request-card-item .req-type {
+        font-weight: 600;
+        color: var(--dark-gray, #2c3e50);
+        font-size: 15px;
+    }
+    .consumer-view .request-card-item .req-actions {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--light-gray, #f1f3f2);
+    }
+    .consumer-view .request-cards-table {
+        display: none !important;
+    }
+
+    /* Auth pages */
+    .consumer-view .auth-container {
+        padding: 20px 16px;
+        min-height: calc(100vh - 70px);
+    }
+    .consumer-view .auth-card {
+        padding: 24px 20px;
+        max-width: 100%;
+    }
+    .consumer-view .auth-card h1 {
+        font-size: 1.35rem;
+    }
+    .consumer-view .auth-card h2 {
+        font-size: 1rem;
+    }
+    .consumer-view .auth-form .form-control,
+    .consumer-view .auth-form .btn {
+        min-height: 48px;
+        font-size: 16px; /* avoids zoom on focus in iOS */
+    }
+    .consumer-view .auth-form .btn-login,
+    .consumer-view .auth-form .btn-primary {
+        min-height: 48px;
+        width: 100%;
+    }
+
+    /* Form two-column → single column on small screens */
+    .consumer-view .two-col,
+    .consumer-view .auth-card .two-col {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    /* Buttons – touch targets minimum 44px */
+    .consumer-view .btn:not(.btn-sm) {
+        min-height: 44px;
+        padding: 12px 20px;
+    }
+    .consumer-view .btn-sm {
+        min-height: 40px;
+        padding: 8px 14px;
+    }
+    .consumer-view .btn-logout {
+        min-height: 44px;
+        padding: 10px 18px;
+    }
+
+    /* User section (hidden on mobile; in drawer) – keep for tablet */
+    .consumer-view .user-name-link {
+        min-height: 44px;
+    }
+
+    /* Toast – full width on small screens */
+    .consumer-view .toast-container {
+        left: 16px;
+        right: 16px;
+        max-width: none;
+        top: 80px;
+    }
+
+    /* Footer – stack sections */
+    .consumer-view .footer-content {
+        grid-template-columns: 1fr;
+        gap: 24px;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    .consumer-view .footer {
+        padding-top: 32px;
+        margin-top: 32px;
+    }
+    .consumer-view .footer-bottom {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    /* Container (dashboard) */
+    .consumer-view .container {
+        padding-left: 0;
+        padding-right: 0;
+    }
+    .consumer-view .container h1 {
+        font-size: 1.5rem;
+        margin-bottom: 16px;
+    }
+    .consumer-view .calendar-section h2,
+    .consumer-view .container h2 {
+        font-size: 1.2rem;
+        margin-bottom: 12px;
+    }
+}
+
+/* ---- Small devices and up (576px) ---- */
+@media (min-width: 576px) {
+    .consumer-view .summary-cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .consumer-view .auth-card {
+        max-width: 440px;
+    }
+}
+
+/* ---- Medium and up (768px) – show desktop nav, hide mobile ---- */
+@media (min-width: 768px) {
+    .consumer-view .nav-toggle {
+        display: none;
+    }
+    .consumer-view .top-nav-links {
+        display: flex;
+    }
+    .consumer-view .mobile-nav-overlay,
+    .consumer-view .mobile-nav-backdrop {
+        display: none !important;
+    }
+    .consumer-view .main-content {
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-bottom: 40px;
+    }
+    .consumer-view .summary-cards {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+    }
+    .consumer-view .table-card {
+        margin-left: 0;
+        margin-right: 0;
+        border-radius: 12px;
+    }
+    .consumer-view .request-cards {
+        display: none;
+    }
+    .consumer-view .request-cards-table {
+        display: block;
+    }
+    .consumer-view .two-col {
+        grid-template-columns: 1fr 1fr;
+    }
+    .consumer-view .auth-container {
+        padding: 40px 24px;
+    }
+    .consumer-view .auth-card {
+        padding: 40px;
+        max-width: 400px;
+    }
+    .consumer-view .footer-content {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .consumer-view .toast-container {
+        left: auto;
+        right: 20px;
+        max-width: 400px;
+    }
+}
+
+/* ---- Large (992px) – comfortable max widths ---- */
+@media (min-width: 992px) {
+    .consumer-view .main-content {
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+    .consumer-view .nav-container {
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY & USABILITY
+   ============================================ */
+.consumer-view .nav-link:focus-visible,
+.consumer-view .mobile-nav-link:focus-visible,
+.consumer-view .btn:focus-visible,
+.consumer-view .form-control:focus-visible {
+    outline: 2px solid var(--primary-green, #1e7a4d);
+    outline-offset: 2px;
+}
+
+.consumer-view button:focus:not(:focus-visible),
+.consumer-view a:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .consumer-view .mobile-nav-drawer,
+    .consumer-view .mobile-nav-overlay,
+    .consumer-view .mobile-nav-backdrop,
+    .consumer-view .nav-toggle-bar {
+        transition: none;
+    }
+}
+
+/* Profile and forms – consumer-view scoped overrides for mobile */
+@media (max-width: 767px) {
+    .consumer-view .profile-container {
+        margin: 20px auto;
+        padding: 0 16px;
+    }
+    .consumer-view .profile-card {
+        padding: 24px 20px;
+    }
+    .consumer-view .profile-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    .consumer-view .profile-name {
+        font-size: 1.25rem;
+    }
+    .consumer-view .profile-container .two-col {
+        grid-template-columns: 1fr;
+    }
+    .consumer-view .profile-container .btn-save,
+    .consumer-view .profile-container .btn-cancel {
+        min-height: 48px;
+        width: 100%;
+    }
+    .consumer-view .profile-container .btn-cancel {
+        margin-top: 8px;
+    }
+    .consumer-view .profile-container .profile-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 24px;
+    }
+}
+
+/* Notification dropdown – position on small so it’s not cut off */
+@media (max-width: 767px) {
+    .consumer-view .notif-dropdown {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: min(320px, calc(100vw - 32px));
+    }
+    .consumer-view .notif-dropdown.open {
+        transform: translateX(-50%);
+    }
+}

@@ -10,7 +10,7 @@ from .models import ConsumerProfile, User
 def login_view(request):
     # If user is already authenticated, show dashboard (not login page)
     if request.user.is_authenticated:
-        if request.user.role == User.Role.ADMIN:
+        if request.user.is_admin():
             return redirect("dashboard:admin_dashboard")
         return redirect("dashboard:home")
     
@@ -19,11 +19,11 @@ def login_view(request):
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
-            if not user.is_approved and user.role != User.Role.ADMIN:
+            if not user.is_approved and user.role != User.Role.ADMIN and not user.is_superuser:
                 messages.warning(request, "Your account is pending approval by an administrator.")
                 return redirect("accounts:login")
             login(request, user)
-            if user.role == User.Role.ADMIN:
+            if user.is_admin():
                 return redirect("dashboard:admin_dashboard")
             return redirect("dashboard:home")
     else:

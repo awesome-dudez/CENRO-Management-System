@@ -118,7 +118,7 @@
                 {% if form.province.errors %}<small class="text-danger">{{ form.province.errors.0 }}</small>{% endif %}
             </div>
 
-            <div style="display:flex;gap:12px;margin-top:24px;">
+            <div class="profile-actions">
                 <button type="submit" class="btn-save">Save Changes</button>
                 <a href="{% url 'dashboard:home' %}" class="btn-cancel">Cancel</a>
             </div>
@@ -199,6 +199,7 @@
     text-decoration: none; display: inline-flex; align-items: center;
 }
 .btn-cancel:hover { border-color: #999; color: #333; }
+.profile-actions { display: flex; gap: 12px; margin-top: 24px; }
 .alert-danger {
     background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
     padding: 12px 16px; border-radius: 6px;

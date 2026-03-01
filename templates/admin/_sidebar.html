@@ -1,0 +1,41 @@
+{% comment %}
+Admin layout: fixed left sidebar with vertical nav.
+Icons beside each item; active page highlighted.
+{% endcomment %}
+<aside class="admin-sidebar" id="adminSidebar" role="navigation" aria-label="Admin navigation">
+    <nav class="admin-sidebar-nav">
+        <a href="{% url 'dashboard:admin_dashboard' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">📊</span>
+            <span>Dashboard</span>
+        </a>
+        <a href="{% url 'dashboard:admin_requests' %}" class="admin-sidebar-link {% if 'admin_requests' in request.resolver_match.url_name or 'approve_request' in request.resolver_match.url_name or 'assign_inspector' in request.resolver_match.url_name or 'schedule_desludging' in request.resolver_match.url_name or 'confirm_payment' in request.resolver_match.url_name or 'admin_schedule' in request.resolver_match.url_name %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">📋</span>
+            <span>Requests</span>
+        </a>
+        <a href="{% url 'dashboard:admin_membership' %}" class="admin-sidebar-link {% if 'admin_membership' in request.resolver_match.url_name or 'member_service_history' in request.resolver_match.url_name %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">👥</span>
+            <span>Members</span>
+        </a>
+        <a href="{% url 'dashboard:admin_computation' %}" class="admin-sidebar-link {% if 'admin_computation' in request.resolver_match.url_name or 'generate_receipt' in request.resolver_match.url_name %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">💰</span>
+            <span>Computation</span>
+        </a>
+        <a href="{% url 'dashboard:admin_map_requests' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'admin_map_requests' %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">🗺️</span>
+            <span>View Map Requests</span>
+        </a>
+        <a href="{% url 'dashboard:admin_analytics' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'admin_analytics' %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">📈</span>
+            <span>Analytics</span>
+        </a>
+    </nav>
+    <button type="button" class="admin-sidebar-close" id="adminSidebarClose" aria-label="Close menu" title="Close menu">
+        <span aria-hidden="true">×</span>
+    </button>
+</aside>
+<div class="admin-sidebar-overlay" id="adminSidebarOverlay" aria-hidden="true"></div>
+<button type="button" class="admin-sidebar-toggle" id="adminSidebarToggle" aria-label="Open menu" aria-expanded="false" aria-controls="adminSidebar">
+    <span class="admin-hamburger-bar"></span>
+    <span class="admin-hamburger-bar"></span>
+    <span class="admin-hamburger-bar"></span>
+</button>

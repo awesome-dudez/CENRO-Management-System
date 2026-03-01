@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Admin Analytics - ECO-TRACK{% endblock %}
+{% block admin_subtitle %}Analytics{% endblock %}
+{% block content %}
+<div class="analytics-page">
+    <div class="analytics-grid">
+        <!-- KPI Card -->
+        <div class="analytics-card analytics-kpi">
+            <h3 class="analytics-card-title">Total Requests Past 30 Days</h3>
+            <div class="analytics-kpi-value" id="analyticsKpiValue">0</div>
+            <div class="analytics-kpi-trend" id="analyticsKpiTrend"></div>
+        </div>
+
+        <!-- Stacked Bar: New v Returning -->
+        <div class="analytics-card">
+            <h3 class="analytics-card-title">New v Completed Requests</h3>
+            <p class="analytics-card-sub">By month (incoming vs completed)</p>
+            <div class="analytics-chart-wrap" style="height: 220px;">
+                <canvas id="chartNewVsReturning"></canvas>
+            </div>
+        </div>
+
+        <!-- Horizontal Bar: Top Sources -->
+        <div class="analytics-card">
+            <h3 class="analytics-card-title">Top Request Sources (Barangay)</h3>
+            <div class="analytics-chart-wrap" style="height: 220px;">
+                <canvas id="chartTopSources"></canvas>
+            </div>
+        </div>
+
+        <!-- Line: Visitor Overview -->
+        <div class="analytics-card analytics-card-wide">
+            <h3 class="analytics-card-title">Request Overview</h3>
+            <p class="analytics-card-sub">Incoming, completed, and total by week</p>
+            <div class="analytics-chart-wrap" style="height: 260px;">
+                <canvas id="chartVisitorOverview"></canvas>
+            </div>
+        </div>
+
+        <!-- Donut: Top Browsers / Service Types -->
+        <div class="analytics-card">
+            <h3 class="analytics-card-title">Service Type Distribution</h3>
+            <div class="analytics-chart-wrap" style="height: 260px;">
+                <canvas id="chartDonut"></canvas>
+            </div>
+        </div>
+
+        <!-- Table: Top Page Views -->
+        <div class="analytics-card">
+            <h3 class="analytics-card-title">Top Request Count by Source</h3>
+            <div class="analytics-table-search">
+                <input type="text" id="analyticsTableSearch" class="form-control" placeholder="Search..." aria-label="Search table">
+            </div>
+            <div class="analytics-table-wrap">
+                <table class="analytics-table" id="analyticsTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th># Requests</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analyticsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ analytics_data|json_script:"analytics-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var API_URL = "{% url 'dashboard:admin_analytics_api' %}";
+    var POLL_INTERVAL_MS = 8000;
+
+    var charts = {};
+    var initialData = null;
+    var el = document.getElementById('analytics-data');
+    if (el && el.textContent) {
+        try { initialData = JSON.parse(el.textContent); } catch (e) {}
+    }
+
+    function formatKpi(d) {
+        var k = d.kpi;
+        document.getElementById('analyticsKpiValue').textContent = (k.total_visitors_30d || 0).toLocaleString();
+        var trendEl = document.getElementById('analyticsKpiTrend');
+        var pct = k.trend_pct || 0;
+        trendEl.textContent = (pct >= 0 ? '+' : '') + pct + '% from previous 30 days';
+        trendEl.className = 'analytics-kpi-trend ' + (pct >= 0 ? 'trend-up' : 'trend-down');
+    }
+
+    function updateTable(rows) {
+        var tbody = document.getElementById('analyticsTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = (rows || []).map(function(r) {
+            return '<tr><td>' + escapeHtml(r.name) + '</td><td>' + (r.views || 0) + '</td></tr>';
+        }).join('');
+        filterTable();
+    }
+
+    function escapeHtml(s) {
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function filterTable() {
+        var q = (document.getElementById('analyticsTableSearch') || {}).value || '';
+        q = q.toLowerCase();
+        var rows = (document.getElementById('analyticsTableBody') || {}).querySelectorAll('tr');
+        for (var i = 0; i < rows.length; i++) {
+            var text = (rows[i].textContent || '').toLowerCase();
+            rows[i].style.display = q && text.indexOf(q) === -1 ? 'none' : '';
+        }
+    }
+
+    function applyData(data) {
+        if (!data) return;
+        formatKpi(data);
+        updateTable(data.top_pages);
+
+        if (charts.newVsReturning && data.new_vs_returning) {
+            var nv = data.new_vs_returning;
+            charts.newVsReturning.data.labels = nv.labels || [];
+            charts.newVsReturning.data.datasets[0].data = nv.new || [];
+            charts.newVsReturning.data.datasets[1].data = nv.returning || [];
+            charts.newVsReturning.update('none');
+        }
+        if (charts.topSources && data.top_sources) {
+            var ts = data.top_sources;
+            charts.topSources.data.labels = ts.labels || [];
+            charts.topSources.data.datasets[0].data = ts.values || [];
+            charts.topSources.update('none');
+        }
+        if (charts.visitorOverview && data.visitor_overview) {
+            var vo = data.visitor_overview;
+            charts.visitorOverview.data.labels = vo.labels || [];
+            charts.visitorOverview.data.datasets[0].data = vo.unique || [];
+            charts.visitorOverview.data.datasets[1].data = vo.site || [];
+            charts.visitorOverview.data.datasets[2].data = vo.pageViews || [];
+            charts.visitorOverview.update('none');
+        }
+        if (charts.donut && data.top_browsers) {
+            var tb = data.top_browsers;
+            charts.donut.data.labels = tb.labels || [];
+            charts.donut.data.datasets[0].data = tb.values || [];
+            charts.donut.update('none');
+        }
+    }
+
+    function createCharts(data) {
+        var d = data || initialData;
+        if (!d) return;
+
+        var opts = { responsive: true, maintainAspectRatio: false };
+
+        if (!charts.newVsReturning && d.new_vs_returning) {
+            var nv = d.new_vs_returning;
+            charts.newVsReturning = new Chart(document.getElementById('chartNewVsReturning'), {
+                type: 'bar',
+                data: {
+                    labels: nv.labels || [],
+                    datasets: [
+                        { label: 'Incoming', data: nv.new || [], backgroundColor: 'rgba(30, 122, 77, 0.8)', borderColor: 'rgb(30, 122, 77)', borderWidth: 1 },
+                        { label: 'Completed', data: nv.returning || [], backgroundColor: 'rgba(74, 155, 158, 0.8)', borderColor: 'rgb(74, 155, 158)', borderWidth: 1 }
+                    ]
+                },
+                options: Object.assign({}, opts, { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } })
+            });
+        }
+
+        if (!charts.topSources && d.top_sources) {
+            var ts = d.top_sources;
+            charts.topSources = new Chart(document.getElementById('chartTopSources'), {
+                type: 'bar',
+                data: {
+                    labels: ts.labels || [],
+                    datasets: [{ label: 'Requests', data: ts.values || [], backgroundColor: 'rgba(45, 134, 89, 0.7)', borderColor: 'rgb(45, 134, 89)', borderWidth: 1 }]
+                },
+                options: Object.assign({}, opts, { indexAxis: 'y', scales: { x: { beginAtZero: true } } })
+            });
+        }
+
+        if (!charts.visitorOverview && d.visitor_overview) {
+            var vo = d.visitor_overview;
+            charts.visitorOverview = new Chart(document.getElementById('chartVisitorOverview'), {
+                type: 'line',
+                data: {
+                    labels: vo.labels || [],
+                    datasets: [
+                        { label: 'Incoming', data: vo.unique || [], borderColor: 'rgb(230, 126, 34)', backgroundColor: 'rgba(230, 126, 34, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Completed', data: vo.site || [], borderColor: 'rgb(45, 134, 89)', backgroundColor: 'rgba(45, 134, 89, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Total', data: vo.pageViews || [], borderColor: 'rgb(155, 89, 182)', backgroundColor: 'rgba(155, 89, 182, 0.1)', fill: true, tension: 0.3 }
+                    ]
+                },
+                options: Object.assign({}, opts, { scales: { y: { beginAtZero: true } } })
+            });
+        }
+
+        if (!charts.donut && d.top_browsers) {
+            var tb = d.top_browsers;
+            var colors = ['#2d8659', '#4a9b9e', '#e67e22', '#9b59b6', '#3498db', '#f1c40f', '#1abc9c', '#e74c3c', '#95a5a6', '#34495e'];
+            charts.donut = new Chart(document.getElementById('chartDonut'), {
+                type: 'doughnut',
+                data: {
+                    labels: tb.labels || [],
+                    datasets: [{ data: tb.values || [], backgroundColor: colors.slice(0, (tb.labels || []).length), borderWidth: 2 }]
+                },
+                options: Object.assign({}, opts, { plugins: { legend: { position: 'right' } } })
+            });
+        }
+
+        applyData(d);
+    }
+
+    function fetchAndUpdate() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', API_URL);
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    applyData(data);
+                } catch (e) {}
+            }
+        };
+        xhr.send();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof initialData === 'undefined') initialData = null;
+        createCharts(initialData);
+        var searchInput = document.getElementById('analyticsTableSearch');
+        if (searchInput) searchInput.addEventListener('input', filterTable);
+        setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
+    });
+})();
+</script>
+{% endblock %}

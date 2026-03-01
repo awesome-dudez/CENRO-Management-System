@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Admin Membership{% endblock %}
+{% block admin_subtitle %}Members{% endblock %}
 {% block content %}
 <!-- Secondary Navigation Tabs -->
 <nav class="secondary-nav-tabs">
@@ -50,6 +51,13 @@
         <h3 class="card-title">Account Management</h3>
         <p class="card-subtitle">Manage customer accounts and locations</p>
     </div>
+    <form method="get" class="membership-search-form" style="margin-bottom: 1.25rem;">
+        <input type="hidden" name="tab" value="account_management">
+        <div class="search-bar-wrap" style="display: flex; gap: 10px; max-width: 400px;">
+            <input type="search" name="q" value="{{ search_query }}" class="form-control" placeholder="Search by name, email, barangay, address..." style="flex: 1;">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+    </form>
     <div class="table-responsive">
         <table class="data-table">
             <thead>
@@ -76,7 +84,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6">No members found.</td>
+                    <td colspan="6">{% if search_query %}No members match "{{ search_query }}".{% else %}No members found.{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -92,6 +100,13 @@
             <span>🖨️</span> Print History Report
         </button>
     </div>
+    <form method="get" class="membership-search-form" style="margin-bottom: 1.25rem;">
+        <input type="hidden" name="tab" value="service_history">
+        <div class="search-bar-wrap" style="display: flex; gap: 10px; max-width: 400px;">
+            <input type="search" name="q" value="{{ search_query }}" class="form-control" placeholder="Search by name, email, barangay..." style="flex: 1;">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+    </form>
     <div class="table-responsive">
         <table class="data-table">
             <thead>
@@ -120,6 +135,10 @@
                     <td colspan="5">No service history found.</td>
                 </tr>
                 {% endif %}
+                {% empty %}
+                <tr>
+                    <td colspan="5">{% if search_query %}No members match "{{ search_query }}".{% else %}No members with service history.{% endif %}</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>

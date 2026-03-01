@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}View Map Requests - ECO-TRACK{% endblock %}
+{% block admin_subtitle %}View Map Requests{% endblock %}
+{% block content %}
+<style>
+.admin-map-page .card { margin-bottom: 0; }
+.admin-map-layout { display: flex; gap: 24px; align-items: stretch; margin-top: 16px; }
+.admin-map-list { flex: 0 0 280px; min-width: 0; display: flex; flex-direction: column; }
+.admin-map-list .card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.admin-map-list .card-header { flex-shrink: 0; }
+.admin-map-list-wrap { flex: 1; overflow-y: auto; min-height: 200px; }
+.admin-map-consumer-item { display: block; width: 100%; padding: 12px 16px; text-align: left; border: none; border-radius: 6px; background: transparent; color: var(--text-dark, #333); font-size: 0.95rem; cursor: pointer; transition: background 0.2s; border-left: 3px solid transparent; }
+.admin-map-consumer-item:hover { background: rgba(45, 134, 89, 0.08); }
+.admin-map-consumer-item.active { background: rgba(45, 134, 89, 0.12); border-left-color: var(--primary-green, #2d8659); font-weight: 600; }
+.admin-map-map { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#admin-map-requests-map { width: 100%; height: 100%; min-height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; }
+.admin-map-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 400px; background: #f8f9fa; border-radius: 8px; color: #666; font-size: 0.95rem; padding: 24px; text-align: center; }
+.admin-map-empty-list { padding: 24px; text-align: center; color: #666; }
+.admin-map-popup { min-width: 220px; font-size: 13px; }
+.admin-map-popup strong { display: block; margin-bottom: 6px; }
+@media (max-width: 768px) {
+    .admin-map-layout { flex-direction: column; }
+    .admin-map-list { flex: 0 0 auto; max-height: 240px; }
+    #admin-map-requests-map { min-height: 320px; }
+    .admin-map-placeholder { min-height: 320px; }
+}
+</style>
+<div class="admin-map-page">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">🗺️ View Map Requests</h3>
+            <p class="card-subtitle">Consumers with completed, serviced requests (with GPS). Select a consumer to view their service location on the map.</p>
+        </div>
+        <div class="admin-map-layout">
+            <div class="admin-map-list">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Consumers</h4>
+                        <p class="card-subtitle">Click a name to show map</p>
+                    </div>
+                    <div class="admin-map-list-wrap">
+                        {% if consumers %}
+                        {% for c in consumers %}
+                        <button type="button" class="admin-map-consumer-item" data-consumer-id="{{ c.id }}" aria-pressed="false">{{ c.name }}</button>
+                        {% endfor %}
+                        {% else %}
+                        <div class="admin-map-empty-list">No completed requests with map location data.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="admin-map-map">
+                <div id="admin-map-container" class="admin-map-map-inner" style="position: relative; flex: 1; min-height: 400px;">
+                    <div class="admin-map-placeholder" id="admin-map-placeholder">Select a consumer to view their service location(s).</div>
+                    <div id="admin-map-requests-map" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;" aria-label="Map of selected consumer service locations"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script type="application/json" id="admin-map-requests-data">{{ requests_json|safe }}</script>
+<script type="application/json" id="admin-map-consumers-data">{{ consumers_json|safe }}</script>
+<script>
+(function() {
+    var placeholder = document.getElementById('admin-map-placeholder');
+    var mapEl = document.getElementById('admin-map-requests-map');
+    if (!mapEl || typeof L === 'undefined') return;
+    var requestsData = [];
+    try {
+        var dataEl = document.getElementById('admin-map-requests-data');
+        if (dataEl) requestsData = JSON.parse(dataEl.textContent);
+    } catch (e) {}
+    var defaultCenter = [9.3696, 122.7960];
+    var defaultZoom = 11;
+    var map = L.map(mapEl, { attributionControl: true }).setView(defaultCenter, defaultZoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+    }).addTo(map);
+    var markersLayer = L.layerGroup().addTo(map);
+    function clearMarkers() {
+        markersLayer.clearLayers();
+    }
+    function showMapForConsumer(consumerId) {
+        clearMarkers();
+        var list = requestsData.filter(function(r) { return String(r.consumer_id) === String(consumerId); });
+        if (list.length === 0) {
+            if (placeholder) placeholder.style.display = 'flex';
+            mapEl.style.display = 'none';
+            return;
+        }
+        if (placeholder) placeholder.style.display = 'none';
+        mapEl.style.display = 'block';
+        var bounds = null;
+        for (var i = 0; i < list.length; i++) {
+            var r = list[i];
+            var lat = parseFloat(r.lat);
+            var lng = parseFloat(r.lng);
+            if (isNaN(lat) || isNaN(lng)) continue;
+            var popupHtml = '<div class="admin-map-popup">' +
+                '<strong>Consumer:</strong> ' + (r.consumer_name || '—') + '<br>' +
+                '<strong>Service:</strong> ' + (r.service_type || '—') + '<br>' +
+                '<strong>Address:</strong> ' + (r.address || '—') + '<br>' +
+                '<strong>Date Completed:</strong> ' + (r.date_completed || '—') +
+                '</div>';
+            var marker = L.marker([lat, lng]).addTo(markersLayer).bindPopup(popupHtml);
+            if (!bounds) bounds = L.latLngBounds([lat, lng], [lat, lng]);
+            else bounds.extend([lat, lng]);
+        }
+        if (bounds && list.length > 0) {
+            map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+        }
+        map.invalidateSize();
+    }
+    var items = document.querySelectorAll('.admin-map-consumer-item[data-consumer-id]');
+    items.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = this.getAttribute('data-consumer-id');
+            items.forEach(function(b) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+            this.classList.add('active');
+            this.setAttribute('aria-pressed', 'true');
+            showMapForConsumer(id);
+        });
+    });
+})();
+</script>
+{% endblock %}

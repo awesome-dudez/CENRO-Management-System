@@ -1,0 +1,16 @@
+{% comment %}
+Admin layout: fixed top header.
+Left: ECO-TRACK logo/title. Right: Admin name and Logout button.
+{% endcomment %}
+<header class="admin-top-header" role="banner">
+    <div class="admin-header-inner">
+        <a href="{% url 'dashboard:admin_dashboard' %}" class="admin-logo" aria-label="ECO-TRACK Home">
+            <span class="admin-logo-icon" aria-hidden="true">🌍</span>
+            <span class="admin-logo-text">ECO-TRACK</span>
+        </a>
+        <div class="admin-header-right">
+            <span class="admin-user-name">{{ user.get_full_name|default:user.username|title }}</span>
+            <a href="{% url 'accounts:logout' %}" class="admin-btn-logout">Logout</a>
+        </div>
+    </div>
+</header>

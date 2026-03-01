@@ -6,6 +6,10 @@
     <title>{% block title %}CENRO Management System{% endblock %} - EcoTrack</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}">
+    {% if user.is_authenticated and user.is_admin %}
+    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}">
+    {% endif %}
     <!-- Leaflet Map Library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <!-- Turf.js for advanced geospatial operations (point-in-polygon) -->
@@ -13,23 +17,45 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
-<body>
-    <!-- Top Navigation Bar -->
+{% comment %}Admin = role ADMIN or superuser; use role/superuser so mini menu is hidden reliably.{% endcomment %}
+<body class="{% if not user.is_authenticated %}consumer-view{% elif user.role == 'ADMIN' or user.is_superuser %}admin-view{% else %}consumer-view{% endif %}">
+    {% if not user.is_authenticated or user.role != 'ADMIN' and not user.is_superuser %}
+    <!-- Top Navigation Bar (consumer / non-admin) -->
     <header class="top-nav">
         <div class="nav-container">
-            <a href="{% url 'dashboard:home' %}" class="logo">
+            {% comment %}Small top-left mini menu (ECO-TRACK | Admin Portal | Profile | Logout): do NOT render for Admin.{% endcomment %}
+            {% if not user.is_authenticated or user.role != 'ADMIN' and not user.is_superuser %}
+            <div id="top-nav-left-block" class="top-nav-left-block">
+                <button type="button" class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav">
+                    <span class="nav-toggle-bar"></span>
+                    <span class="nav-toggle-bar"></span>
+                    <span class="nav-toggle-bar"></span>
+                </button>
+                <a href="{% url 'dashboard:home' %}" class="logo">
+                    <span class="logo-icon">🌍</span>
+                    <div>
+                        <span class="logo-text">ECO-TRACK</span>
+                        <span class="logo-subtitle">Wetland Management</span>
+                    </div>
+                </a>
+            </div>
+            {% endif %}
+            {% if user.is_authenticated and user.role == 'ADMIN' or user.is_superuser %}
+            <a href="{% url 'dashboard:home' %}" class="logo admin-nav-logo-center" aria-hidden="false">
                 <span class="logo-icon">🌍</span>
                 <div>
                     <span class="logo-text">ECO-TRACK</span>
                     <span class="logo-subtitle">Wetland Management</span>
                 </div>
             </a>
+            {% endif %}
             <nav class="top-nav-links">
-                {% if user.is_authenticated and user.is_admin %}
+                {% if user.is_authenticated and user.role == 'ADMIN' or user.is_superuser %}
                 <a href="{% url 'dashboard:admin_dashboard' %}" class="nav-link {% if 'admin' in request.resolver_match.url_name %}active{% endif %}">
                     <span>⚙️</span> Admin Portal{% if user.is_superuser %}<span class="super-admin-badge" title="Super Admin">Super</span>{% endif %}
                 </a>
                 {% elif user.is_authenticated %}
+                {% comment %}Consumer-only nav: Dashboard, Service Request, Service History — do NOT show when user is Admin{% endcomment %}
                 <a href="{% url 'dashboard:home' %}" class="nav-link {% if request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'request_list' %}active{% endif %}">
                     <span>🏠</span> Dashboard
                 </a>
@@ -83,56 +109,30 @@
                         </span>
                         <span>{{ user.get_full_name|default:user.username|title }}</span>
                     </a>
-                    <a href="{% url 'accounts:logout' %}" class="btn-logout">Logout</a>
+                    <a href="{% url 'accounts:logout' %}" class="btn-logout"><span aria-hidden="true">🚪</span> Logout</a>
                 </div>
                 {% endif %}
             </nav>
         </div>
     </header>
-
-    {% if user.is_authenticated and user.is_admin %}
-    <!-- Admin Section Header -->
-    <div class="admin-header">
-        <div class="admin-header-content">
-            <div>
-                <h1 class="system-title">CENRO Management System{% if user.is_superuser %} <span class="super-admin-badge" title="Super Admin">Super Admin</span>{% endif %}</h1>
-                <p class="system-subtitle">Comprehensive Management for Environmental Services</p>
-            </div>
-            <div class="admin-actions">
-                <button class="btn-export" onclick="exportData()">
-                    <span>📥</span> Export Data
-                </button>
-                <a href="{% url 'scheduling:schedule_list' %}" class="btn-operations">
-                    <span>🚚</span> Operations
-                </a>
-            </div>
-        </div>
-        
-        <!-- Primary Admin Navigation Tabs -->
-        <nav class="admin-nav-tabs">
-            <a href="{% url 'dashboard:admin_dashboard' %}" class="admin-tab {% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}">
-                <span>📊</span> Dashboard
-            </a>
-            <a href="{% url 'dashboard:admin_requests' %}" class="admin-tab {% if 'admin_requests' in request.resolver_match.url_name %}active{% endif %}">
-                <span>📋</span> Requests
-            </a>
-            <a href="{% url 'dashboard:admin_membership' %}" class="admin-tab {% if 'admin_membership' in request.resolver_match.url_name %}active{% endif %}">
-                <span>👥</span> Membership
-            </a>
-            <a href="{% url 'dashboard:admin_computation' %}" class="admin-tab {% if 'admin_computation' in request.resolver_match.url_name %}active{% endif %}">
-                <span>💰</span> Computation
-            </a>
-            <a href="{% url 'dashboard:admin_declogging_app' %}" class="admin-tab {% if 'admin_declogging_app' in request.resolver_match.url_name %}active{% endif %}">
-                <span>📄</span> Declogging App
-            </a>
-        </nav>
-    </div>
     {% endif %}
 
-    <!-- Main Content -->
-    <main class="main-content">
+    {% if user.is_authenticated and user.is_admin %}
+    <!-- Admin layout: fixed header + sidebar + main -->
+    {% include "admin/_header.html" %}
+    {% include "admin/_sidebar.html" %}
+    <div class="admin-layout-wrapper">
+    {% endif %}
+    <main class="{% if user.is_authenticated and user.is_admin %}admin-main{% else %}main-content{% endif %}">
+        {% if user.is_authenticated and user.is_admin %}
+        <h1 class="admin-main-title">CENRO Management System</h1>
+        <p class="admin-main-subtitle">{% block admin_subtitle %}System Dashboard{% endblock %}</p>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
+    {% if user.is_authenticated and user.is_admin %}
+    </div>
+    {% endif %}
 
     <!-- Footer -->
     <footer class="footer">
@@ -147,17 +147,17 @@
             <div class="footer-section">
                 <h4>Services</h4>
                 <ul>
-                    <li>Septage Desludging</li>
-                    <li>Waste Collection</li>
-                    <li>Environmental Permits</li>
-                    <li>Complaint Filing</li>
+                    <li><a href="#">Septage Desludging</a></li>
+                    <li><a href="#">Waste Collection</a></li>
+                    <li><a href="#">Environmental Permits</a></li>
+                    <li><a href="#">Complaint Filing</a></li>
                 </ul>
             </div>
             <div class="footer-section">
                 <h4>Contact</h4>
                 <p>CENRO Office, Bayawan City</p>
-                <p>(035) 123-4567</p>
-                <p>cenro@bayawancity.gov.ph</p>
+                <p><a href="tel:+35351234567">(035) 123-4567</a></p>
+                <p><a href="mailto:cenro@bayawancity.gov.ph">cenro@bayawancity.gov.ph</a></p>
             </div>
             <div class="footer-section">
                 <h4>Legal</h4>
@@ -323,6 +323,72 @@
     </script>
     {% endif %}
 
+    <script>
+    (function() {
+        var consumerView = document.body.classList.contains('consumer-view');
+        if (!consumerView) return;
+        var toggle = document.getElementById('navToggle');
+        var overlay = document.getElementById('mobileNav');
+        var backdrop = document.getElementById('mobileNavBackdrop');
+        var closeBtn = document.getElementById('mobileNavClose');
+        function openNav() {
+            document.body.classList.add('mobile-nav-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            if (overlay) overlay.setAttribute('aria-hidden', 'false');
+            if (backdrop) backdrop.setAttribute('aria-hidden', 'false');
+            document.documentElement.style.overflow = 'hidden';
+        }
+        function closeNav() {
+            document.body.classList.remove('mobile-nav-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+            if (overlay) overlay.setAttribute('aria-hidden', 'true');
+            if (backdrop) backdrop.setAttribute('aria-hidden', 'true');
+            document.documentElement.style.overflow = '';
+        }
+        if (toggle) toggle.addEventListener('click', function() {
+            if (document.body.classList.contains('mobile-nav-open')) closeNav(); else openNav();
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeNav);
+        if (backdrop) backdrop.addEventListener('click', closeNav);
+        var links = overlay ? overlay.querySelectorAll('.mobile-nav-link') : [];
+        for (var i = 0; i < links.length; i++) links[i].addEventListener('click', closeNav);
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && document.body.classList.contains('mobile-nav-open')) closeNav();
+        });
+    })();
+    </script>
+    {% if user.is_authenticated and user.is_admin %}
+    <script>
+    (function() {
+        var sidebar = document.getElementById('adminSidebar');
+        var toggle = document.getElementById('adminSidebarToggle');
+        var closeBtn = document.getElementById('adminSidebarClose');
+        var overlay = document.getElementById('adminSidebarOverlay');
+        function openSidebar() {
+            if (sidebar) sidebar.classList.add('is-open');
+            if (overlay) overlay.classList.add('is-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            document.documentElement.style.overflow = 'hidden';
+        }
+        function closeSidebar() {
+            if (sidebar) sidebar.classList.remove('is-open');
+            if (overlay) overlay.classList.remove('is-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+            document.documentElement.style.overflow = '';
+        }
+        if (toggle) toggle.addEventListener('click', openSidebar);
+        if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+        if (overlay) overlay.addEventListener('click', closeSidebar);
+        if (sidebar) {
+            var links = sidebar.querySelectorAll('.admin-sidebar-link');
+            for (var i = 0; i < links.length; i++) links[i].addEventListener('click', closeSidebar);
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && sidebar && sidebar.classList.contains('is-open')) closeSidebar();
+        });
+    })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

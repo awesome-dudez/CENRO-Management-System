@@ -35,6 +35,15 @@ class ServiceRequest(models.Model):
     request_date = models.DateField(default=timezone.now)
     contact_number = models.CharField(max_length=20)
 
+    class LocationMode(models.TextChoices):
+        PIN = "PIN", "Pin on Map"
+        TEXT = "TEXT", "Type Address"
+
+    location_mode = models.CharField(
+        max_length=10,
+        choices=LocationMode.choices,
+        default=LocationMode.PIN,
+    )
     barangay = models.CharField(max_length=255)
     address = models.CharField(max_length=500)
     gps_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -49,6 +58,9 @@ class ServiceRequest(models.Model):
         default=PublicPrivate.PRIVATE,
     )
     client_signature = models.FileField(upload_to="client_signatures/", null=True, blank=True)
+
+    location_photo_1 = models.ImageField(upload_to="location_photos/", null=True, blank=True)
+    location_photo_2 = models.ImageField(upload_to="location_photos/", null=True, blank=True)
 
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=25, choices=Status.choices, default=Status.SUBMITTED)

@@ -20,4 +20,7 @@ urlpatterns = [
     path("admin/computation/", admin_views.admin_computation, name="admin_computation"),
     path("admin/computation/generate-receipt/", admin_views.generate_receipt, name="generate_receipt"),
     path("admin/declogging-app/", admin_views.admin_declogging_app, name="admin_declogging_app"),
+    path("admin/map-requests/", admin_views.admin_map_requests, name="admin_map_requests"),
+    path("admin/analytics/", admin_views.admin_analytics, name="admin_analytics"),
+    path("admin/analytics/api/", admin_views.analytics_api, name="admin_analytics_api"),
 ]

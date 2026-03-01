@@ -324,6 +324,47 @@
     .req-toggle-btn:hover:not(.active) {
         background: #f0fdf4;
     }
+
+    /* Service Location mode toggle */
+    .location-mode-section { margin-bottom: 20px; }
+    .location-mode-toggle {
+        display: flex;
+        gap: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px solid #1abc9c;
+        margin-top: 8px;
+    }
+    .location-mode-btn {
+        flex: 1;
+        padding: 12px 16px;
+        border: none;
+        background: #fff;
+        color: #2d3142;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+    }
+    .location-mode-btn:first-child { border-right: 1px solid #1abc9c; }
+    .location-mode-btn.active { background: #1abc9c; color: white; }
+    .location-mode-btn:hover:not(.active) { background: #f0fdf4; }
+    .location-pin-section { margin-top: 12px; }
+    .location-pin-section.hidden { display: none !important; }
+    .location-text-section { margin-top: 12px; }
+    .location-text-section.hidden { display: none !important; }
+    .location-text-section .form-group label span { color: red; }
+    @media (max-width: 576px) {
+        .location-mode-toggle { flex-direction: column; }
+        .location-mode-btn:first-child { border-right: none; border-bottom: 1px solid #1abc9c; }
+    }
+    .location-photos-upload { margin-top: 16px; }
+    .location-photos-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+    @media (max-width: 600px) { .location-photos-inputs { grid-template-columns: 1fr; } }
+    .location-photo-slot .form-control { margin-bottom: 8px; }
+    .location-photo-preview { min-height: 80px; margin-top: 6px; border-radius: 8px; overflow: hidden; background: #f0f0f0; }
+    .location-photo-preview img { width: 100%; height: 120px; object-fit: cover; display: block; }
 </style>
 
 <div class="wizard-container">
@@ -406,38 +447,69 @@
                 </div>
             </div>
 
-            <!-- Map Location -->
-            <div class="form-group">
+            <!-- Service Location: Pin on Map vs Type Address -->
+            <div class="form-group location-mode-section">
                 <label>Service Location <span style="color:red">*</span></label>
-                <div class="map-instructions" id="mapInstructions">
-                    <span>Click the map to drop a pin, then drag to refine.</span>
-                    <span class="map-status-badge" id="mapStatusBadge">Waiting for pin</span>
+                {{ form.location_mode }}
+                <div class="location-mode-toggle">
+                    <button type="button" class="location-mode-btn active" data-mode="PIN" id="btnLocationPin">Pin on Map</button>
+                    <button type="button" class="location-mode-btn" data-mode="TEXT" id="btnLocationText">Type Address</button>
                 </div>
-                <div id="map-container">
-                    <div id="map" style="width:100%;height:100%;"></div>
-                    <div id="pin-info-card" class="pin-info-card">
-                        <div class="pin-info-title" id="pinInfoBarangay">Select a location</div>
-                        <div class="pin-info-coords" id="pinInfoCoords">--</div>
-                        <div class="pin-info-address" id="pinInfoAddress">Address will appear here</div>
-                        <div class="pin-info-status" id="pinInfoStatus">Place the pin inside Bayawan City</div>
+                <!-- Pin on Map: map only -->
+                <div class="location-pin-section" id="locationPinSection">
+                    <div class="map-instructions" id="mapInstructions">
+                        <span>Click the map to drop a pin, then drag to refine.</span>
+                        <span class="map-status-badge" id="mapStatusBadge">Waiting for pin</span>
+                    </div>
+                    <div id="map-container">
+                        <div id="map" style="width:100%;height:100%;"></div>
+                        <div id="pin-info-card" class="pin-info-card">
+                            <div class="pin-info-title" id="pinInfoBarangay">Select a location</div>
+                            <div class="pin-info-coords" id="pinInfoCoords">--</div>
+                            <div class="pin-info-address" id="pinInfoAddress">Address will appear here</div>
+                            <div class="pin-info-status" id="pinInfoStatus">Place the pin inside Bayawan City</div>
+                        </div>
+                    </div>
+                    <div class="location-validation" id="locationValidation">
+                        Place the pin inside Bayawan City to continue.
+                    </div>
+                    {{ form.gps_latitude }}
+                    {{ form.gps_longitude }}
+                </div>
+                <!-- Type Address: no map; optional location photos -->
+                <div class="location-text-section hidden" id="locationTextSection">
+                    <p class="form-help-text" style="margin-bottom:12px;">Enter your barangay and full address. No map required.</p>
+                    <div class="form-group location-photos-upload" id="locationPhotosUpload">
+                        <label>Location photos (optional)</label>
+                        <p class="form-help-text">Optional: upload up to 2 photos to help our team find the location. JPG, PNG, or WEBP, max 5MB each.</p>
+                        <div class="location-photos-inputs">
+                            <div class="location-photo-slot">
+                                <input type="file" name="location_photo_1" id="id_location_photo_1" class="form-control location-photo-input" accept="image/jpeg,image/jpg,image/png,image/webp" data-slot="1">
+                                <div class="location-photo-preview" id="preview1"></div>
+                                <div class="form-error" id="locationPhoto1Error"></div>
+                            </div>
+                            <div class="location-photo-slot">
+                                <input type="file" name="location_photo_2" id="id_location_photo_2" class="form-control location-photo-input" accept="image/jpeg,image/jpg,image/png,image/webp" data-slot="2">
+                                <div class="location-photo-preview" id="preview2"></div>
+                                <div class="form-error" id="locationPhoto2Error"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="location-validation" id="locationValidation">
-                    Place the pin inside Bayawan City to continue.
-                </div>
-                {{ form.gps_latitude }}
-                {{ form.gps_longitude }}
             </div>
 
-            <div class="form-group">
-                <label for="id_barangay">Barangay</label>
+            <div class="form-group" id="barangayFormGroup">
+                <label for="id_barangay">Barangay <span class="location-required-asterisk" id="barangayRequiredStar" style="display:none;">*</span></label>
                 {{ form.barangay }}
+                {% if form.barangay.errors %}<div class="form-error">{{ form.barangay.errors.0 }}</div>{% endif %}
+                <div class="form-help-text" id="barangayHelp">Auto-detected from the pin or type manually.</div>
             </div>
 
-            <div class="form-group">
-                <label for="id_address">Complete Address / Landmark</label>
+            <div class="form-group" id="addressFormGroup">
+                <label for="id_address">Complete Address / Landmark <span class="location-required-asterisk" id="addressRequiredStar" style="display:none;">*</span></label>
                 {{ form.address }}
                 {% if form.address.errors %}<div class="form-error">{{ form.address.errors.0 }}</div>{% endif %}
+                <div class="form-help-text" id="addressHelp">House number, street, near [landmark]. Optional when using Pin on Map.</div>
             </div>
 
             <div class="form-group">
@@ -503,6 +575,7 @@
                     <tr><td>Service Type</td><td>{{ form_data.service_type }}</td></tr>
                     <tr><td>Client Name</td><td>{{ form_data.client_name }}</td></tr>
                     <tr><td>Request Date</td><td>{{ form_data.request_date }}</td></tr>
+                    <tr><td>Location</td><td>{% if form_data.location_mode == 'TEXT' %}Type Address{% else %}Pin on Map{% endif %}</td></tr>
                     <tr><td>Barangay</td><td>{{ form_data.barangay }}</td></tr>
                     <tr><td>Address</td><td>{{ form_data.address|default:"N/A" }}</td></tr>
                     <tr><td>Contact Number</td><td>{{ form_data.contact_number }}</td></tr>
@@ -631,6 +704,88 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     if (dateInput) dateInput.addEventListener('change', validateRequestDate);
+
+    // ---- Service Location mode: Pin on Map vs Type Address ----
+    var locationModeInput = document.getElementById('id_location_mode');
+    var btnLocationPin = document.getElementById('btnLocationPin');
+    var btnLocationText = document.getElementById('btnLocationText');
+    var locationPinSection = document.getElementById('locationPinSection');
+    var locationTextSection = document.getElementById('locationTextSection');
+    var barangayRequiredStar = document.getElementById('barangayRequiredStar');
+    var addressRequiredStar = document.getElementById('addressRequiredStar');
+    var barangayHelp = document.getElementById('barangayHelp');
+    var addressHelp = document.getElementById('addressHelp');
+    var latField = document.querySelector('input[name="gps_latitude"]');
+    var lonField = document.querySelector('input[name="gps_longitude"]');
+    var barangayInput = document.querySelector('input[name="barangay"]');
+    var addressInput = document.querySelector('input[name="address"]');
+
+    function setLocationMode(mode) {
+        if (!locationModeInput) return;
+        locationModeInput.value = mode;
+        var isPin = mode === 'PIN';
+        btnLocationPin.classList.toggle('active', isPin);
+        btnLocationText.classList.toggle('active', !isPin);
+        if (locationPinSection) locationPinSection.classList.toggle('hidden', !isPin);
+        if (locationTextSection) locationTextSection.classList.toggle('hidden', isPin);
+        if (barangayRequiredStar) barangayRequiredStar.style.display = isPin ? 'none' : 'inline';
+        if (addressRequiredStar) addressRequiredStar.style.display = isPin ? 'none' : 'inline';
+        if (barangayHelp) barangayHelp.textContent = isPin ? 'Auto-detected from the pin or type manually.' : 'Required when using Type Address.';
+        if (addressHelp) addressHelp.textContent = isPin ? 'House number, street, near [landmark]. Optional when using Pin on Map.' : 'Required when using Type Address.';
+        if (!isPin && latField && lonField) { latField.value = ''; lonField.value = ''; }
+        if (typeof mapInstance !== 'undefined' && mapInstance) setTimeout(function() { mapInstance.invalidateSize(); }, 150);
+    }
+    if (btnLocationPin) btnLocationPin.addEventListener('click', function() { setLocationMode('PIN'); });
+    if (btnLocationText) btnLocationText.addEventListener('click', function() { setLocationMode('TEXT'); });
+    var initialMode = (locationModeInput && locationModeInput.value) ? locationModeInput.value : 'PIN';
+    setLocationMode(initialMode);
+
+    // ---- Location photos (Type Address): validate type + size, preview ----
+    var LOCATION_PHOTO_MAX_MB = 5;
+    var LOCATION_PHOTO_ACCEPT = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    function validateLocationPhoto(file, errorElId) {
+        var errEl = document.getElementById(errorElId);
+        if (!errEl) return true;
+        errEl.textContent = '';
+        if (!file) return true;
+        var typeOk = LOCATION_PHOTO_ACCEPT.indexOf(file.type) !== -1 || /\.(jpe?g|png|webp)$/i.test(file.name);
+        if (!typeOk) { errEl.textContent = 'Only JPG, PNG, or WEBP images allowed.'; return false; }
+        if (file.size > LOCATION_PHOTO_MAX_MB * 1024 * 1024) {
+            errEl.textContent = 'Max 5MB per file.';
+            return false;
+        }
+        return true;
+    }
+    function previewLocationPhoto(input, previewId) {
+        var preview = document.getElementById(previewId);
+        if (!preview) return;
+        preview.innerHTML = '';
+        if (input.files && input.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = document.createElement('img');
+                img.src = e.target.result;
+                img.alt = 'Preview';
+                preview.appendChild(img);
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+    [1, 2].forEach(function(slot) {
+        var input = document.getElementById('id_location_photo_' + slot);
+        var errId = 'locationPhoto' + slot + 'Error';
+        var previewId = 'preview' + slot;
+        if (input) {
+            input.addEventListener('change', function() {
+                if (!validateLocationPhoto(this.files && this.files[0], errId)) {
+                    this.value = '';
+                    document.getElementById(previewId).innerHTML = '';
+                    return;
+                }
+                previewLocationPhoto(this, previewId);
+            });
+        }
+    });
 
     var bawadOutsideNote = document.getElementById('bawadOutsideNote');
     window.enforceBawadForLocation = function(withinCity) {
@@ -886,8 +1041,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (wizardForm) {
             wizardForm.addEventListener('submit', function(evt) {
-                if (!latField.value || !lonField.value) { evt.preventDefault(); alert('Please drop a pin on the map before continuing.'); return; }
-                if (!barangayInput.value || !barangayInput.value.trim()) barangayInput.value = 'Outside Bayawan City';
+                var locMode = (document.getElementById('id_location_mode') || {}).value || 'PIN';
+                if (locMode === 'PIN') {
+                    if (!latField.value || !lonField.value) { evt.preventDefault(); alert('Please drop a pin on the map before continuing.'); return; }
+                    if (!barangayInput.value || !barangayInput.value.trim()) barangayInput.value = 'Outside Bayawan City';
+                } else {
+                    var bar = (barangayInput && barangayInput.value) ? barangayInput.value.trim() : '';
+                    var addr = (addressInput && addressInput.value) ? addressInput.value.trim() : '';
+                    if (!bar) { evt.preventDefault(); alert('Please enter Barangay when using Type Address.'); if (barangayInput) barangayInput.focus(); return; }
+                    if (!addr) { evt.preventDefault(); alert('Please enter Complete Address / Landmark when using Type Address.'); if (addressInput) addressInput.focus(); return; }
+                }
                 document.querySelectorAll('[name="connected_to_bawad"]').forEach(function(r) { r.disabled = false; });
             });
         }

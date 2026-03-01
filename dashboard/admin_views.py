@@ -14,10 +14,9 @@ from services.models import ServiceRequest, Notification
 from scheduling.models import Schedule
 
 
-@login_required
-@role_required("ADMIN")
-def admin_dashboard(request):
-    """Main admin dashboard with charts and statistics"""
+def _get_dashboard_context(request):
+    """Shared context for admin dashboard and analytics pages."""
+    import json
     today = date.today()
     start_of_month = today.replace(day=1)
 
@@ -55,8 +54,6 @@ def admin_dashboard(request):
             request_date__lte=week_end,
         ).count()
         weeks_data.append({"week": f"Week {i+1}", "incoming": incoming, "completed": completed})
-
-    import json
     weeks_data_json = json.dumps(weeks_data)
 
     residential = ServiceRequest.objects.filter(
@@ -79,7 +76,7 @@ def admin_dashboard(request):
         .order_by("-count")[:10]
     )
 
-    context = {
+    return {
         "total_requests": total_requests,
         "pending_count": pending_count,
         "completed_this_month": completed_this_month,
@@ -90,7 +87,222 @@ def admin_dashboard(request):
         "barangay_stats": list(barangay_stats),
         "total_services": total_services,
     }
+
+
+@login_required
+@role_required("ADMIN")
+def admin_dashboard(request):
+    """Main admin dashboard with charts and statistics"""
+    context = _get_dashboard_context(request)
     return render(request, "dashboard/admin_dashboard.html", context)
+
+
+def _get_analytics_payload(request=None):
+    """
+    Build analytics payload for API and initial page load.
+    Uses real ServiceRequest/User data where possible; dummy data for visitor-style metrics.
+    Structure is ready to plug in backend metrics (e.g. page views, browsers) later.
+    """
+    today = date.today()
+    thirty_days_ago = today - timedelta(days=30)
+
+    # Real: total requests in last 30 days (as "Total Visitors" analogue)
+    total_requests_30 = ServiceRequest.objects.filter(
+        created_at__date__gte=thirty_days_ago
+    ).count()
+    prev_30 = today - timedelta(days=60)
+    prev_count = ServiceRequest.objects.filter(
+        created_at__date__gte=prev_30,
+        created_at__date__lt=thirty_days_ago,
+    ).count()
+    trend_pct = (
+        round((total_requests_30 - prev_count) / prev_count * 100, 1)
+        if prev_count else 0
+    )
+
+    # New vs Returning: incoming vs completed per month (last 3 months, oldest first)
+    months = []
+    new_vals = []
+    returning_vals = []
+    for i in range(2, -1, -1):
+        month_start = today.replace(day=1)
+        for _ in range(i):
+            month_start = (month_start - timedelta(days=1)).replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        months.append(month_start.strftime("%b"))
+        new_vals.append(
+            ServiceRequest.objects.filter(
+                created_at__date__gte=month_start,
+                created_at__date__lte=month_end,
+            ).count()
+        )
+        returning_vals.append(
+            ServiceRequest.objects.filter(
+                status=ServiceRequest.Status.COMPLETED,
+                request_date__gte=month_start,
+                request_date__lte=month_end,
+            ).count()
+        )
+    if not months:
+        months, new_vals, returning_vals = ["Jan", "Feb", "Mar"], [12, 19, 8], [10, 14, 6]
+
+    # Top sources: real – top barangays by request count
+    top_barangays = (
+        ServiceRequest.objects.values("barangay")
+        .annotate(count=Count("id"))
+        .order_by("-count")[:10]
+    )
+    top_sources_labels = [b["barangay"] or "Unknown" for b in top_barangays]
+    top_sources_values = [b["count"] for b in top_barangays]
+    if not top_sources_labels:
+        top_sources_labels = ["Poblacion", "Magatas", "San Isidro", "Naraja", "Balabag"]
+        top_sources_values = [45, 32, 28, 22, 18]
+
+    # Line chart: request trend by week (last 7 weeks)
+    line_labels = []
+    line_unique = []
+    line_site = []
+    line_views = []
+    for i in range(6, -1, -1):
+        week_end = today - timedelta(weeks=i)
+        week_start = week_end - timedelta(days=6)
+        line_labels.append(week_start.strftime("%m/%d"))
+        incoming = ServiceRequest.objects.filter(
+            created_at__date__gte=week_start,
+            created_at__date__lte=week_end,
+        ).count()
+        completed = ServiceRequest.objects.filter(
+            status=ServiceRequest.Status.COMPLETED,
+            request_date__gte=week_start,
+            request_date__lte=week_end,
+        ).count()
+        line_unique.append(incoming)
+        line_site.append(completed)
+        line_views.append(incoming + completed)
+
+    # Donut: service type distribution (real)
+    by_type = (
+        ServiceRequest.objects.values("service_type")
+        .annotate(count=Count("id"))
+    )
+    donut_labels = []
+    donut_values = []
+    for t in by_type:
+        st = t["service_type"]
+        donut_labels.append(st.replace("_", " ").title() if st else "Other")
+        donut_values.append(t["count"])
+    if not donut_labels:
+        donut_labels = ["Residential", "Commercial", "Grass Cutting"]
+        donut_values = [48, 23, 15]
+
+    # Table: top "pages" = top barangays with view count (real)
+    top_pages = [
+        {"name": label, "views": val}
+        for label, val in zip(top_sources_labels, top_sources_values)
+    ]
+    if not top_pages:
+        top_pages = [
+            {"name": "Home", "views": 110},
+            {"name": "Services", "views": 39},
+            {"name": "About Us", "views": 32},
+            {"name": "Our Team", "views": 29},
+            {"name": "Contact Us", "views": 18},
+        ]
+
+    return {
+        "kpi": {
+            "total_visitors_30d": total_requests_30,
+            "trend_pct": trend_pct,
+        },
+        "new_vs_returning": {
+            "labels": months,
+            "new": new_vals,
+            "returning": returning_vals,
+        },
+        "top_sources": {
+            "labels": top_sources_labels,
+            "values": top_sources_values,
+        },
+        "visitor_overview": {
+            "labels": line_labels,
+            "unique": line_unique,
+            "site": line_site,
+            "pageViews": line_views,
+        },
+        "top_browsers": {
+            "labels": donut_labels,
+            "values": donut_values,
+        },
+        "top_pages": top_pages,
+    }
+
+
+@login_required
+@role_required("ADMIN")
+def admin_map_requests(request):
+    """Map view: list of consumers with completed requests (with GPS); click consumer to show their locations on map."""
+    import json
+    qs = (
+        ServiceRequest.objects.filter(
+            status=ServiceRequest.Status.COMPLETED,
+            gps_latitude__isnull=False,
+            gps_longitude__isnull=False,
+        )
+        .select_related("consumer")
+        .order_by("consumer__first_name", "consumer__last_name", "-request_date")
+    )
+    consumers_seen = set()
+    consumers = []
+    requests_list = []
+    for sr in qs:
+        try:
+            lat = float(sr.gps_latitude)
+            lng = float(sr.gps_longitude)
+        except (TypeError, ValueError):
+            continue
+        cid = sr.consumer_id
+        cname = (sr.consumer.get_full_name() or sr.consumer.username or "").strip() or "Unknown"
+        if cid not in consumers_seen:
+            consumers_seen.add(cid)
+            consumers.append({"id": cid, "name": cname})
+        date_completed = sr.request_date.strftime("%b %d, %Y") if sr.request_date else ""
+        requests_list.append({
+            "consumer_id": cid,
+            "consumer_name": cname,
+            "client_name": sr.client_name or "",
+            "service_type": sr.get_service_type_display() if sr.service_type else "",
+            "address": sr.address or "",
+            "date_completed": date_completed,
+            "lat": lat,
+            "lng": lng,
+        })
+    consumers_json = json.dumps(consumers)
+    requests_json = json.dumps(requests_list)
+    return render(
+        request,
+        "dashboard/admin_map_requests.html",
+        {
+            "consumers": consumers,
+            "consumers_json": consumers_json,
+            "requests_json": requests_json,
+        },
+    )
+
+
+@login_required
+@role_required("ADMIN")
+def admin_analytics(request):
+    """Analytics page – KPI cards, charts, table; initial data for first paint."""
+    payload = _get_analytics_payload(request)
+    return render(request, "dashboard/admin_analytics.html", {"analytics_data": payload})
+
+
+@login_required
+@role_required("ADMIN")
+def analytics_api(request):
+    """JSON endpoint for real-time analytics (polling)."""
+    payload = _get_analytics_payload(request)
+    return JsonResponse(payload)
 
 
 @login_required
@@ -276,8 +488,9 @@ def admin_schedule_by_barangay(request):
 @login_required
 @role_required("ADMIN")
 def admin_membership(request):
-    """Admin membership view with sub-tabs"""
+    """Admin membership view with sub-tabs and search."""
     tab = request.GET.get("tab", "registration")
+    search = (request.GET.get("q") or "").strip()
 
     if tab == "registration":
         consumers = User.objects.filter(role=User.Role.CONSUMER, is_approved=False)
@@ -288,7 +501,19 @@ def admin_membership(request):
     else:
         consumers = User.objects.filter(role=User.Role.CONSUMER)
 
-    context = {"consumers": consumers, "active_tab": tab}
+    if search and tab in ("account_management", "service_history"):
+        consumers = consumers.filter(
+            Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(username__icontains=search)
+            | Q(email__icontains=search)
+            | Q(consumer_profile__barangay__icontains=search)
+            | Q(consumer_profile__street_address__icontains=search)
+            | Q(consumer_profile__municipality__icontains=search)
+            | Q(consumer_profile__mobile_number__icontains=search)
+        )
+
+    context = {"consumers": consumers, "active_tab": tab, "search_query": search}
     return render(request, "dashboard/admin_membership.html", context)
 
 

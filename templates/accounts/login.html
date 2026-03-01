@@ -6,40 +6,29 @@
         <h1>🌿 CENRO Management System</h1>
         <h2>City Environmental and Natural Resources Office</h2>
         <p class="subtitle">Bayawan</p>
-        <form method="post" class="auth-form">
+        <form method="post" class="auth-form" novalidate>
             {% csrf_token %}
             {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
             <div class="mb-3">
                 <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
                 {{ form.username }}
-                {% if form.username.errors %}<small class="text-danger d-block mt-1">{{ form.username.errors.0 }}</small>{% endif %}
+                {% if form.username.errors %}<small class="text-danger">{{ form.username.errors.0 }}</small>{% endif %}
             </div>
             <div class="mb-3">
                 <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
                 <div class="password-input-wrapper">
                     {{ form.password }}
-                    <button type="button" class="password-toggle" data-target="{{ form.password.id_for_label }}" title="Show password">&#128065;</button>
+                    <button type="button" class="password-toggle" data-target="{{ form.password.id_for_label }}" title="Show password" aria-label="Toggle password visibility">👁</button>
                 </div>
-                {% if form.password.errors %}<small class="text-danger d-block mt-1">{{ form.password.errors.0 }}</small>{% endif %}
+                {% if form.password.errors %}<small class="text-danger">{{ form.password.errors.0 }}</small>{% endif %}
             </div>
-            <button type="submit" class="btn btn-primary btn-login">Login</button>
+            <button type="submit" class="btn btn-primary btn-login">Sign in</button>
         </form>
         <p class="auth-link">
             Don't have an account? <a href="{% url 'accounts:consumer_register' %}">Register</a>
         </p>
     </div>
 </div>
-<style>
-.auth-form .btn-login { margin-top: 1.25rem; }
-.password-input-wrapper { position: relative; display: flex; align-items: center; }
-.password-input-wrapper .form-control { flex: 1; padding-right: 42px; }
-.password-toggle {
-    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-    background: none; border: none; padding: 6px; cursor: pointer; color: #666;
-    font-size: 18px; line-height: 1; border-radius: 4px;
-}
-.password-toggle:hover { color: #2d8659; }
-</style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.password-toggle').forEach(function(btn) {
