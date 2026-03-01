@@ -6,6 +6,13 @@
     <div class="auth-card" style="max-width: 560px;">
         <h1 style="color: #2d8659; text-align: center; margin-bottom: 30px;">User Account Registration</h1>
 
+        {% if messages %}
+        <div class="alert alert-danger" style="margin-bottom: 20px;">
+            {% for message in messages %}
+            <p style="margin: 0;">{{ message }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% if form.non_field_errors %}
         <div class="alert alert-danger">
             {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}

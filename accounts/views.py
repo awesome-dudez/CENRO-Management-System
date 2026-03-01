@@ -43,7 +43,12 @@ def consumer_register(request):
             try:
                 with transaction.atomic():
                     user = form.save()
-                login(request, user)
+                try:
+                    login(request, user)
+                except Exception as login_err:
+                    logger.exception("Login after registration failed: %s", login_err)
+                    messages.warning(request, "Account created. Please sign in with your username and password.")
+                    return redirect("accounts:login")
                 messages.success(request, "Registration successful! Welcome to EcoTrack.")
                 if user.role == User.Role.ADMIN:
                     return redirect("dashboard:admin_dashboard")
