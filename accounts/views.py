@@ -3,7 +3,8 @@ import logging
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError, transaction
+from django.db import transaction
+from django.db.utils import IntegrityError
 from django.shortcuts import redirect, render
 
 from .forms import ConsumerRegistrationForm, LoginForm, ProfileUpdateForm, StaffRegistrationForm
@@ -18,19 +19,25 @@ def login_view(request):
         if request.user.is_admin():
             return redirect("dashboard:admin_dashboard")
         return redirect("dashboard:home")
-    
-    # If user is trying to access login page, show login form
+
     if request.method == "POST":
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
-            user = form.get_user()
-            if not user.is_approved and user.role != User.Role.ADMIN and not user.is_superuser:
-                messages.warning(request, "Your account is pending approval by an administrator.")
-                return redirect("accounts:login")
-            login(request, user)
-            if user.is_admin():
-                return redirect("dashboard:admin_dashboard")
-            return redirect("dashboard:home")
+            try:
+                user = form.get_user()
+                is_approved = getattr(user, "is_approved", True)
+                role = getattr(user, "role", None)
+                if not is_approved and role != User.Role.ADMIN and not getattr(user, "is_superuser", False):
+                    messages.warning(request, "Your account is pending approval by an administrator.")
+                    return redirect("accounts:login")
+                login(request, user)
+                if user.is_admin():
+                    return redirect("dashboard:admin_dashboard")
+                return redirect("dashboard:home")
+            except Exception as e:
+                logger.exception("Login failed after form.is_valid(): %s", e)
+                messages.error(request, "An error occurred during sign in. Please try again.")
+        # Invalid form: fall through to re-render with errors
     else:
         form = LoginForm(request)
     return render(request, "accounts/login.html", {"form": form})
@@ -43,12 +50,7 @@ def consumer_register(request):
             try:
                 with transaction.atomic():
                     user = form.save()
-                try:
-                    login(request, user)
-                except Exception as login_err:
-                    logger.exception("Login after registration failed: %s", login_err)
-                    messages.warning(request, "Account created. Please sign in with your username and password.")
-                    return redirect("accounts:login")
+                login(request, user)
                 messages.success(request, "Registration successful! Welcome to EcoTrack.")
                 if user.role == User.Role.ADMIN:
                     return redirect("dashboard:admin_dashboard")
@@ -56,15 +58,16 @@ def consumer_register(request):
             except IntegrityError as e:
                 logger.exception("Registration IntegrityError: %s", e)
                 if "username" in str(e).lower() or "unique" in str(e).lower():
-                    messages.error(request, "That username or email is already in use. Please choose another.")
+                    form.add_error("username", "This username is already taken. Please choose another.")
+                elif "email" in str(e).lower():
+                    form.add_error("email", "An account with this email already exists.")
                 else:
-                    messages.error(request, "A user with that username or email already exists. Please try again.")
-                return render(request, "accounts/consumer_register.html", {"form": form})
+                    form.add_error(None, "Username or email already in use. Please choose different values.")
             except Exception as e:
                 logger.exception("Registration failed: %s", e)
-                messages.error(request, "Registration failed. Please try again or contact support.")
-                return render(request, "accounts/consumer_register.html", {"form": form})
-        messages.error(request, "Please fix the errors below and try again.")
+                messages.error(request, "An error occurred during registration. Please try again.")
+        else:
+            messages.error(request, "Please fix the errors below and try again.")
     else:
         form = ConsumerRegistrationForm()
     return render(request, "accounts/consumer_register.html", {"form": form})

@@ -9,7 +9,7 @@ SECRET_KEY = config("SECRET_KEY", default="replace-me-in-production")
 
 DEBUG = config("DEBUG", default="False", cast=bool)
 
-ALLOWED_HOSTS = [s.strip() for s in config("ALLOWED_HOSTS", default="*").split(",")]
+ALLOWED_HOSTS = ['https://cenro-management-7.onrender.com','cenro-management-7.onrender.com']
 
 # Required for HTTPS login on Render (and similar hosts)
 CSRF_TRUSTED_ORIGINS = [s.strip() for s in config("CSRF_TRUSTED_ORIGINS", default="").split(",") if s.strip()]
@@ -118,7 +118,7 @@ LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "dashboard:home"
 LOGOUT_REDIRECT_URL = "dashboard:home"
 
-# Log to stdout so Render (and other hosts) capture errors in logs
+# Logging: print to console (stdout) so Render logs show the real exception
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -131,6 +131,7 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
             "formatter": "verbose",
         },
     },
@@ -141,7 +142,7 @@ LOGGING = {
     "loggers": {
         "accounts": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": False,
         },
     },
