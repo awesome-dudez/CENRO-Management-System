@@ -57,7 +57,7 @@ try:
         default="https://*.onrender.com",
     )
 except Exception:
-_csrf_origins_env = "https://*.onrender.com"
+    _csrf_origins_env = "https://*.onrender.com"
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
