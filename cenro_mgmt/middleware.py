@@ -1,8 +1,27 @@
 """
-Authentication middleware to enforce login requirement
+Authentication middleware and exception logging for production.
 """
+import logging
 from django.shortcuts import redirect
 from django.urls import reverse
+
+logger = logging.getLogger(__name__)
+
+
+class ExceptionLoggingMiddleware:
+    """
+    Logs every unhandled exception with full traceback to stdout (Render logs).
+    Must be first in MIDDLEWARE so it wraps the rest.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        try:
+            return self.get_response(request)
+        except Exception as e:
+            logger.exception("Unhandled exception (500): %s", e)
+            raise
 
 
 class LoginRequiredMiddleware:
@@ -30,10 +49,7 @@ class LoginRequiredMiddleware:
     def __call__(self, request):
         # Check if path is public
         is_public = any(request.path.startswith(path) for path in self.public_paths)
-        
-        # If not public and not authenticated, redirect to login
-        if not is_public and not request.user.is_authenticated:
+        # Only access .is_authenticated (safe for AnonymousUser); never .role or .is_approved here
+        if not is_public and getattr(request.user, "is_authenticated", False) is False:
             return redirect(f"{reverse('accounts:login')}?next={request.path}")
-        
-        response = self.get_response(request)
-        return response
+        return self.get_response(request)

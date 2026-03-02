@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.utils import IntegrityError
+from django.db.utils import IntegrityError, OperationalError, ProgrammingError
 from django.shortcuts import redirect, render
 
 from .forms import ConsumerRegistrationForm, LoginForm, ProfileUpdateForm, StaffRegistrationForm
@@ -13,72 +13,128 @@ from .models import ConsumerProfile, User
 logger = logging.getLogger(__name__)
 
 
+def _safe_is_admin(user):
+    """True if user is admin; never access .role/.is_superuser on AnonymousUser."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+    role = getattr(user, "role", None)
+    if role == User.Role.ADMIN:
+        return True
+    if getattr(user, "is_superuser", False):
+        return True
+    return False
+
+
 def login_view(request):
-    try:
-        if request.user.is_authenticated:
-            if request.user.is_admin():
+    # Only check authenticated; never access .role before verifying authenticated
+    if getattr(request.user, "is_authenticated", False):
+        try:
+            if _safe_is_admin(request.user):
                 return redirect("dashboard:admin_dashboard")
             return redirect("dashboard:home")
+        except Exception as e:
+            logger.exception("Login view redirect (authenticated user) failed: %s", e)
+            messages.error(request, "An error occurred. Please try again.")
 
-        if request.method == "POST":
-            form = LoginForm(request, data=request.POST)
-            if form.is_valid():
-                try:
-                    user = form.get_user()
-                    is_approved = getattr(user, "is_approved", True)
-                    role = getattr(user, "role", None)
-                    if not is_approved and role != User.Role.ADMIN and not getattr(user, "is_superuser", False):
-                        messages.warning(request, "Your account is pending approval by an administrator.")
-                        return redirect("accounts:login")
-                    login(request, user)
-                    if user.is_admin():
-                        return redirect("dashboard:admin_dashboard")
-                    return redirect("dashboard:home")
-                except Exception as e:
-                    logger.exception("Login failed after form.is_valid(): %s", e)
-                    messages.error(request, "An error occurred during sign in. Please try again.")
-            else:
-                messages.error(request, "Please fix the errors below.")
-        else:
-            form = LoginForm(request)
+    form = LoginForm(request)
+    if request.method != "POST":
+        return render(request, "accounts/login.html", {"form": form})
+
+    form = LoginForm(request, data=request.POST)
+    try:
+        is_valid = form.is_valid()
+    except (OperationalError, ProgrammingError, IntegrityError) as e:
+        logger.exception("Login DB error during form.is_valid() (authenticate): %s", e)
+        messages.error(request, "A temporary error occurred. Please try again in a moment.")
         return render(request, "accounts/login.html", {"form": form})
     except Exception as e:
-        logger.exception("Login view error (check Render logs for traceback): %s", e)
-        raise
+        logger.exception("Login view crashed during form.is_valid(): %s", e)
+        messages.error(request, "An error occurred during sign in. Please try again.")
+        return render(request, "accounts/login.html", {"form": form})
+
+    if not is_valid:
+        messages.error(request, "Please fix the errors below.")
+        return render(request, "accounts/login.html", {"form": form})
+
+    try:
+        user = form.get_user()
+    except (OperationalError, ProgrammingError, IntegrityError) as e:
+        logger.exception("Login DB error during get_user: %s", e)
+        messages.error(request, "A temporary error occurred. Please try again in a moment.")
+        return render(request, "accounts/login.html", {"form": form})
+    except Exception as e:
+        logger.exception("Login failed during get_user: %s", e)
+        messages.error(request, "An error occurred during sign in. Please try again.")
+        return render(request, "accounts/login.html", {"form": form})
+
+    is_approved = getattr(user, "is_approved", True)
+    role = getattr(user, "role", None)
+    if not is_approved and role != User.Role.ADMIN and not getattr(user, "is_superuser", False):
+        messages.warning(request, "Your account is pending approval by an administrator.")
+        return render(request, "accounts/login.html", {"form": form})
+
+    try:
+        login(request, user)
+    except Exception as e:
+        logger.exception("Login session save failed: %s", e)
+        messages.error(request, "An error occurred during sign in. Please try again.")
+        return render(request, "accounts/login.html", {"form": form})
+
+    try:
+        if _safe_is_admin(user):
+            return redirect("dashboard:admin_dashboard")
+        return redirect("dashboard:home")
+    except Exception as e:
+        logger.exception("Login redirect after auth failed: %s", e)
+        return redirect("dashboard:home")
 
 
 def consumer_register(request):
+    if request.method != "POST":
+        return render(request, "accounts/consumer_register.html", {"form": ConsumerRegistrationForm()})
+
+    form = ConsumerRegistrationForm(request.POST)
     try:
-        if request.method == "POST":
-            form = ConsumerRegistrationForm(request.POST)
-            if form.is_valid():
-                try:
-                    with transaction.atomic():
-                        user = form.save()
-                    login(request, user)
-                    messages.success(request, "Registration successful! Welcome to EcoTrack.")
-                    if user.role == User.Role.ADMIN:
-                        return redirect("dashboard:admin_dashboard")
-                    return redirect("dashboard:home")
-                except IntegrityError as e:
-                    logger.exception("Registration IntegrityError: %s", e)
-                    if "username" in str(e).lower() or "unique" in str(e).lower():
-                        form.add_error("username", "This username is already taken. Please choose another.")
-                    elif "email" in str(e).lower():
-                        form.add_error("email", "An account with this email already exists.")
-                    else:
-                        form.add_error(None, "Username or email already in use. Please choose different values.")
-                except Exception as e:
-                    logger.exception("Registration failed: %s", e)
-                    messages.error(request, "An error occurred during registration. Please try again.")
-            else:
-                messages.error(request, "Please fix the errors below and try again.")
-        else:
-            form = ConsumerRegistrationForm()
+        is_valid = form.is_valid()
+    except (OperationalError, ProgrammingError, IntegrityError) as e:
+        logger.exception("Register view crashed during form.is_valid(): %s", e)
+        messages.error(request, "A temporary error occurred. Please try again.")
         return render(request, "accounts/consumer_register.html", {"form": form})
     except Exception as e:
-        logger.exception("Consumer register view error (check Render logs): %s", e)
-        raise
+        logger.exception("Register view crashed: %s", e)
+        messages.error(request, "An error occurred. Please try again.")
+        return render(request, "accounts/consumer_register.html", {"form": form})
+
+    if not is_valid:
+        messages.error(request, "Please fix the errors below and try again.")
+        return render(request, "accounts/consumer_register.html", {"form": form})
+
+    try:
+        with transaction.atomic():
+            user = form.save()
+        login(request, user)
+        messages.success(request, "Registration successful! Welcome to EcoTrack.")
+        role = getattr(user, "role", None)
+        if role == User.Role.ADMIN:
+            return redirect("dashboard:admin_dashboard")
+        return redirect("dashboard:home")
+    except IntegrityError as e:
+        logger.exception("Registration IntegrityError: %s", e)
+        if "username" in str(e).lower() or "unique" in str(e).lower():
+            form.add_error("username", "This username is already taken. Please choose another.")
+        elif "email" in str(e).lower():
+            form.add_error("email", "An account with this email already exists.")
+        else:
+            form.add_error(None, "Username or email already in use. Please choose different values.")
+        return render(request, "accounts/consumer_register.html", {"form": form})
+    except (OperationalError, ProgrammingError) as e:
+        logger.exception("Registration DB error: %s", e)
+        messages.error(request, "A temporary error occurred. Please try again in a moment.")
+        return render(request, "accounts/consumer_register.html", {"form": form})
+    except Exception as e:
+        logger.exception("Registration failed: %s", e)
+        messages.error(request, "An error occurred during registration. Please try again.")
+        return render(request, "accounts/consumer_register.html", {"form": form})
 
 
 @login_required

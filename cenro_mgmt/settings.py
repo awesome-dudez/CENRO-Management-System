@@ -45,9 +45,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "cenro_mgmt.middleware.ExceptionLoggingMiddleware",
     "django.middleware.security.SecurityMiddleware",
-
-    # WhiteNoise MUST be directly after SecurityMiddleware
     "whitenoise.middleware.WhiteNoiseMiddleware",
 
     "django.contrib.sessions.middleware.SessionMiddleware",
