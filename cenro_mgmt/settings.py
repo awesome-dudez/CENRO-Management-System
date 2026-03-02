@@ -1,20 +1,33 @@
 import os
 from pathlib import Path
 import dj_database_url
-from decouple import config
+from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Env vars with safe defaults so Render never crashes on missing vars
 SECRET_KEY = config("SECRET_KEY", default="replace-me-in-production")
 
-DEBUG = config("DEBUG", default=False, cast=bool)
+def _debug():
+    try:
+        return config("DEBUG", default="False", cast=bool)
+    except Exception:
+        return False
+DEBUG = _debug()
 
-# IMPORTANT: No https:// here
-ALLOWED_HOSTS = ["cenro-management-7.onrender.com"]
+# ALLOWED_HOSTS: hostnames only, no https:// (comma-separated on Render)
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="cenro-management-7.onrender.com,localhost,127.0.0.1",
+    cast=Csv(),
+)
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://cenro-management-7.onrender.com",
-]
+# CSRF_TRUSTED_ORIGINS: full origins with https:// (comma-separated on Render)
+try:
+    _csv_origins = config("CSRF_TRUSTED_ORIGINS", default="https://cenro-management-7.onrender.com")
+    CSRF_TRUSTED_ORIGINS = [s.strip() for s in _csv_origins.split(",") if s.strip()]
+except Exception:
+    CSRF_TRUSTED_ORIGINS = ["https://cenro-management-7.onrender.com"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -72,9 +85,15 @@ WSGI_APPLICATION = "cenro_mgmt.wsgi.application"
 # DATABASE CONFIG
 # =========================
 def _get_database_config():
-    database_url = config("DATABASE_URL", default=None)
+    try:
+        database_url = config("DATABASE_URL", default=None)
+    except Exception:
+        database_url = None
     if database_url:
-        return dj_database_url.parse(database_url, conn_max_age=600)
+        try:
+            return dj_database_url.parse(database_url, conn_max_age=600)
+        except Exception:
+            pass
     return {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
@@ -120,6 +139,9 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # Required for Django 5 + WhiteNoise
 STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -135,7 +157,7 @@ LOGOUT_REDIRECT_URL = "dashboard:home"
 
 
 # =========================
-# LOGGING (Render-friendly)
+# LOGGING (Render-friendly: full 500 tracebacks to stdout)
 # =========================
 LOGGING = {
     "version": 1,
@@ -145,6 +167,10 @@ LOGGING = {
             "format": "{levelname} {asctime} {module} {message}",
             "style": "{",
         },
+        "verbose_tb": {
+            "format": "{levelname} {asctime} {module}\n{message}",
+            "style": "{",
+        },
     },
     "handlers": {
         "console": {
@@ -152,9 +178,26 @@ LOGGING = {
             "stream": "ext://sys.stdout",
             "formatter": "verbose",
         },
+        "console_tb": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "verbose_tb",
+        },
     },
     "root": {
         "handlers": ["console"],
         "level": "INFO",
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console_tb"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "accounts": {
+            "handlers": ["console_tb"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
     },
 }

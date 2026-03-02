@@ -14,33 +14,37 @@ logger = logging.getLogger(__name__)
 
 
 def login_view(request):
-    # If user is already authenticated, show dashboard (not login page)
-    if request.user.is_authenticated:
-        if request.user.is_admin():
-            return redirect("dashboard:admin_dashboard")
-        return redirect("dashboard:home")
+    try:
+        if request.user.is_authenticated:
+            if request.user.is_admin():
+                return redirect("dashboard:admin_dashboard")
+            return redirect("dashboard:home")
 
-    if request.method == "POST":
-        form = LoginForm(request, data=request.POST)
-        if form.is_valid():
-            try:
-                user = form.get_user()
-                is_approved = getattr(user, "is_approved", True)
-                role = getattr(user, "role", None)
-                if not is_approved and role != User.Role.ADMIN and not getattr(user, "is_superuser", False):
-                    messages.warning(request, "Your account is pending approval by an administrator.")
-                    return redirect("accounts:login")
-                login(request, user)
-                if user.is_admin():
-                    return redirect("dashboard:admin_dashboard")
-                return redirect("dashboard:home")
-            except Exception as e:
-                logger.exception("Login failed after form.is_valid(): %s", e)
-                messages.error(request, "An error occurred during sign in. Please try again.")
-        # Invalid form: fall through to re-render with errors
-    else:
-        form = LoginForm(request)
-    return render(request, "accounts/login.html", {"form": form})
+        if request.method == "POST":
+            form = LoginForm(request, data=request.POST)
+            if form.is_valid():
+                try:
+                    user = form.get_user()
+                    is_approved = getattr(user, "is_approved", True)
+                    role = getattr(user, "role", None)
+                    if not is_approved and role != User.Role.ADMIN and not getattr(user, "is_superuser", False):
+                        messages.warning(request, "Your account is pending approval by an administrator.")
+                        return redirect("accounts:login")
+                    login(request, user)
+                    if user.is_admin():
+                        return redirect("dashboard:admin_dashboard")
+                    return redirect("dashboard:home")
+                except Exception as e:
+                    logger.exception("Login failed after form.is_valid(): %s", e)
+                    messages.error(request, "An error occurred during sign in. Please try again.")
+            else:
+                messages.error(request, "Please fix the errors below.")
+        else:
+            form = LoginForm(request)
+        return render(request, "accounts/login.html", {"form": form})
+    except Exception as e:
+        logger.exception("Login view error (check Render logs for traceback): %s", e)
+        raise
 
 
 def consumer_register(request):
