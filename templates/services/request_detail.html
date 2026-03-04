@@ -196,8 +196,14 @@
             </form>
             {% endif %}
 
+            {% if sr.service_type == "GRASS_CUTTING" %}
+            {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
+            <a href="{% url 'services:grasscutting_request_detail' sr.pk %}" class="btn btn-teal">View Request Detail</a>
+            {% endif %}
+            {% else %}
             {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
             <a href="{% url 'dashboard:assign_inspector' sr.pk %}" class="btn btn-purple">Assign Inspector</a>
+            {% endif %}
             {% endif %}
 
             {% if sr.status == "INSPECTION_SCHEDULED" %}
@@ -234,6 +240,16 @@
             {% endif %}
         {% endif %}
     </div>
+
+    {% if sr.consumer == user and sr.service_type == "GRASS_CUTTING" %}
+    <div style="margin-top: 18px; text-align: center;">
+        <a href="{% url 'services:grasscutting_request_view' sr.pk %}"
+           class="btn btn-outline"
+           style="min-width: 260px;">
+            View Grasscutting Application Form
+        </a>
+    </div>
+    {% endif %}
 </div>
 
 {% if sr.gps_latitude and sr.gps_longitude %}

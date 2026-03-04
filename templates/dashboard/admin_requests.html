@@ -4,7 +4,9 @@
 {% block content %}
 <style>
     .requests-container { max-width: 1100px; margin: 20px auto; padding: 20px; }
-    .sub-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: #f0f0f0; border-radius: 8px; padding: 4px; }
+    .requests-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+    .requests-title { font-size: 20px; font-weight: 700; color: #2d3142; }
+    .sub-tabs { display: flex; gap: 4px; margin-bottom: 16px; background: #f0f0f0; border-radius: 8px; padding: 4px; flex-wrap: wrap; }
     .sub-tab { padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; color: #555; transition: all 0.2s; }
     .sub-tab:hover { background: #e0e0e0; }
     .sub-tab.active { background: #1abc9c; color: white; }
@@ -25,15 +27,36 @@
     .btn-sm { padding: 6px 14px; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; color: white; }
     .btn-view { background: #3498db; }
     .btn-approve { background: #27ae60; }
+    .request-type-select { min-width: 210px; padding: 8px 10px; border-radius: 6px; border: 1px solid #d0d4e4; font-size: 14px; }
+    .request-type-label { font-size: 13px; font-weight: 600; color: #555; margin-right: 8px; }
+    .request-type-filter { display: flex; align-items: center; gap: 8px; }
 </style>
 
 <div class="requests-container">
+    <div class="requests-header">
+        <div class="requests-title">Requests</div>
+        <form method="get" class="request-type-filter">
+            {% if active_tab %}
+                <input type="hidden" name="tab" value="{{ active_tab }}">
+            {% endif %}
+            <span class="request-type-label">Request Type</span>
+            <select name="request_type" class="request-type-select" onchange="this.form.submit()">
+                <option value="all" {% if request_type == 'all' or not request_type %}selected{% endif %}>All Request Types</option>
+                {% for opt in request_type_options %}
+                    <option value="{{ opt.key }}" {% if request_type == opt.key %}selected{% endif %}>
+                        {{ opt.label }}
+                    </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
     <div class="sub-tabs">
-        <a href="?tab=pending" class="sub-tab {% if active_tab == 'pending' %}active{% endif %}">Pending</a>
-        <a href="?tab=inspection" class="sub-tab {% if active_tab == 'inspection' %}active{% endif %}">Inspection</a>
-        <a href="?tab=computation" class="sub-tab {% if active_tab == 'computation' %}active{% endif %}">Computation</a>
-        <a href="?tab=schedule" class="sub-tab {% if active_tab == 'schedule' %}active{% endif %}">Scheduling</a>
-        <a href="?tab=completed" class="sub-tab {% if active_tab == 'completed' %}active{% endif %}">Completed</a>
+        <a href="?tab=pending{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}" class="sub-tab {% if active_tab == 'pending' %}active{% endif %}">Pending</a>
+        <a href="?tab=inspection{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}" class="sub-tab {% if active_tab == 'inspection' %}active{% endif %}">Inspection</a>
+        <a href="?tab=computation{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}" class="sub-tab {% if active_tab == 'computation' %}active{% endif %}">Computation</a>
+        <a href="?tab=schedule{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}" class="sub-tab {% if active_tab == 'schedule' %}active{% endif %}">Scheduling</a>
+        <a href="?tab=completed{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}" class="sub-tab {% if active_tab == 'completed' %}active{% endif %}">Completed</a>
     </div>
 
     <table class="data-table">

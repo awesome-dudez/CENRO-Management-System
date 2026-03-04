@@ -23,15 +23,18 @@ from accounts.models import User
 from scheduling.models import Schedule
 
 from .forms import (
+    GRASSCUTTING_RATE_PER_HOUR,
     ServiceRequestForm,
     ServiceRequestStep1Form,
     ServiceRequestStep2Form,
     ServiceRequestStep3Form,
+    GrasscuttingApplicationForm,
+    GrasscuttingAdminEditForm,
 )
 from .business_days import next_business_day, ph_holidays
 from .location import detect_barangay_for_point
 from .geocode import address_in_bayawan, extract_barangay, reverse_geocode_osm
-from .models import CompletionInfo, InspectionDetail, Notification, ServiceRequest
+from .models import CompletionInfo, InspectionDetail, Notification, ServiceRequest, ServiceRequestChangeLog
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +67,11 @@ def create_request(request):
 
         # ---- Step 2: Customer Request Form ----
         elif step == 2:
-            form = ServiceRequestStep2Form(request.POST, request.FILES)
+            form = ServiceRequestStep2Form(
+                request.POST,
+                request.FILES,
+                service_type=form_data.get("service_type"),
+            )
             if form.is_valid():
                 lat = form.cleaned_data.get("gps_latitude")
                 lon = form.cleaned_data.get("gps_longitude")
@@ -100,6 +107,8 @@ def create_request(request):
                 else:
                     form_data.pop("_location_photos", None)
                 request.session["service_request_data"] = form_data
+                if form_data.get("service_type") == ServiceRequest.ServiceType.GRASS_CUTTING:
+                    return HttpResponseRedirect(reverse("services:grasscutting_application"))
                 return HttpResponseRedirect(reverse("services:create_request") + "?step=3")
 
         # ---- Step 3: Review & Submit ----
@@ -191,18 +200,21 @@ def create_request(request):
             default_contact = request.user.consumer_profile.mobile_number or ""
         except Exception:
             pass
-        form = ServiceRequestStep2Form(initial={
-            "client_name": form_data.get("client_name", request.user.get_full_name()),
-            "request_date": form_data.get("request_date", str(next_business_day())),
-            "contact_number": form_data.get("contact_number", default_contact),
-            "location_mode": form_data.get("location_mode", "PIN"),
-            "connected_to_bawad": form_data.get("connected_to_bawad", "NO"),
-            "public_private": form_data.get("public_private", "PRIVATE"),
-            "barangay": form_data.get("barangay", ""),
-            "address": form_data.get("address", ""),
-            "gps_latitude": form_data.get("gps_latitude"),
-            "gps_longitude": form_data.get("gps_longitude"),
-        })
+        form = ServiceRequestStep2Form(
+            initial={
+                "client_name": form_data.get("client_name", request.user.get_full_name()),
+                "request_date": form_data.get("request_date", str(next_business_day())),
+                "contact_number": form_data.get("contact_number", default_contact),
+                "location_mode": form_data.get("location_mode", "PIN"),
+                "connected_to_bawad": form_data.get("connected_to_bawad", "NO"),
+                "public_private": form_data.get("public_private", "PRIVATE"),
+                "barangay": form_data.get("barangay", ""),
+                "address": form_data.get("address", ""),
+                "gps_latitude": form_data.get("gps_latitude"),
+                "gps_longitude": form_data.get("gps_longitude"),
+            },
+            service_type=form_data.get("service_type"),
+        )
     elif step == 3:
         form = ServiceRequestStep3Form()
     else:
@@ -238,6 +250,347 @@ def create_request(request):
         "holidays_json": holidays_json,
     }
     return render(request, "services/create_request_wizard.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Grasscutting Services Application Form (only for Grass Cutting flow)
+# ---------------------------------------------------------------------------
+
+@login_required
+@role_required("CONSUMER")
+def grasscutting_application(request):
+    """Show and process the Grasscutting Services Application Form. Only reachable after step 2 when service is Grass Cutting."""
+    form_data = request.session.get("service_request_data", {})
+    if form_data.get("service_type") != ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.warning(request, "Please start a Grass Cutting service request first.")
+        return redirect("services:create_request")
+
+    initial = {
+        "signature_over_printed_name": form_data.get("client_name", request.user.get_full_name()),
+        "contact_number": form_data.get("contact_number", ""),
+        "address": (form_data.get("address") or "").strip() or (form_data.get("barangay") or "").strip(),
+    }
+    if form_data.get("request_date"):
+        try:
+            initial["date"] = form_data["request_date"]
+            initial["date_of_grass_cutting"] = form_data["request_date"]
+        except Exception:
+            pass
+
+    if request.method == "POST":
+        form = GrasscuttingApplicationForm(request.POST, initial=initial)
+        if form.is_valid():
+            cd = form.cleaned_data
+            personnel = cd["number_of_personnel"]
+            hours = float(cd["number_of_hours"])
+            # Always compute on backend; do not trust any client-submitted total.
+            total_amount = personnel * hours * GRASSCUTTING_RATE_PER_HOUR
+            total_amount = max(0, round(total_amount, 2))
+
+            designated_time_val = cd["designated_time"]
+            if hasattr(designated_time_val, "strftime"):
+                designated_time_str = designated_time_val.strftime("%I:%M %p")
+            else:
+                designated_time_str = str(designated_time_val)
+
+            notes_lines = [
+                "GRASSCUTTING APPLICATION",
+                f"Date: {cd['date']}",
+                f"Date of Grass Cutting: {cd['date_of_grass_cutting']}",
+                f"Designated Time: {designated_time_str}",
+                f"Place of Grass Cutting: {cd['place_of_grass_cutting']}",
+                f"Signature over printed name: {cd['signature_over_printed_name']}",
+                f"Contact Number: {cd['contact_number']}",
+                f"Address: {cd['address']}",
+                f"Number of Personnel: {personnel}",
+                f"Number of Hours: {hours}",
+                f"Rate: ₱{GRASSCUTTING_RATE_PER_HOUR}/hour per personnel",
+                f"Total Amount: ₱{total_amount:.2f}",
+            ]
+            notes = "\n".join(notes_lines)
+
+            gps_latitude = None
+            gps_longitude = None
+            if form_data.get("gps_latitude") is not None:
+                try:
+                    gps_latitude = Decimal(str(form_data["gps_latitude"]))
+                except (ValueError, TypeError):
+                    pass
+            if form_data.get("gps_longitude") is not None:
+                try:
+                    gps_longitude = Decimal(str(form_data["gps_longitude"]))
+                except (ValueError, TypeError):
+                    pass
+
+            req_date = (
+                datetime.strptime(form_data["request_date"], "%Y-%m-%d").date()
+                if form_data.get("request_date")
+                else timezone.now().date()
+            )
+            service_request = ServiceRequest.objects.create(
+                consumer=request.user,
+                client_name=form_data.get("client_name", request.user.get_full_name()),
+                request_date=req_date,
+                contact_number=cd["contact_number"],
+                location_mode=form_data.get("location_mode", "PIN"),
+                barangay=form_data.get("barangay", ""),
+                address=cd["address"],
+                gps_latitude=gps_latitude,
+                gps_longitude=gps_longitude,
+                service_type=ServiceRequest.ServiceType.GRASS_CUTTING,
+                connected_to_bawad=False,
+                public_private=form_data.get("public_private", "PRIVATE"),
+                status=ServiceRequest.Status.SUBMITTED,
+                notes=notes,
+                fee_amount=Decimal(str(round(total_amount, 2))),
+                grasscutting_date=cd["date_of_grass_cutting"],
+                grasscutting_personnel=personnel,
+                grasscutting_hours=Decimal(str(hours)),
+            )
+
+            admin_users = User.objects.filter(role=User.Role.ADMIN)
+            for admin in admin_users:
+                Notification.objects.create(
+                    user=admin,
+                    message=f"New Grass Cutting request from {service_request.client_name}.",
+                    notification_type=Notification.NotificationType.REQUEST_SUBMITTED,
+                    related_request=service_request,
+                )
+            Notification.objects.create(
+                user=request.user,
+                message="Your Grass Cutting request has been submitted.",
+                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                related_request=service_request,
+            )
+
+            request.session.pop("service_request_data", None)
+            request.session.pop("_bawad_proof_pending", None)
+            request.session.pop("_client_sig_pending", None)
+            request.session.pop("_location_photos", None)
+
+            messages.success(request, "Grasscutting application submitted successfully!")
+            return render(request, "services/request_success.html", {
+                "reference_number": f"ECO-{timezone.now().year}-{service_request.id % 1000:03d}",
+                "service_request": service_request,
+            })
+    else:
+        form = GrasscuttingApplicationForm(initial=initial)
+
+    return render(request, "services/grasscutting_application.html", {
+        "form": form,
+        "form_data": form_data,
+        "rate_per_hour": GRASSCUTTING_RATE_PER_HOUR,
+    })
+
+
+def _parse_grasscutting_notes(notes_str):
+    """Parse notes text for grasscutting date, personnel, hours (backfill when DB fields are null)."""
+    if not notes_str:
+        return None, None, None
+    date_val = None
+    personnel_val = None
+    hours_val = None
+    for line in notes_str.splitlines():
+        line = line.strip()
+        if line.startswith("Date of Grass Cutting:"):
+            part = line.split(":", 1)[-1].strip()
+            if part:
+                try:
+                    from datetime import datetime as dt
+                    date_val = dt.strptime(part, "%Y-%m-%d").date()
+                except Exception:
+                    pass
+        elif line.startswith("Number of Personnel:"):
+            part = line.split(":", 1)[-1].strip()
+            if part:
+                try:
+                    personnel_val = int(part)
+                except ValueError:
+                    pass
+        elif line.startswith("Number of Hours:"):
+            part = line.split(":", 1)[-1].strip()
+            if part:
+                try:
+                    hours_val = Decimal(part)
+                except Exception:
+                    pass
+    return date_val, personnel_val, hours_val
+
+
+def _extract_grasscutting_field(notes_str, label_prefix: str) -> str:
+    """Return the value after a given 'Label: ' prefix in the notes, or empty string."""
+    if not notes_str:
+        return ""
+    for line in notes_str.splitlines():
+        line = line.strip()
+        if line.startswith(label_prefix):
+            return line.split(":", 1)[-1].strip()
+    return ""
+
+
+@login_required
+@role_required("ADMIN", "STAFF")
+def grasscutting_request_detail(request, pk):
+    """Admin view: show Grasscutting Application details and allow editing date, personnel, hours (with required remarks)."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.error(request, "This page is only for Grass Cutting requests.")
+        return redirect("services:request_detail", pk=pk)
+
+    # Resolve display values (from DB or backfill from notes)
+    g_date = service_request.grasscutting_date
+    g_personnel = service_request.grasscutting_personnel
+    g_hours = service_request.grasscutting_hours
+    if g_date is None or g_personnel is None or g_hours is None:
+        parsed_date, parsed_personnel, parsed_hours = _parse_grasscutting_notes(service_request.notes)
+        if g_date is None:
+            g_date = parsed_date
+        if g_personnel is None:
+            g_personnel = parsed_personnel
+        if g_hours is None:
+            g_hours = parsed_hours
+
+    rate_per_hour = GRASSCUTTING_RATE_PER_HOUR
+    designated_time = _extract_grasscutting_field(service_request.notes, "Designated Time:")
+    place_of_grass_cutting = _extract_grasscutting_field(service_request.notes, "Place of Grass Cutting:")
+    initial = {
+        "date_of_grass_cutting": g_date,
+        "number_of_personnel": g_personnel or 1,
+        "number_of_hours": g_hours or Decimal("1"),
+        "remarks": "",
+    }
+
+    if request.method == "POST":
+        form = GrasscuttingAdminEditForm(request.POST, initial=initial)
+        if form.is_valid():
+            cd = form.cleaned_data
+            new_date = cd["date_of_grass_cutting"]
+            new_personnel = cd["number_of_personnel"]
+            posted_hours = cd["number_of_hours"]
+            remarks = (cd["remarks"] or "").strip()
+            # Enforce that admin cannot change number_of_hours
+            if g_hours is not None and posted_hours != g_hours:
+                form.add_error("number_of_hours", "Number of hours cannot be modified by admin.")
+            if not remarks:
+                form.add_error("remarks", "Remarks are required.")
+
+            if not form.errors:
+                new_hours = g_hours or posted_hours
+                old_values = {}
+                new_values = {}
+                if g_date != new_date:
+                    old_values["date_of_grass_cutting"] = str(g_date) if g_date else None
+                    new_values["date_of_grass_cutting"] = str(new_date)
+                if g_personnel != new_personnel:
+                    old_values["number_of_personnel"] = g_personnel
+                    new_values["number_of_personnel"] = new_personnel
+
+                if not old_values and not new_values:
+                    messages.info(request, "No changes were made.")
+                else:
+                    # Update request (hours are kept from original; only personnel/date may change)
+                    service_request.grasscutting_date = new_date
+                    service_request.grasscutting_personnel = new_personnel
+                    service_request.grasscutting_hours = new_hours
+                    total = new_personnel * float(new_hours) * rate_per_hour
+                    service_request.fee_amount = Decimal(str(round(total, 2)))
+                    service_request.save(update_fields=["grasscutting_date", "grasscutting_personnel", "grasscutting_hours", "fee_amount", "updated_at"])
+
+                    # Audit log
+                    ServiceRequestChangeLog.objects.create(
+                        service_request=service_request,
+                        changed_by=request.user,
+                        remarks=remarks,
+                        old_values=old_values,
+                        new_values=new_values,
+                    )
+
+                    # Notify consumer (include remarks and what changed)
+                    change_parts = []
+                    if "date_of_grass_cutting" in new_values:
+                        change_parts.append(f"Date of Grass Cutting: {old_values.get('date_of_grass_cutting', '—')} → {new_values['date_of_grass_cutting']}")
+                    if "number_of_personnel" in new_values:
+                        change_parts.append(f"Number of Personnel: {old_values.get('number_of_personnel', '—')} → {new_values['number_of_personnel']}")
+                    changes_text = "; ".join(change_parts)
+                    msg = f"Your Grass Cutting request was updated. Reason: {remarks}"
+                    if changes_text:
+                        msg += f" Changes: {changes_text}"
+                    if len(msg) > 500:
+                        msg = msg[:497] + "..."
+                    Notification.objects.create(
+                        user=service_request.consumer,
+                        message=msg,
+                        notification_type=Notification.NotificationType.STATUS_CHANGE,
+                        related_request=service_request,
+                    )
+                    messages.success(request, "Changes saved. The consumer has been notified.")
+                return redirect("services:grasscutting_request_detail", pk=pk)
+    else:
+        form = GrasscuttingAdminEditForm(initial=initial)
+
+    # Build display summary from notes (full text) for read-only section
+    return render(request, "services/grasscutting_request_detail.html", {
+        "sr": service_request,
+        "form": form,
+        "grasscutting_date": g_date,
+        "grasscutting_personnel": g_personnel,
+        "grasscutting_hours": g_hours,
+        "designated_time": designated_time,
+        "place_of_grass_cutting": place_of_grass_cutting,
+        "rate_per_hour": rate_per_hour,
+        "total_amount": service_request.fee_amount,
+        "change_logs": service_request.change_logs.all()[:20],
+    })
+
+
+@login_required
+def grasscutting_request_view(request, pk):
+    """Consumer view: read-only Grasscutting Application Form + admin changes."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.error(request, "This page is only for Grass Cutting requests.")
+        return redirect("services:request_detail", pk=pk)
+
+    # Permission: owner (consumer) or admin/staff
+    is_owner = service_request.consumer == request.user
+    is_admin_like = hasattr(request.user, "is_admin") and request.user.is_admin() or hasattr(request.user, "is_staff_member") and request.user.is_staff_member()
+    if not (is_owner or is_admin_like):
+        messages.error(request, "You do not have permission to view this grasscutting form.")
+        return redirect("services:request_list")
+
+    # Resolve stored values or backfill from notes
+    g_date = service_request.grasscutting_date
+    g_personnel = service_request.grasscutting_personnel
+    g_hours = service_request.grasscutting_hours
+    if g_date is None or g_personnel is None or g_hours is None:
+        parsed_date, parsed_personnel, parsed_hours = _parse_grasscutting_notes(service_request.notes)
+        if g_date is None:
+            g_date = parsed_date
+        if g_personnel is None:
+            g_personnel = parsed_personnel
+        if g_hours is None:
+            g_hours = parsed_hours
+
+    rate_per_hour = GRASSCUTTING_RATE_PER_HOUR
+    designated_time = _extract_grasscutting_field(service_request.notes, "Designated Time:")
+    place_of_grass_cutting = _extract_grasscutting_field(service_request.notes, "Place of Grass Cutting:")
+    total_amount = service_request.fee_amount
+    if total_amount is None and g_personnel and g_hours:
+        total_amount = Decimal(str(round(g_personnel * float(g_hours) * rate_per_hour, 2)))
+
+    change_logs = service_request.change_logs.all()[:20]
+
+    return render(request, "services/grasscutting_request_view.html", {
+        "sr": service_request,
+        "grasscutting_date": g_date,
+        "grasscutting_personnel": g_personnel,
+        "grasscutting_hours": g_hours,
+        "designated_time": designated_time,
+        "place_of_grass_cutting": place_of_grass_cutting,
+        "rate_per_hour": rate_per_hour,
+        "total_amount": total_amount,
+        "change_logs": change_logs,
+    })
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from django import forms
 from django.core.files.uploadedfile import UploadedFile
@@ -140,6 +141,14 @@ class ServiceRequestStep2Form(forms.Form):
         label="Location photo 2",
     )
 
+    def __init__(self, *args, **kwargs):
+        """
+        Optionally accept `service_type` (from step 1/session) so that
+        validation can depend on whether this is a declogging or grass-cutting request.
+        """
+        self.service_type = kwargs.pop("service_type", None)
+        super().__init__(*args, **kwargs)
+
     def clean_request_date(self):
         from .business_days import next_business_day
         d = self.cleaned_data["request_date"]
@@ -197,9 +206,22 @@ class ServiceRequestStep2Form(forms.Form):
 
             cleaned["barangay"] = detected or cleaned.get("barangay") or ""
 
-        bawad = cleaned.get("connected_to_bawad")
-        if bawad == "YES" and not cleaned.get("bawad_proof") and not self.files.get("bawad_proof"):
-            self.add_error("bawad_proof", "Please upload proof of BAWAD affiliation.")
+        # Connected to BAWAD + proof:
+        # Only enforce this for declogging-type services (residential/commercial desludging).
+        service_type = self.service_type or ""
+        is_declogging = service_type in {
+            ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+        }
+
+        if is_declogging:
+            bawad = cleaned.get("connected_to_bawad")
+            if bawad == "YES" and not cleaned.get("bawad_proof") and not self.files.get("bawad_proof"):
+                self.add_error("bawad_proof", "Please upload proof of BAWAD affiliation.")
+        else:
+            # Grass cutting and other non-declogging services should not depend on BAWAD details.
+            cleaned["connected_to_bawad"] = "NO"
+            cleaned["bawad_proof"] = None
 
         return cleaned
 
@@ -212,3 +234,117 @@ class ServiceRequestStep3Form(forms.Form):
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
         label="I confirm that the information provided is correct.",
     )
+
+
+GRASSCUTTING_RATE_PER_HOUR = 40
+
+
+class GrasscuttingApplicationForm(forms.Form):
+    """Grasscutting Services Application Form (sections from paper form)."""
+
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        label="Date",
+    )
+    date_of_grass_cutting = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        label="Date of Grass Cutting",
+    )
+    designated_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}, format="%H:%M"),
+        label="Designated Time",
+        input_formats=["%H:%M", "%I:%M %p", "%I:%M%p", "%H:%M:%S"],
+    )
+    place_of_grass_cutting = forms.CharField(
+        max_length=500,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Place of Grass Cutting"}),
+        label="Place of Grass Cutting",
+    )
+    signature_over_printed_name = forms.CharField(
+        max_length=255,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+        label="Signature over printed name",
+    )
+    contact_number = forms.CharField(
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "09XX-XXX-XXXX"}),
+        label="Contact Number",
+    )
+    address = forms.CharField(
+        max_length=500,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        label="Address",
+    )
+    number_of_personnel = forms.IntegerField(
+        min_value=1,
+        max_value=50,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": 1, "id": "id_number_of_personnel"}),
+        label="Number of Personnel/s",
+    )
+    number_of_hours = forms.DecimalField(
+        min_value=Decimal("0.5"),
+        max_value=Decimal("24"),
+        decimal_places=1,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0.5", "step": "0.5", "id": "id_number_of_hours"}),
+        label="Number of Hour/s",
+    )
+
+    def clean_number_of_personnel(self):
+        val = self.cleaned_data.get("number_of_personnel")
+        if val is not None and (not isinstance(val, int) or val < 1):
+            raise forms.ValidationError("Enter a positive number (at least 1).")
+        return val
+
+    def clean_number_of_hours(self):
+        val = self.cleaned_data.get("number_of_hours")
+        if val is not None:
+            try:
+                h = float(val)
+                if h <= 0:
+                    raise forms.ValidationError("Enter a positive number of hours.")
+                if h > 24:
+                    raise forms.ValidationError("Hours cannot exceed 24.")
+            except (TypeError, ValueError):
+                raise forms.ValidationError("Enter a valid number.")
+        return val
+
+    def clean_contact_number(self):
+        import re
+        num = (self.cleaned_data.get("contact_number") or "").strip()
+        cleaned = re.sub(r"[\s\-()]", "", num)
+        if not re.match(r"^(\+63|0)?9\d{9}$", cleaned):
+            raise forms.ValidationError("Enter a valid Philippine mobile number (e.g. 09XX-XXX-XXXX).")
+        return cleaned
+
+
+class GrasscuttingAdminEditForm(forms.Form):
+    """Admin edit form for Grass Cutting request: only date, personnel, hours + required remarks."""
+
+    date_of_grass_cutting = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        label="Date of Grass Cutting",
+    )
+    number_of_personnel = forms.IntegerField(
+        min_value=1,
+        max_value=50,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": 1}),
+        label="Number of Personnel/s",
+    )
+    number_of_hours = forms.DecimalField(
+        min_value=Decimal("0.5"),
+        max_value=Decimal("24"),
+        decimal_places=1,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0.5", "step": "0.5"}),
+        label="Number of Hour/s",
+    )
+    remarks = forms.CharField(
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 4, "placeholder": "Explain why these values were changed (required)."}),
+        label="Remarks (reason for change)",
+        required=True,
+    )
+
+    def clean_remarks(self):
+        remarks = (self.cleaned_data.get("remarks") or "").strip()
+        if not remarks:
+            raise forms.ValidationError("Remarks are required when saving changes.")
+        return remarks

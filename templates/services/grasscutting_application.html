@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Grasscutting Services Application Form{% endblock %}
+{% block content %}
+<style>
+    .grasscutting-form-page {
+        max-width: 900px;
+        margin: 30px auto;
+        padding: 30px;
+        background: #fff;
+        border: 2px solid #1abc9c;
+        border-radius: 10px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .grasscutting-form-page h1.form-title {
+        text-align: center;
+        font-size: 22px;
+        font-weight: 700;
+        color: #2d3142;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 24px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #1abc9c;
+    }
+    .grasscutting-form-page .form-section {
+        margin-bottom: 24px;
+    }
+    .grasscutting-form-page .form-section label {
+        display: block;
+        font-weight: 600;
+        color: #2d3142;
+        margin-bottom: 6px;
+        font-size: 14px;
+    }
+    .grasscutting-form-page .form-control {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    .grasscutting-form-page .form-control:focus {
+        outline: none;
+        border-color: #1abc9c;
+        box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.15);
+    }
+    .grasscutting-form-page .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    @media (max-width: 700px) {
+        .grasscutting-form-page .form-row { grid-template-columns: 1fr; }
+    }
+    .grasscutting-form-page .payment-note {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 12px;
+        font-style: italic;
+    }
+    .grasscutting-form-page .payment-formula {
+        font-size: 13px;
+        color: #555;
+        margin-top: 8px;
+    }
+    .grasscutting-form-page .total-amount-display {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1abc9c;
+        margin-top: 10px;
+    }
+    .grasscutting-form-page .form-error {
+        color: #e74c3c;
+        font-size: 13px;
+        margin-top: 4px;
+    }
+    .grasscutting-form-page .btn-submit {
+        display: block;
+        width: 100%;
+        max-width: 280px;
+        margin: 28px auto 0;
+        padding: 14px 24px;
+        background: #1abc9c;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .grasscutting-form-page .btn-submit:hover {
+        background: #16a085;
+    }
+    @media print {
+        .grasscutting-form-page { box-shadow: none; border: 1px solid #ccc; }
+        .no-print { display: none !important; }
+    }
+</style>
+
+<div class="grasscutting-form-page">
+    <h1 class="form-title">Grasscutting Services Application Form</h1>
+
+    <form method="post" action="" id="grasscuttingForm">
+        {% csrf_token %}
+
+        <!-- 1. Date -->
+        <div class="form-section">
+            <label for="id_date">Date <span style="color:red">*</span></label>
+            {{ form.date }}
+            {% if form.date.errors %}<div class="form-error">{{ form.date.errors.0 }}</div>{% endif %}
+        </div>
+
+        <!-- 2. Request Details -->
+        <div class="form-section">
+            <strong style="display:block; margin-bottom:10px; color:#2d3142;">Request Details</strong>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="id_date_of_grass_cutting">Date of Grass Cutting <span style="color:red">*</span></label>
+                {{ form.date_of_grass_cutting }}
+                {% if form.date_of_grass_cutting.errors %}<div class="form-error">{{ form.date_of_grass_cutting.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="id_designated_time">Designated Time <span style="color:red">*</span></label>
+                <input type="time" name="designated_time" id="id_designated_time" class="form-control" value="{% if form.designated_time.value %}{{ form.designated_time.value|time:'H:i' }}{% endif %}" required>
+                <span class="form-help-text" style="font-size:12px; color:#666;">Use the time picker; time is saved as e.g. 03:30 PM.</span>
+                {% if form.designated_time.errors %}<div class="form-error">{{ form.designated_time.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="id_place_of_grass_cutting">Place of Grass Cutting <span style="color:red">*</span></label>
+                {{ form.place_of_grass_cutting }}
+                {% if form.place_of_grass_cutting.errors %}<div class="form-error">{{ form.place_of_grass_cutting.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+
+        <!-- 3. Requested By -->
+        <div class="form-section">
+            <strong style="display:block; margin-bottom:10px; color:#2d3142;">Requested By</strong>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="id_signature_over_printed_name">Signature over printed name <span style="color:red">*</span></label>
+                {{ form.signature_over_printed_name }}
+                {% if form.signature_over_printed_name.errors %}<div class="form-error">{{ form.signature_over_printed_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="id_contact_number">Contact Number <span style="color:red">*</span></label>
+                {{ form.contact_number }}
+                {% if form.contact_number.errors %}<div class="form-error">{{ form.contact_number.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="id_address">Address <span style="color:red">*</span></label>
+                {{ form.address }}
+                {% if form.address.errors %}<div class="form-error">{{ form.address.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+
+        <!-- 4. Payment Information -->
+        <div class="form-section">
+            <strong style="display:block; margin-bottom:10px; color:#2d3142;">Payment Information</strong>
+            <p class="payment-note">(Fuel, nylon, oil and transportation will be shouldered by the requesting party & honorarium if SAT & SUN.)</p>
+            <p style="font-weight:600; margin-bottom:10px;">Payments to be made:</p>
+            <p style="margin-bottom:12px;">1 Personnel ₱{{ rate_per_hour }} / 1 hour</p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_number_of_personnel">Number of Personnel/s <span style="color:red">*</span></label>
+                    {{ form.number_of_personnel }}
+                    {% if form.number_of_personnel.errors %}<div class="form-error">{{ form.number_of_personnel.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="id_number_of_hours">Number of Hour/s <span style="color:red">*</span></label>
+                    {{ form.number_of_hours }}
+                    {% if form.number_of_hours.errors %}<div class="form-error">{{ form.number_of_hours.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+            <p class="payment-formula">(Rate/hour × No. of hrs. × No. of personnel = Amount to be paid)</p>
+            <div class="total-amount-display" id="totalAmountDisplay">Total Amount: ₱0.00</div>
+            <div class="form-error" id="totalAmountError" style="display:none; margin-top:6px;"></div>
+        </div>
+
+        <div class="no-print">
+            <a href="{% url 'services:create_request' %}?step=2" style="display:inline-block; margin-bottom:12px; color:#1abc9c;">← Back to request details</a>
+            <button type="submit" class="btn-submit">Submit Application</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    var ratePerHour = {{ rate_per_hour }};
+    var personnelEl = document.getElementById('id_number_of_personnel');
+    var hoursEl = document.getElementById('id_number_of_hours');
+    var totalEl = document.getElementById('totalAmountDisplay');
+    var totalErrorEl = document.getElementById('totalAmountError');
+
+    function updateTotal() {
+        var personnelRaw = personnelEl ? personnelEl.value.trim() : '';
+        var hoursRaw = hoursEl ? hoursEl.value.trim() : '';
+        var personnel = parseInt(personnelRaw, 10);
+        var hours = parseFloat(hoursRaw);
+        if (isNaN(personnel) || personnel < 0) personnel = 0;
+        if (isNaN(hours) || hours < 0) hours = 0;
+
+        var total = ratePerHour * hours * personnel;
+        if (total < 0 || isNaN(total)) total = 0;
+
+        if (totalEl) totalEl.textContent = 'Total Amount: ₱' + total.toFixed(2);
+
+        if (totalErrorEl) {
+            if (personnel === 0 || hours === 0) {
+                totalErrorEl.textContent = 'Enter positive Number of Personnel and Number of Hours to see the total.';
+                totalErrorEl.style.display = 'block';
+            } else {
+                totalErrorEl.textContent = '';
+                totalErrorEl.style.display = 'none';
+            }
+        }
+    }
+    if (personnelEl) {
+        personnelEl.addEventListener('input', updateTotal);
+        personnelEl.addEventListener('change', updateTotal);
+    }
+    if (hoursEl) {
+        hoursEl.addEventListener('input', updateTotal);
+        hoursEl.addEventListener('change', updateTotal);
+    }
+    updateTotal();
+})();
+</script>
+{% endblock %}

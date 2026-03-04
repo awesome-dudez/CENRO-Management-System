@@ -310,42 +310,63 @@ def analytics_api(request):
 def admin_requests(request):
     """Admin requests view with sub-tabs"""
     tab = request.GET.get("tab", "pending")
+    # New: request-type filter controlled from UI selector.
+    # "grass" -> Grass Cutting only; "declogging" -> all desludging/declogging requests;
+    # anything else (including empty) -> all service types.
+    request_type = request.GET.get("request_type") or "all"
+
+    base_qs = ServiceRequest.objects.all()
+    if request_type == "grass":
+        base_qs = base_qs.filter(service_type=ServiceRequest.ServiceType.GRASS_CUTTING)
+    elif request_type == "declogging":
+        # Group both residential and commercial desludging under "Declogging"
+        base_qs = base_qs.filter(
+            service_type__in=[
+                ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+                ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+            ]
+        )
 
     if tab == "pending":
-        requests_qs = ServiceRequest.objects.filter(
+        requests_qs = base_qs.filter(
             status__in=[ServiceRequest.Status.SUBMITTED, ServiceRequest.Status.UNDER_REVIEW]
         ).order_by("-created_at")
     elif tab == "inspection":
-        requests_qs = ServiceRequest.objects.filter(
+        requests_qs = base_qs.filter(
             status__in=[
                 ServiceRequest.Status.INSPECTION_SCHEDULED,
                 ServiceRequest.Status.INSPECTED,
             ]
         ).order_by("-created_at")
     elif tab == "computation":
-        requests_qs = ServiceRequest.objects.filter(
+        requests_qs = base_qs.filter(
             status__in=[
                 ServiceRequest.Status.COMPUTATION_SENT,
                 ServiceRequest.Status.AWAITING_PAYMENT,
             ]
         ).order_by("-created_at")
     elif tab == "schedule":
-        requests_qs = ServiceRequest.objects.filter(
+        requests_qs = base_qs.filter(
             status__in=[
                 ServiceRequest.Status.PAID,
                 ServiceRequest.Status.DESLUDGING_SCHEDULED,
             ]
         ).order_by("-created_at")
     elif tab == "completed":
-        requests_qs = ServiceRequest.objects.filter(
+        requests_qs = base_qs.filter(
             status=ServiceRequest.Status.COMPLETED,
         ).order_by("-request_date")
     else:
-        requests_qs = ServiceRequest.objects.all().order_by("-created_at")
+        requests_qs = base_qs.order_by("-created_at")
 
     context = {
         "requests": requests_qs,
         "active_tab": tab,
+        "request_type": request_type,
+        "request_type_options": [
+            {"key": "grass", "label": "Grass Cutting"},
+            {"key": "declogging", "label": "Declogging"},
+        ],
     }
     return render(request, "dashboard/admin_requests.html", context)
 

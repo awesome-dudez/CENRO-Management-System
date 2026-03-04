@@ -6,8 +6,11 @@ app_name = "services"
 
 urlpatterns = [
     path("request/create/", views.create_request, name="create_request"),
+    path("request/grasscutting-application/", views.grasscutting_application, name="grasscutting_application"),
     path("api/reverse-geocode/", views.reverse_geocode, name="reverse_geocode"),
     path("request/<int:pk>/", views.request_detail, name="request_detail"),
+    path("request/<int:pk>/grasscutting-detail/", views.grasscutting_request_detail, name="grasscutting_request_detail"),
+    path("request/<int:pk>/grasscutting-view/", views.grasscutting_request_view, name="grasscutting_request_view"),
     path("requests/", views.request_list, name="request_list"),
     path("history/", views.history, name="history"),
     path("clients/", views.client_records, name="client_records"),

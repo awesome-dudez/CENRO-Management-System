@@ -579,7 +579,9 @@
                     <tr><td>Barangay</td><td>{{ form_data.barangay }}</td></tr>
                     <tr><td>Address</td><td>{{ form_data.address|default:"N/A" }}</td></tr>
                     <tr><td>Contact Number</td><td>{{ form_data.contact_number }}</td></tr>
+                    {% if form_data.service_type != 'GRASS_CUTTING' %}
                     <tr><td>Connected to BAWAD</td><td>{{ form_data.connected_to_bawad }}</td></tr>
+                    {% endif %}
                     <tr><td>Public / Private</td><td>{{ form_data.public_private }}</td></tr>
                 </table>
             </div>
@@ -607,6 +609,7 @@
 {% if step == 2 %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    var currentServiceType = "{{ form_data.service_type|default:'' }}";
     var ownerProfile = {{ owner_profile_json|safe }};
     var btnOwner = document.getElementById('btnOwner');
     var btnOther = document.getElementById('btnOther');
@@ -653,8 +656,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var radios = document.querySelectorAll('[name="connected_to_bawad"]');
     var proofSection = document.getElementById('bawadProofSection');
     var bawadGroup = document.getElementById('bawadRadioGroup');
+    var bawadFormGroup = document.getElementById('bawadFormGroup');
 
     function toggleBawad() {
+        if (currentServiceType === 'GRASS_CUTTING') {
+            return;
+        }
         var val = document.querySelector('[name="connected_to_bawad"]:checked');
         if (val && val.value === 'YES') {
             proofSection.classList.add('visible');
@@ -663,7 +670,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     radios.forEach(function(r) { r.addEventListener('change', toggleBawad); });
-    toggleBawad();
+
+    function updateBawadVisibility() {
+        var isGrass = currentServiceType === 'GRASS_CUTTING';
+        if (bawadFormGroup) {
+            bawadFormGroup.style.display = isGrass ? 'none' : '';
+        }
+        if (proofSection) {
+            if (isGrass) {
+                proofSection.classList.remove('visible');
+                proofSection.style.display = 'none';
+            } else {
+                proofSection.style.display = '';
+            }
+        }
+        if (radios && radios.length) {
+            if (isGrass) {
+                radios.forEach(function(r) {
+                    r.checked = (r.value === 'NO');
+                    r.disabled = true;
+                });
+            } else {
+                radios.forEach(function(r) {
+                    r.disabled = false;
+                });
+            }
+        }
+    }
+    updateBawadVisibility();
 
     // ---- Request date: business-day enforcement ----
     var holidays = {{ holidays_json|safe }};
@@ -789,6 +823,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var bawadOutsideNote = document.getElementById('bawadOutsideNote');
     window.enforceBawadForLocation = function(withinCity) {
+        if (currentServiceType === 'GRASS_CUTTING') {
+            // For Grass Cutting, BAWAD connection is irrelevant; do nothing.
+            return;
+        }
         if (!withinCity) {
             radios.forEach(function(r) { r.checked = (r.value === 'NO'); r.disabled = true; });
             proofSection.classList.remove('visible');
