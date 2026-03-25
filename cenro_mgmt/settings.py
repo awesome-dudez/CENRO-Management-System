@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 import dj_database_url
 from decouple import config, Csv
@@ -17,6 +18,18 @@ def _debug():
         return False
 
 DEBUG = _debug()
+
+# Django's static() helper only mounts /media/ when DEBUG=True. Many local .env files use
+# DEBUG=False, which breaks ImageField URLs (404). Serve uploads when DEBUG, when using
+# runserver, or when SERVE_MEDIA=true (e.g. staging). Production behind nginx should
+# serve MEDIA_ROOT separately and keep this False.
+_serve_media_env = config("SERVE_MEDIA", default="")
+if str(_serve_media_env).strip().lower() in ("1", "true", "yes", "on"):
+    SERVE_MEDIA = True
+elif str(_serve_media_env).strip().lower() in ("0", "false", "no", "off"):
+    SERVE_MEDIA = False
+else:
+    SERVE_MEDIA = DEBUG or ("runserver" in sys.argv)
 
 # -------------------------
 # Hosts & CSRF (Render-safe)
@@ -117,6 +130,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 
     "cenro_mgmt.middleware.LoginRequiredMiddleware",
+    "cenro_mgmt.middleware.ForceStaffPasswordChangeMiddleware",
 ]
 
 
@@ -198,7 +212,17 @@ USE_TZ = True
 # Static & Media
 # -------------------------
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
+
+STATICFILES_DIRS = []
+
+_project_static = BASE_DIR / "static"
+if _project_static.exists():
+    STATICFILES_DIRS.append(_project_static)
+
+_windows_root_static = Path("C:/static")
+if _windows_root_static.exists():
+    STATICFILES_DIRS.append(_windows_root_static)
+
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"

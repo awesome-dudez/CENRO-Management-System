@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}CENRO Management System{% endblock %} - EcoTrack</title>
+    <title>{% block title %}CENRO Management System{% endblock %}</title>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
-    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}">
-    {% if user.is_authenticated and user.is_admin %}
-    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260309-admin-logo-fix">
+    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260309-admin-logo-fix">
+    {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
+    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260309-admin-logo-fix">
     {% endif %}
     <!-- Leaflet Map Library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -18,13 +18,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 {% comment %}Short-circuit: do not access user.role when user is not authenticated.{% endcomment %}
-<body class="{% if not user.is_authenticated %}consumer-view{% elif user.is_authenticated and user.role == 'ADMIN' or user.is_superuser %}admin-view{% else %}consumer-view{% endif %}">
-    {% if not user.is_authenticated or user.role != 'ADMIN' and not user.is_superuser %}
+<body class="{% if not user.is_authenticated %}consumer-view{% elif user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-view{% else %}consumer-view{% endif %}">
+{% if not user.is_authenticated or user.is_authenticated and not user.is_admin and not user.is_staff_member %}
     <!-- Top Navigation Bar (consumer / non-admin) -->
     <header class="top-nav">
         <div class="nav-container">
-            {% comment %}Small top-left mini menu (ECO-TRACK | Admin Portal | Profile | Logout): do NOT render for Admin.{% endcomment %}
-            {% if not user.is_authenticated or user.role != 'ADMIN' and not user.is_superuser %}
+            {% comment %}Small top-left mini menu: do NOT render for Admin.{% endcomment %}
+            {% if not user.is_authenticated or user.is_authenticated and not user.is_admin and not user.is_staff_member %}
             <div id="top-nav-left-block" class="top-nav-left-block">
                 <button type="button" class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav">
                     <span class="nav-toggle-bar"></span>
@@ -32,27 +32,27 @@
                     <span class="nav-toggle-bar"></span>
                 </button>
                 <a href="{% url 'dashboard:home' %}" class="logo">
-                    <span class="logo-icon">🌍</span>
+                    <span class="logo-icon"><img src="{% static 'img/cenro_logo.png' %}" alt="CENRO logo" width="60" height="60"></span>
                     <div>
-                        <span class="logo-text">ECO-TRACK</span>
-                        <span class="logo-subtitle">Wetland Management</span>
+                        <span class="logo-text">CENRO</span>
+                        <span class="logo-subtitle">Management System</span>
                     </div>
                 </a>
             </div>
             {% endif %}
-            {% if user.is_authenticated and user.role == 'ADMIN' or user.is_superuser %}
+            {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
             <a href="{% url 'dashboard:home' %}" class="logo admin-nav-logo-center" aria-hidden="false">
-                <span class="logo-icon">🌍</span>
+                <span class="logo-icon"><img src="{% static 'img/cenro_logo.png' %}" alt="CENRO logo" width="60" height="60"></span>
                 <div>
-                    <span class="logo-text">ECO-TRACK</span>
-                    <span class="logo-subtitle">Wetland Management</span>
+                    <span class="logo-text">CENRO</span>
+                    <span class="logo-subtitle">Management System</span>
                 </div>
             </a>
             {% endif %}
             <nav class="top-nav-links">
-                {% if user.is_authenticated and user.role == 'ADMIN' or user.is_superuser %}
-                <a href="{% url 'dashboard:admin_dashboard' %}" class="nav-link {% if 'admin' in request.resolver_match.url_name %}active{% endif %}">
-                    <span>⚙️</span> Admin Portal{% if user.is_superuser %}<span class="super-admin-badge" title="Super Admin">Super</span>{% endif %}
+                {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
+                <a href="{% if user.is_admin %}{% url 'dashboard:admin_dashboard' %}{% else %}{% url 'dashboard:admin_requests' %}{% endif %}" class="nav-link {% if 'admin' in request.resolver_match.url_name %}active{% endif %}">
+                    <span>⚙️</span> {% if user.is_admin %}Admin Portal{% else %}Staff Portal{% endif %}{% if user.is_superuser %}<span class="super-admin-badge" title="Super Admin">Super</span>{% endif %}
                 </a>
                 {% elif user.is_authenticated %}
                 {% comment %}Consumer-only nav: Dashboard, Service Request, Service History — do NOT show when user is Admin{% endcomment %}
@@ -66,14 +66,46 @@
                     <span>📋</span> Service History
                 </a>
                 {% else %}
-                <a href="{% url 'dashboard:home' %}" class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
-                    <span>🏠</span> Home
-                </a>
+                {% with current_url_name=request.resolver_match.url_name %}
+                    {# Hide Home on the login and registration pages to avoid redundancy #}
+                    {% if current_url_name != 'login' and current_url_name != 'consumer_register' %}
+                    <a href="{% url 'dashboard:home' %}" class="nav-link {% if current_url_name == 'home' %}active{% endif %}">
+                        <span>🏠</span> Home
+                    </a>
+                    {% endif %}
+
+                    {# Login/Register states when user is logged out #}
+                    {% if not user.is_authenticated %}
+                        {# On the login page: show Login as disabled and highlight Register #}
+                        {% if current_url_name == 'login' %}
+                        <span class="nav-link" aria-disabled="true" style="pointer-events: none; opacity: 0.5; cursor: default;">
+                            🔑 Login
+                        </span>
+                        <a href="{% url 'accounts:consumer_register' %}" class="btn btn-primary">
+                            📋 Register
+                        </a>
+                        {# On the register page: disable Register and keep Login clickable #}
+                        {% elif current_url_name == 'consumer_register' %}
+                        <a href="{% url 'accounts:login' %}" class="nav-link">
+                            🔑 Login
+                        </a>
+                        <span class="btn btn-primary" aria-disabled="true" style="pointer-events: none; opacity: 0.7; cursor: default;">
+                            📋 Register
+                        </span>
+                        {# All other public pages: both Login and Register enabled #}
+                        {% else %}
+                        <a href="{% url 'accounts:login' %}" class="nav-link">
+                            🔑 Login
+                        </a>
+                        <a href="{% url 'accounts:consumer_register' %}" class="btn btn-primary">
+                            📋 Register
+                        </a>
+                        {% endif %}
+                    {% endif %}
+                {% endwith %}
                 {% endif %}
-                {% if not user.is_authenticated %}
-                <a href="{% url 'accounts:login' %}" class="nav-link">🔑 Login</a>
-                <a href="{% url 'accounts:consumer_register' %}" class="btn btn-primary">📋 Register</a>
-                {% else %}
+
+                {% if user.is_authenticated %}
                 <!-- Notification: icon only, no text -->
                 <div class="notif-bell-wrapper" id="notifBellWrapper">
                     <button type="button" class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
@@ -117,20 +149,20 @@
     </header>
     {% endif %}
 
-    {% if user.is_authenticated and user.is_admin %}
+    {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
     <!-- Admin layout: fixed header + sidebar + main -->
     {% include "admin/_header.html" %}
     {% include "admin/_sidebar.html" %}
     <div class="admin-layout-wrapper">
     {% endif %}
-    <main class="{% if user.is_authenticated and user.is_admin %}admin-main{% else %}main-content{% endif %}">
-        {% if user.is_authenticated and user.is_admin %}
+    <main class="{% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-main{% else %}main-content{% endif %}">
+        {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
         <h1 class="admin-main-title">CENRO Management System</h1>
         <p class="admin-main-subtitle">{% block admin_subtitle %}System Dashboard{% endblock %}</p>
         {% endif %}
         {% block content %}{% endblock %}
     </main>
-    {% if user.is_authenticated and user.is_admin %}
+        {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
     </div>
     {% endif %}
 
@@ -139,8 +171,8 @@
         <div class="footer-content">
             <div class="footer-section">
                 <div class="footer-logo">
-                    <span class="logo-icon">🌿</span>
-                    <span class="logo-text">EcoTrack</span>
+                    <span class="logo-icon"><img src="{% static 'img/cenro_logo.png' %}" alt="CENRO logo" width="45" height="45"></span>
+                    <span class="logo-text">CENRO Management System</span>
                 </div>
                 <p>A Comprehensive Management System for CENRO in Bayawan City. Streamlining environmental services for a cleaner future.</p>
             </div>

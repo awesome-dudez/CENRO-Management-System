@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Request #{{ sr.id }} Details{% endblock %}
+{% block title %}Service Request Details{% endblock %}
 {% block content %}
 <style>
     .detail-container { max-width: 900px; margin: 30px auto; padding: 20px; }
@@ -47,7 +47,7 @@
 
 <div class="detail-container">
     <div class="detail-header">
-        <h1>Service Request #{{ sr.id }}</h1>
+        <h1>Service Request</h1>
         <span class="status-pill {{ sr.status|lower }}">{{ sr.get_status_display }}</span>
     </div>
 
@@ -102,15 +102,52 @@
         {% endif %}
     </div>
 
-    <!-- Inspection Details (if exists) -->
-    {% if sr.inspection_detail %}
+    <!-- Inspection Fee Receipt (for first-time desludging customers) -->
+    {% if sr.inspection_fee_receipt %}
     <div class="section-card">
-        <h3>Inspection Details</h3>
+        <h3>Inspection Fee Receipt</h3>
         <div class="info-grid">
-            <div class="info-item"><label>Inspection Date</label><span>{{ sr.inspection_detail.inspection_date|date:"M d, Y" }}</span></div>
-            <div class="info-item"><label>Inspected By</label><span>{{ sr.inspection_detail.inspected_by }}</span></div>
-            <div class="info-item"><label>Remarks</label><span>{{ sr.inspection_detail.remarks|default:"None" }}</span></div>
+            <div class="info-item">
+                <label>Receipt</label>
+                <span><a href="{% url 'services:view_inspection_fee_receipt' sr.pk %}" target="_blank">View Receipt</a></span>
+            </div>
         </div>
+    </div>
+    {% endif %}
+
+    <!-- Inspection Details & Schedule (merged) -->
+    {% if sr.inspection_detail or sr.status == "INSPECTION_SCHEDULED" or sr.status == "INSPECTED" or sr.status == "COMPLETED" %}
+    <div class="section-card">
+        <h3>Inspection Details &amp; Schedule</h3>
+        <div class="info-grid">
+            <div class="info-item"><label>Inspector</label><span>{% if sr.inspection_detail %}{{ sr.inspection_detail.inspected_by }}{% else %}{{ inspector_label|default:"N/A" }}{% endif %}</span></div>
+            <div class="info-item">
+                <label>Inspection Date &amp; Time</label>
+                <span>
+                    {% if sr.inspection_detail %}
+                        {{ sr.inspection_detail.inspection_date|date:"M d, Y" }}{% if inspection_time %} &mdash; {{ inspection_time }}{% endif %}
+                    {% elif sr.inspection_date %}
+                        {{ sr.inspection_date|date:"M d, Y" }}{% if inspection_time %} &mdash; {{ inspection_time }}{% endif %}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </span>
+            </div>
+            {% if sr.inspection_detail %}
+            <div class="info-item"><label>Remarks</label><span>{{ sr.inspection_detail.remarks|default:"None" }}</span></div>
+            {% endif %}
+            {% if inspection_reason %}
+            <div class="info-item" style="grid-column: 1 / -1;">
+                <label>Reason for Changes</label>
+                <span>{{ inspection_reason }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% if user.is_admin and sr.status == "INSPECTION_SCHEDULED" %}
+        <div style="margin-top:12px;text-align:right;">
+            <a href="{% url 'dashboard:assign_inspector' sr.pk %}" class="btn btn-purple">Change Inspector / Schedule</a>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -120,20 +157,7 @@
         <h3>Completion Information</h3>
         <div class="info-grid">
             <div class="info-item"><label>Date Completed</label><span>{{ sr.completion_info.date_completed|date:"M d, Y" }}</span></div>
-            <div class="info-item"><label>Time Required</label><span>{{ sr.completion_info.time_required }}</span></div>
             <div class="info-item"><label>Witnessed By</label><span>{{ sr.completion_info.witnessed_by_name|default:"N/A" }}</span></div>
-            <div class="info-item"><label>Declogger No.</label><span>{{ sr.completion_info.declogger_no|default:"N/A" }}</span></div>
-            <div class="info-item"><label>Fuel Consumption</label><span>{% if sr.completion_info.fuel_consumption %}{{ sr.completion_info.fuel_consumption }} {{ sr.completion_info.fuel_unit }}{% else %}N/A{% endif %}</span></div>
-            <div class="info-item"><label>Driver</label><span>{{ sr.completion_info.driver_name }}</span></div>
-            {% if sr.completion_info.helper1_name %}
-            <div class="info-item"><label>Helper 1</label><span>{{ sr.completion_info.helper1_name }}</span></div>
-            {% endif %}
-            {% if sr.completion_info.helper2_name %}
-            <div class="info-item"><label>Helper 2</label><span>{{ sr.completion_info.helper2_name }}</span></div>
-            {% endif %}
-            {% if sr.completion_info.helper3_name %}
-            <div class="info-item"><label>Helper 3</label><span>{{ sr.completion_info.helper3_name }}</span></div>
-            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -144,11 +168,30 @@
         <h3>Computation</h3>
         <div class="info-grid">
             <div class="info-item"><label>Total Charge</label><span style="font-size:18px;color:#1abc9c;font-weight:700;">&#8369;{{ sr.computation.total_charge }}</span></div>
-            <div class="info-item"><label>Payment Status</label><span>{{ sr.computation.get_payment_status_display }}</span></div>
+            <div class="info-item"><label>Payment Status</label><span>{% if sr.status == "PAID" %}Paid{% elif sr.treasurer_receipt and sr.status == "AWAITING_PAYMENT" %}Awaiting Verification{% else %}{{ sr.computation.get_payment_status_display }}{% endif %}</span></div>
         </div>
         <div style="margin-top:12px;">
             <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-outline" style="font-size:13px;">View Computation Letter</a>
         </div>
+
+        {% if user.is_admin %}
+        <div style="margin-top:18px;font-size:13px;color:#666;">
+            <p>Prepared by: {{ sr.computation.prepared_by.get_full_name|default:"Admin" }}</p>
+        </div>
+        {% if not sr.computation.is_finalized %}
+        <form method="post" action="{% url 'services:view_computation' sr.pk %}" enctype="multipart/form-data" style="margin-top:8px;">
+            {% csrf_token %}
+            <div class="form-group">
+                <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature (optional until finalization)</label>
+                <input type="file" name="prepared_by_signature" accept="image/*">
+                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a scanned or digital signature that will appear on the computation letter.</p>
+            </div>
+            <div style="margin-top:10px;">
+                <button type="submit" name="action" value="finalize" class="btn btn-teal">Finalize &amp; Send to Customer</button>
+            </div>
+        </form>
+        {% endif %}
+        {% endif %}
     </div>
     {% endif %}
 
@@ -156,7 +199,7 @@
     {% if sr.treasurer_receipt %}
     <div class="section-card">
         <h3>Payment Receipt</h3>
-        <div class="info-item"><label>Receipt</label><span><a href="{{ sr.treasurer_receipt.url }}" target="_blank">View Receipt</a></span></div>
+        <div class="info-item"><label>Receipt</label><span><a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank">View Receipt</a></span></div>
         {% if sr.payment_confirmed_at %}
         <div class="info-item" style="margin-top:8px;"><label>Confirmed At</label><span>{{ sr.payment_confirmed_at|date:"M d, Y H:i" }}</span></div>
         {% endif %}
@@ -167,28 +210,23 @@
     {% if sr.scheduled_desludging_date %}
     <div class="section-card">
         <h3>Desludging Schedule</h3>
-        <div class="info-item"><label>Scheduled Date</label><span style="font-size:16px;font-weight:600;">{{ sr.scheduled_desludging_date|date:"M d, Y" }}</span></div>
-    </div>
-    {% endif %}
-
-    <!-- Inspector Assignment -->
-    {% if sr.assigned_inspector %}
-    <div class="section-card">
-        <h3>Assigned Inspector</h3>
-        <div class="info-grid">
-            <div class="info-item"><label>Inspector</label><span>{{ sr.assigned_inspector.get_full_name }}</span></div>
-            {% if sr.inspection_date %}
-            <div class="info-item"><label>Inspection Date</label><span>{{ sr.inspection_date|date:"M d, Y" }}</span></div>
-            {% endif %}
+        <div class="info-item">
+            <label>Scheduled Date &amp; Time</label>
+            <span style="font-size:16px;font-weight:600;">
+                {{ sr.scheduled_desludging_date|date:"M d, Y" }}
+                {% if desludging_time %}&mdash; {{ desludging_time }}{% endif %}
+            </span>
         </div>
+        <p style="font-size:13px;color:#666;margin-top:8px;">
+            Please note: Schedule may change due to operational or weather conditions.
+            You will receive a notification if there are any updates to this desludging schedule.
+        </p>
     </div>
     {% endif %}
 
     <!-- ACTION BAR -->
     <div class="action-bar">
-        <a href="{% url 'services:print_application' sr.pk %}" class="btn btn-outline" target="_blank">Print Application</a>
-
-        {% if user.is_admin or user.is_staff_member %}
+        {% if user.is_admin %}
             {% if sr.status == "SUBMITTED" %}
             <form method="post" action="{% url 'dashboard:approve_request' sr.pk %}" class="inline-form">
                 {% csrf_token %}
@@ -197,13 +235,25 @@
             {% endif %}
 
             {% if sr.service_type == "GRASS_CUTTING" %}
-            {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
-            <a href="{% url 'services:grasscutting_request_detail' sr.pk %}" class="btn btn-teal">View Request Detail</a>
-            {% endif %}
+                {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
+                <a href="{% url 'services:grasscutting_request_detail' sr.pk %}" class="btn btn-teal">View Request Detail</a>
+                {% endif %}
             {% else %}
-            {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
-            <a href="{% url 'dashboard:assign_inspector' sr.pk %}" class="btn btn-purple">Assign Inspector</a>
-            {% endif %}
+                {% if can_assign_inspector %}
+                <a href="{% url 'dashboard:assign_inspector' sr.pk %}" class="btn btn-purple">Assign Inspector</a>
+                {% elif inspection_optional and not inspection_waived %}
+                <span class="form-help-text" style="margin-left:8px;">
+                    This customer has previous inspected requests for this service type.
+                    Inspector assignment is optional. You may waive inspection below.
+                </span>
+                <form method="post" action="{% url 'dashboard:waive_inspection' sr.pk %}" class="inline-form" style="margin-left:8px;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-warning">Waive Inspection</button>
+                </form>
+                {% elif inspection_waived %}
+                <span class="form-help-text" style="margin-left:8px;">Inspection was waived for this request.</span>
+                <a href="{% url 'dashboard:proceed_to_computation' sr.pk %}" class="btn btn-teal" style="margin-left:8px;">Proceed to Computation</a>
+                {% endif %}
             {% endif %}
 
             {% if sr.status == "INSPECTION_SCHEDULED" %}
@@ -211,7 +261,9 @@
             {% endif %}
 
             {% if sr.status == "INSPECTED" %}
+                {% if not sr.completion_info or not sr.completion_info.driver_name %}
             <a href="{% url 'services:submit_completion' sr.pk %}" class="btn btn-orange">Fill Completion Info</a>
+                {% endif %}
             {% endif %}
 
             {% if sr.status == "PAID" %}
@@ -219,6 +271,7 @@
             {% endif %}
 
             {% if sr.status == "DESLUDGING_SCHEDULED" %}
+            <a href="{% url 'dashboard:schedule_desludging' sr.pk %}" class="btn btn-blue">Change Desludging Schedule</a>
             <form method="post" action="{% url 'services:complete_request' sr.pk %}" class="inline-form">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-green">Mark Completed</button>
@@ -231,9 +284,29 @@
                 <button type="submit" class="btn btn-green">Confirm Payment</button>
             </form>
             {% endif %}
+
+            {% if sr.inspection_fee_receipt and sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
+            <form method="post" action="{% url 'dashboard:confirm_inspection_fee' sr.pk %}" class="inline-form" style="margin-left:8px;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-green">Confirm Inspection Fee</button>
+            </form>
+            {% endif %}
         {% endif %}
 
-        {% if sr.consumer == user %}
+        {% if user.is_staff_member %}
+            {% if sr.status == "INSPECTION_SCHEDULED" %}
+            <a href="{% url 'services:submit_inspection' sr.pk %}" class="btn btn-teal">Fill Inspection</a>
+            {% endif %}
+        {% endif %}
+
+        {% if sr.consumer == user or sr.requested_by == user %}
+            {% if sr.status == "INSPECTION_FEE_DUE" or sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
+            <a href="{% url 'services:inspection_fee_bill' sr.pk %}" class="btn btn-orange">View Inspection Fee Bill</a>
+            {% if sr.status == "INSPECTION_FEE_DUE" %}
+            <a href="{% url 'services:upload_inspection_fee' sr.pk %}" class="btn btn-green">Upload Inspection Fee Receipt</a>
+            {% endif %}
+            {% endif %}
+
             {% if sr.status == "COMPUTATION_SENT" or sr.status == "AWAITING_PAYMENT" %}
             <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-orange">View Computation</a>
             <a href="{% url 'services:upload_receipt' sr.pk %}" class="btn btn-green">Upload Payment Receipt</a>
@@ -241,14 +314,16 @@
         {% endif %}
     </div>
 
-    {% if sr.consumer == user and sr.service_type == "GRASS_CUTTING" %}
-    <div style="margin-top: 18px; text-align: center;">
-        <a href="{% url 'services:grasscutting_request_view' sr.pk %}"
-           class="btn btn-outline"
-           style="min-width: 260px;">
-            View Grasscutting Application Form
-        </a>
-    </div>
+    {% if sr.consumer == user or sr.requested_by == user %}
+        {% if sr.service_type == "GRASS_CUTTING" %}
+        <div style="margin-top: 18px; text-align: center;">
+            <a href="{% url 'services:grasscutting_request_view' sr.pk %}"
+               class="btn btn-outline"
+               style="min-width: 260px;">
+                View Grasscutting Application Form
+            </a>
+        </div>
+        {% endif %}
     {% endif %}
 </div>
 
@@ -264,14 +339,14 @@
     var address = "{{ sr.address|default:""|escapejs }}";
     var requestId = "{{ sr.id }}";
     var popupHtml = '<div class="request-detail-popup" style="min-width:200px;font-size:13px;">' +
-        '<strong style="display:block;margin-bottom:6px;">Request #' + requestId + '</strong>' +
+        '<strong style="display:block;margin-bottom:6px;">Service Request</strong>' +
         '<div style="margin-bottom:4px;"><strong>Client:</strong> ' + (clientName || '—') + '</div>' +
         '<div style="margin-bottom:4px;"><strong>Service:</strong> ' + (serviceType || '—') + '</div>' +
         '<div><strong>Address:</strong> ' + (address || '—') + '</div>' +
         '</div>';
     var map = L.map(mapEl, { attributionControl: true }).setView([lat, lng], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 19
     }).addTo(map);
     var marker = L.marker([lat, lng]).addTo(map).bindPopup(popupHtml);

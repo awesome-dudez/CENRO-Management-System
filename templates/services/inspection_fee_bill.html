@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Inspection Fee Bill{% endblock %}
+{% block content %}
+<style>
+    .bill-container { max-width: 800px; margin: 30px auto; padding: 20px; }
+    .bill-card { background: white; border: 2px solid #1abc9c; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    .bill-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+    .bill-title { font-size: 22px; font-weight: 700; color:#2d3142; }
+    .bill-meta { font-size:13px; color:#555; }
+    .bill-section { margin-top:18px; }
+    .bill-section h3 { font-size:15px; font-weight:700; color:#1abc9c; margin-bottom:8px; }
+    .bill-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:14px; }
+    .bill-label { font-weight:600; color:#444; }
+    .bill-value { color:#222; }
+    .btn-row { margin-top:24px; display:flex; gap:12px; justify-content:flex-end; }
+    .btn { padding:10px 24px; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; }
+    .btn-primary { background:#1abc9c; color:white; }
+    .btn-primary:hover { background:#16a085; }
+    .btn-secondary { background:#e0e0e0; color:#2d3142; }
+    .logo-row { display:flex; align-items:center; gap:16px; }
+    .title-block { margin-top:8px; }
+    .date-right { margin-top:140px; }
+
+    /* Print-only adjustments: only print the bill card, hide rest of layout */
+    @media print {
+        body {
+            margin: 0;
+            background: #ffffff;
+        }
+        header, nav, footer,
+        .top-nav, .site-header, .site-footer {
+            display: none !important;
+        }
+        .bill-container {
+            margin: 0;
+            padding: 0;
+            max-width: 100%;
+        }
+        .bill-card {
+            box-shadow: none;
+            border-radius: 0;
+        }
+        .btn-row {
+            display: none !important;
+        }
+    }
+</style>
+<div class="bill-container">
+    <div class="bill-card">
+        <div class="bill-header">
+            <div style="flex:1;">
+                <div class="logo-row">
+                    <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:128px;">
+                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:64px;">
+                </div>
+                <div class="title-block">
+                    <div class="bill-title">Inspection Fee Bill</div>
+                    <div class="bill-meta">{{ sr.get_service_type_display }}</div>
+                </div>
+            </div>
+            <div class="bill-meta date-right" style="text-align:right; white-space:nowrap;">
+                Date: {{ sr.request_date|date:"M d, Y" }}
+            </div>
+        </div>
+
+        <div class="bill-section">
+            <h3>Customer Information</h3>
+            <div class="bill-row">
+                <span class="bill-label">Name</span>
+                <span class="bill-value">{{ sr.client_name }}</span>
+            </div>
+            <div class="bill-row">
+                <span class="bill-label">Address</span>
+                <span class="bill-value">{{ sr.address }}</span>
+            </div>
+            <div class="bill-row">
+                <span class="bill-label">Barangay</span>
+                <span class="bill-value">{{ sr.barangay }}</span>
+            </div>
+        </div>
+
+        <div class="bill-section">
+            <h3>Inspection Fee</h3>
+            <div class="bill-row">
+                <span class="bill-label">Amount Due</span>
+                <span class="bill-value">₱{{ amount }}.00</span>
+            </div>
+        </div>
+
+        <div class="bill-section">
+            <h3>Payment Instructions</h3>
+            <p style="font-size:14px; color:#444; line-height:1.5;">
+                Please bring this bill to the <strong>Treasurer's Office</strong> and pay the
+                inspection fee of <strong>₱{{ amount }}.00</strong>. After payment, return to the CENRO Management System
+                and upload a clear photo or scanned copy of your official receipt on the request detail page.
+            </p>
+        </div>
+
+        <div class="btn-row">
+            <a href="{% url 'services:request_detail' sr.pk %}" class="btn btn-secondary">Back to Request</a>
+            <button type="button" class="btn btn-primary" onclick="window.print()">Print Bill</button>
+            <a href="{% url 'services:download_inspection_fee_bill_pdf' sr.pk %}" class="btn btn-primary">Download PDF</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

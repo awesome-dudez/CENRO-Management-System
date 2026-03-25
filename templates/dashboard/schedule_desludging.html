@@ -7,7 +7,7 @@
     .form-card h2 { color: #2d3142; border-bottom: 2px solid #2980b9; padding-bottom: 12px; margin-bottom: 20px; }
     .form-group { margin-bottom: 18px; }
     .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #2d3142; }
-    .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
     .btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
     .btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
     .btn-primary { background: #2980b9; color: white; }
@@ -16,14 +16,38 @@
 </style>
 <div class="form-container">
     <div class="form-card">
-        <h2>Schedule Desludging &mdash; Request #{{ service_request.id }}</h2>
+        <h2>Schedule Desludging</h2>
         <p style="color:#666;margin-bottom:20px;">{{ service_request.get_service_type_display }} &bull; {{ service_request.client_name }} &bull; {{ service_request.barangay }}</p>
         <form method="post">
             {% csrf_token %}
             <div class="form-group">
                 <label>Desludging Date <span style="color:red">*</span></label>
-                <input type="date" name="desludging_date" required>
+                {# initial_date is ISO Y-m-d string from the view; do not pipe it through |date (strings break the value). #}
+                <input type="date" name="desludging_date" value="{% if initial_date %}{{ initial_date }}{% elif service_request.scheduled_desludging_date %}{{ service_request.scheduled_desludging_date|date:'Y-m-d' }}{% endif %}" required>
             </div>
+            <div class="form-group">
+                <label>Desludging Time <span style="color:red">*</span></label>
+                <select name="desludging_time" id="desludgingTime" required>
+                    <option value="">-- Select Time --</option>
+                    <option value="9:00 AM" {% if initial_time == "9:00 AM" %}selected{% endif %}>9:00 AM</option>
+                    <option value="10:00 AM" {% if initial_time == "10:00 AM" %}selected{% endif %}>10:00 AM</option>
+                    <option value="11:00 AM" {% if initial_time == "11:00 AM" %}selected{% endif %}>11:00 AM</option>
+                    <option value="1:00 PM" {% if initial_time == "1:00 PM" %}selected{% endif %}>1:00 PM</option>
+                    <option value="2:00 PM" {% if initial_time == "2:00 PM" %}selected{% endif %}>2:00 PM</option>
+                    <option value="3:00 PM" {% if initial_time == "3:00 PM" %}selected{% endif %}>3:00 PM</option>
+                </select>
+            </div>
+            <div class="form-group" id="changeReasonGroup"{% if not has_existing_schedule %} style="display:none;"{% endif %}>
+                <label>Reason for Changes <span style="color:red">*</span></label>
+                {% if has_existing_schedule %}
+                <p style="font-size:12px;color:#666;margin:-4px 0 8px;">Required only if you change the date or time above.</p>
+                {% endif %}
+                <textarea name="change_reason" id="changeReason" rows="3" placeholder="{% if has_existing_schedule %}e.g. Customer requested a different slot{% endif %}">{{ change_reason }}</textarea>
+            </div>
+            <p style="font-size:13px;color:#666;margin-top:-6px;">
+                Note: Actual schedule may change due to operational or weather conditions.
+                The customer will receive a notification if any changes are made.
+            </p>
             <div class="btn-row">
                 <a href="{% url 'services:request_detail' service_request.pk %}" class="btn btn-secondary">Cancel</a>
                 <button type="submit" class="btn btn-primary">Schedule &amp; Notify Customer</button>
@@ -31,4 +55,39 @@
         </form>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var dateInput = document.querySelector('input[name="desludging_date"]');
+    var timeSelect = document.getElementById('desludgingTime');
+    var reasonGroup = document.getElementById('changeReasonGroup');
+    var reasonInput = document.getElementById('changeReason');
+    var hasExistingSchedule = {% if has_existing_schedule %}true{% else %}false{% endif %};
+
+    if (!dateInput || !timeSelect || !reasonGroup) return;
+
+    var initialDate = dateInput.value;
+    var initialTime = "{{ initial_time|default:'' }}";
+
+    function checkChanged() {
+        if (!hasExistingSchedule) {
+            reasonGroup.style.display = 'none';
+            if (reasonInput) reasonInput.removeAttribute('required');
+            return;
+        }
+        // Reschedule: always show the reason field; require it only after date/time is changed.
+        reasonGroup.style.display = '';
+        var changed = (dateInput.value && dateInput.value !== initialDate) ||
+                      (timeSelect.value && timeSelect.value !== initialTime);
+        if (changed) {
+            if (reasonInput) reasonInput.setAttribute('required', 'required');
+        } else if (reasonInput) {
+            reasonInput.removeAttribute('required');
+        }
+    }
+
+    dateInput.addEventListener('change', checkChanged);
+    timeSelect.addEventListener('change', checkChanged);
+    checkChanged();
+});
+</script>
 {% endblock %}

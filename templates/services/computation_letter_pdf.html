@@ -1,11 +1,14 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
     <title>Computation Letter - ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</title>
     <style type="text/css">
-        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #2d3142; padding: 20px; }
-        .letter-header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #2d3142; padding-bottom: 16px; }
+        /* xhtml2pdf uses ReportLab registered fonts — see download_computation_pdf */
+        body { font-family: {{ pdf_body_font_stack }}; font-size: 12px; color: #2d3142; padding: 20px; }
+        .currency { font-family: inherit; }
+        .letter-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; }
         .letter-header h2 { font-size: 18px; margin: 0 0 4px; }
         .letter-header p { font-size: 12px; color: #666; margin: 0; }
         .letter-addressee { margin-bottom: 20px; }
@@ -18,7 +21,10 @@
         .breakdown-table tr.total td { border-top: 2px solid #2d3142; font-weight: 700; font-size: 14px; color: #1abc9c; }
         .breakdown-table tr.subtotal td { font-weight: 600; color: #555; }
         .breakdown-table tr.free td { color: #27ae60; font-weight: 700; }
-        .prepared { margin-top: 24px; font-size: 12px; color: #666; }
+        .breakdown-table tr.used-for-computation td { background: #e8f8f5; }
+        .breakdown-table tr.used-for-computation td:first-child { font-weight: 700; }
+        .breakdown-table tr.used-for-computation td:last-child { font-weight: 700; color: #1abc9c; }
+        .prepared { margin-top: 8px; font-size: 12px; color: #666; line-height: 1.2; }
     </style>
 </head>
 <body>
@@ -40,10 +46,10 @@
             <tr><td>Reference</td><td>ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</td></tr>
             <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
             <tr><td>Client</td><td>{{ sr.client_name }}</td></tr>
-            <tr><td>Address</td><td>{{ sr.address }}, {{ sr.barangay }}</td></tr>
+            <tr><td>Address</td><td>{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</td></tr>
             <tr><td>BAWAD Member</td><td>{% if sr.connected_to_bawad %}Yes{% else %}No{% endif %}</td></tr>
-            <tr><td>Volume</td><td>{{ comp.cubic_meters }} cubic meters</td></tr>
-            {% if comp.distance_km %}<tr><td>Distance from CENRO Office</td><td>{{ comp.distance_km }} km</td></tr>{% endif %}
+            <tr><td>Volume</td><td>{{ comp.cubic_meters|floatformat:0 }} cubic meters</td></tr>
+            {% if comp.distance_km %}<tr><td>Distance from CENRO Office</td><td>{{ comp.distance_km|floatformat:0 }} km</td></tr>{% endif %}
             <tr><td>Trips</td><td>{{ comp.trips }}</td></tr>
         </table>
     </div>
@@ -51,28 +57,38 @@
     <div class="letter-section">
         <h4>Declogging Fee Breakdown</h4>
         <table class="breakdown-table">
-            <tr><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking }}</td></tr>
+            <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td><span class="currency">&#8369;</span> {{ comp.fixed_trucking }}</td></tr>
             {% for line in comp.get_desludging_breakdown %}
-            <tr><td>{{ line.label }}</td><td>&#8369;{{ line.amount }}</td></tr>
+            <tr><td>{{ line.label }}</td><td><span class="currency">&#8369;</span> {{ line.amount }}</td></tr>
             {% endfor %}
-            <tr class="subtotal"><td>Desludging Fee (subtotal)</td><td>&#8369;{{ comp.desludging_fee }}</td></tr>
-            {% if comp.distance_charge %}<tr><td>Distance Charge (beyond 20 km from CENRO Office)</td><td>&#8369;{{ comp.distance_charge }}</td></tr>{% endif %}
-            {% if comp.wear_charge %}<tr><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>{% endif %}
-            <tr><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
-            <tr><td>Inspection Fee</td><td>&#8369;{{ comp.inspection_charge }}</td></tr>
+            <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td><span class="currency">&#8369;</span> {{ comp.desludging_fee }}</td></tr>
+            {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee ({{ comp.distance_km|floatformat:0 }} km &#215; <span class="currency">&#8369;</span> 20 &#215; 2)</td><td><span class="currency">&#8369;</span> {{ comp.distance_travel_fee }}</td></tr>{% endif %}
+            <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td><span class="currency">&#8369;</span> {{ comp.wear_charge }}</td></tr>
+            <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td><span class="currency">&#8369;</span> {{ comp.meals_transport_charge }}</td></tr>
             {% if comp.payment_status == "FREE" %}
-            <tr class="free"><td>BAWAD Discount (Free Service)</td><td>- &#8369;{{ comp.total_charge }}</td></tr>
-            <tr class="total"><td>TOTAL</td><td>&#8369;0.00</td></tr>
+            <tr class="free"><td>BAWAD Discount (Free Service)</td><td>- <span class="currency">&#8369;</span> {{ comp.total_charge }}</td></tr>
+            <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> 0.00</td></tr>
             {% else %}
-            <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
+            <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> {{ comp.total_charge }}</td></tr>
             {% endif %}
         </table>
     </div>
 
-    {% if comp.prepared_by %}
     <div class="prepared">
-        <p>Prepared by: {{ comp.prepared_by.get_full_name }}</p>
+        <table style="border-collapse:collapse;">
+            <tr>
+                <td style="padding:0;">
+                    {% if prepared_by_signature_path %}
+                    <img src="{{ prepared_by_signature_path }}" alt="Prepared by signature" height="36" style="height:18px; display:block; margin-left:60px;">
+                    {% else %}
+                    <img src="{% static 'signatures/signature.png' %}" alt="Prepared by signature" height="36" style="height:18px; display:block; margin-left:60px;">
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding:0; line-height:1.0;">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</td>
+            </tr>
+        </table>
     </div>
-    {% endif %}
 </body>
 </html>

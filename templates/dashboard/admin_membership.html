@@ -4,48 +4,18 @@
 {% block content %}
 <!-- Secondary Navigation Tabs -->
 <nav class="secondary-nav-tabs">
-    <a href="?tab=registration" class="secondary-tab {% if active_tab == 'registration' %}active{% endif %}">
-        Registration
-    </a>
     <a href="?tab=account_management" class="secondary-tab {% if active_tab == 'account_management' %}active{% endif %}">
         Account Management
     </a>
     <a href="?tab=service_history" class="secondary-tab {% if active_tab == 'service_history' %}active{% endif %}">
         Service History
     </a>
+    <a href="?tab=previous_account_registration" class="secondary-tab {% if active_tab == 'previous_account_registration' %}active{% endif %}">
+        Previous Account Registration
+    </a>
 </nav>
 
-{% if active_tab == 'registration' %}
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">Member Registration</h3>
-    </div>
-    <form method="post" class="registration-form" enctype="multipart/form-data">
-        {% csrf_token %}
-        <div class="form-group">
-            <label>Full Name</label>
-            <input type="text" name="full_name" class="form-control" placeholder="John Doe" required>
-        </div>
-        <div class="form-group">
-            <label>Contact</label>
-            <input type="tel" name="contact" class="form-control" placeholder="0912 345 6789" required>
-        </div>
-        <div class="form-group">
-            <label>Barangay</label>
-            <input type="text" name="barangay" class="form-control" placeholder="Enter location" required>
-        </div>
-        <div class="form-group">
-            <label>Previous Septage Receipt</label>
-            <div class="upload-area">
-                <input type="file" name="receipt" accept="image/*,application/pdf" class="form-control" required>
-                <p class="upload-hint">Upload Receipt Image/PDF</p>
-            </div>
-        </div>
-        <button type="submit" class="btn btn-primary">Register Member</button>
-    </form>
-</div>
-
-{% elif active_tab == 'account_management' %}
+{% if active_tab == 'account_management' %}
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Account Management</h3>
@@ -58,6 +28,9 @@
             <button type="submit" class="btn btn-primary">Search</button>
         </div>
     </form>
+    <p class="card-subtitle" style="margin-top: -0.5rem; margin-bottom: 1rem; font-size: 0.9rem; color: #555;">
+        Use <strong>Reset password</strong> to set a member’s login password to the system default; they will be asked to choose a new password on their next sign-in.
+    </p>
     <div class="table-responsive">
         <table class="data-table">
             <thead>
@@ -78,8 +51,14 @@
                     <td>{{ consumer.consumer_profile.full_address|default:"-" }}</td>
                     <td>{{ consumer.email|default:"-" }}</td>
                     <td>1</td>
-                    <td>
+                    <td style="white-space: nowrap;">
                         <a href="{% url 'dashboard:member_service_history' consumer.pk %}" class="btn btn-sm">View Details</a>
+                        <form method="post" action="{% url 'dashboard:admin_reset_consumer_password' consumer.pk %}" style="display: inline-block; margin-left: 6px; vertical-align: middle;"
+                              onsubmit="return confirm('Reset this member’s password to the default temporary password? They must set a new password after the next login.');">
+                            {% csrf_token %}
+                            {% if search_query %}<input type="hidden" name="next_q" value="{{ search_query }}">{% endif %}
+                            <button type="submit" class="btn btn-sm" style="background: #e67e22; color: #fff; border: none;">Reset password</button>
+                        </form>
                     </td>
                 </tr>
                 {% empty %}
@@ -138,6 +117,105 @@
                 {% empty %}
                 <tr>
                     <td colspan="5">{% if search_query %}No members match "{{ search_query }}".{% else %}No members with service history.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif active_tab == 'previous_account_registration' %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Previous Account Registration</h3>
+        <p class="card-subtitle">Register pre-system/manual customers so request verification can match them by name + barangay + address.</p>
+    </div>
+    <form method="post" style="margin-bottom: 1rem;">
+        {% csrf_token %}
+        {% if previous_form.non_field_errors %}
+        <div class="form-error" style="margin-bottom: 10px;">
+            {% for error in previous_form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px;">
+            <div>
+                <label for="{{ previous_form.first_name.id_for_label }}">First name</label>
+                {{ previous_form.first_name }}
+                {% if previous_form.first_name.errors %}<div class="form-error">{{ previous_form.first_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.last_name.id_for_label }}">Last name</label>
+                {{ previous_form.last_name }}
+                {% if previous_form.last_name.errors %}<div class="form-error">{{ previous_form.last_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.mobile_number.id_for_label }}">Mobile number (optional)</label>
+                {{ previous_form.mobile_number }}
+                {% if previous_form.mobile_number.errors %}<div class="form-error">{{ previous_form.mobile_number.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.barangay.id_for_label }}">Barangay</label>
+                {{ previous_form.barangay }}
+                {% if previous_form.barangay.errors %}<div class="form-error">{{ previous_form.barangay.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.street_address.id_for_label }}">Street address</label>
+                {{ previous_form.street_address }}
+                {% if previous_form.street_address.errors %}<div class="form-error">{{ previous_form.street_address.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.municipality.id_for_label }}">Municipality</label>
+                {{ previous_form.municipality }}
+                {% if previous_form.municipality.errors %}<div class="form-error">{{ previous_form.municipality.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.province.id_for_label }}">Province</label>
+                {{ previous_form.province }}
+                {% if previous_form.province.errors %}<div class="form-error">{{ previous_form.province.errors.0 }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ previous_form.prior_desludging_m3_4y.id_for_label }}">{{ previous_form.prior_desludging_m3_4y.label }}</label>
+                {{ previous_form.prior_desludging_m3_4y }}
+                {% if previous_form.prior_desludging_m3_4y.errors %}<div class="form-error">{{ previous_form.prior_desludging_m3_4y.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Previous Account</button>
+    </form>
+
+    <form method="get" class="membership-search-form" style="margin-bottom: 1rem;">
+        <input type="hidden" name="tab" value="previous_account_registration">
+        <div class="search-bar-wrap" style="display: flex; gap: 10px; max-width: 420px;">
+            <input type="search" name="q" value="{{ search_query }}" class="form-control" placeholder="Search previous registrations..." style="flex: 1;">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Mobile</th>
+                    <th>Barangay</th>
+                    <th>Street Address</th>
+                    <th>Municipality / Province</th>
+                    <th>Past 4-year m³</th>
+                    <th>Encoded Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in previous_records %}
+                <tr>
+                    <td>{{ u.get_full_name|default:u.username }}</td>
+                    <td>{{ u.consumer_profile.mobile_number|default:"-" }}</td>
+                    <td>{{ u.consumer_profile.barangay|default:"-" }}</td>
+                    <td>{{ u.consumer_profile.street_address|default:"-" }}</td>
+                    <td>{{ u.consumer_profile.municipality|default:"-" }}{% if u.consumer_profile.province %}, {{ u.consumer_profile.province }}{% endif %}</td>
+                    <td>{{ u.consumer_profile.prior_desludging_m3_4y|floatformat:2 }}</td>
+                    <td>{{ u.date_joined|date:"M d, Y" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">{% if search_query %}No previous registrations match "{{ search_query }}".{% else %}No previous registrations yet.{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

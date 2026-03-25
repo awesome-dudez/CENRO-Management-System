@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Inspection Fee Bill - Request #{{ sr.id }}</title>
+    <style type="text/css">
+        @page {
+            /* xhtml2pdf respects @page margin more reliably than body padding */
+            margin: 24pt 72pt;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #2d3142;
+            padding: 0;
+        }
+        .bill-shell {
+            border: none;
+            border-radius: 0;
+            padding: 18px 0;
+        }
+        .bill-header {
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+        }
+        .bill-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .bill-subtitle {
+            font-size: 11px;
+            color: #6a737d;
+            margin-top: 2px;
+        }
+        .bill-date {
+            font-size: 11px;
+            color: #6a737d;
+            text-align: right;
+            margin-top: 4px;
+        }
+        .section {
+            margin-top: 10px;
+        }
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1abc9c;
+            margin-bottom: 4px;
+        }
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2px;
+            border: none;
+        }
+        .info-table td {
+            padding: 4px 0;
+            font-size: 12px;
+            border: none;
+            text-align: left;
+        }
+        .label {
+            font-weight: 600;
+            text-align: left;
+        }
+        .value {
+            text-align: left;
+        }
+        .amount {
+            font-weight: 700;
+            font-size: 13px;
+        }
+        .instructions {
+            font-size: 12px;
+            line-height: 1.4;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="bill-shell">
+        <div class="bill-header">
+            <table width="100%">
+                <tr>
+                    <td style="vertical-align:top;">
+                        {% if bayawan_logo_url or cenro_logo_url %}
+                        <div style="margin-bottom:6px;">
+                            {% if bayawan_logo_url %}
+                            <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:120px; vertical-align:middle;">
+                            {% endif %}
+                            {% if cenro_logo_url %}
+                            <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:60px; vertical-align:middle; margin-left:10px;">
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="bill-title">Inspection Fee Bill</div>
+                        <div class="bill-subtitle">
+                            {{ sr.get_service_type_display }}
+                        </div>
+                    </td>
+                    <td class="bill-date" style="vertical-align:top; padding-top:93px;">
+                        Date: {{ sr.request_date|date:"M d, Y" }}
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Customer Information</div>
+            <table class="info-table">
+                <tr>
+                    <td class="label">Name</td>
+                    <td class="value">{{ sr.client_name }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Address</td>
+                    <td class="value">{{ sr.address }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Barangay</td>
+                    <td class="value">{{ sr.barangay }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Inspection Fee</div>
+            <table class="info-table">
+                <tr>
+                    <td class="label">Amount Due</td>
+                    <td class="value amount">PHP {{ amount }}.00</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Payment Instructions</div>
+            <p class="instructions">
+                Please bring this bill to the Treasurer's Office and pay the inspection fee of
+                PHP {{ amount }}.00. After payment, return to the CENRO Management System and upload a clear photo
+                or scanned copy of your official receipt on the request detail page.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+

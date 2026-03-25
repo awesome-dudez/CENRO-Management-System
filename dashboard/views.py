@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_http_methods
 
@@ -11,20 +11,44 @@ from scheduling.models import Schedule
 
 def home(request):
     if not request.user.is_authenticated:
-        return redirect('accounts:login')
+        return redirect("accounts:login")
 
     if request.user.is_admin():
-        return redirect('dashboard:admin_dashboard')
+        return redirect("dashboard:admin_dashboard")
 
-    user_requests = ServiceRequest.objects.filter(consumer=request.user).order_by("-created_at")
-    pending_count = user_requests.filter(status=ServiceRequest.Status.SUBMITTED).count()
+    # Staff should not create their own requests; send them to the
+    # admin Requests view where they can only see assigned requests.
+    if hasattr(request.user, "is_staff_member") and request.user.is_staff_member():
+        return redirect("dashboard:admin_requests")
+
+    # For regular consumers, show their own requests plus any in‑progress
+    # requests they submitted on behalf of another person.
+    user_requests = ServiceRequest.objects.filter(
+        Q(consumer=request.user)
+        | Q(
+            requested_by=request.user,
+            status__in=[
+                ServiceRequest.Status.SUBMITTED,
+                ServiceRequest.Status.UNDER_REVIEW,
+                ServiceRequest.Status.INSPECTION_SCHEDULED,
+                ServiceRequest.Status.INSPECTED,
+                ServiceRequest.Status.COMPUTATION_SENT,
+                ServiceRequest.Status.AWAITING_PAYMENT,
+                ServiceRequest.Status.PAID,
+                ServiceRequest.Status.DESLUDGING_SCHEDULED,
+            ],
+        )
+    ).order_by("-created_at")
+
+    pending_count = user_requests.exclude(status=ServiceRequest.Status.COMPLETED).count()
     completed_count = user_requests.filter(status=ServiceRequest.Status.COMPLETED).count()
     total_count = user_requests.count()
 
     today = date.today()
     upcoming_schedules = (
         Schedule.objects.filter(
-            service_request__consumer=request.user,
+            Q(service_request__consumer=request.user)
+            | Q(service_request__requested_by=request.user),
             service_date__gte=today,
             service_date__lte=today + timedelta(days=30),
         )

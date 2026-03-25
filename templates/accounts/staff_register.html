@@ -1,12 +1,143 @@
 {% extends "base.html" %}
 {% block title %}Register Staff{% endblock %}
 {% block content %}
-<div class="container">
-    <h1>Register Staff Account</h1>
-    <form method="post" class="form-card">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Create Staff Account</button>
-    </form>
+<style>
+    .auth-container {
+        display: flex; justify-content: center; align-items: center;
+        min-height: calc(100vh - 100px);
+        background: linear-gradient(135deg, #2d8659 0%, #5fa89f 100%);
+        padding: 20px;
+    }
+    .auth-card {
+        background: white; border-radius: 10px; padding: 32px 40px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        max-width: 560px; width: 100%;
+    }
+    .form-label { font-weight: 600; color: #333; margin-bottom: 8px; display: block; }
+    .form-control,
+    .auth-card input[type="text"],
+    .auth-card input[type="email"],
+    .auth-card input[type="password"] {
+        border: 1px solid #ddd; border-radius: 5px;
+        padding: 10px 12px; font-size: 14px; width: 100%; box-sizing: border-box;
+    }
+    .form-control:focus,
+    .auth-card input:focus {
+        border-color: #2d8659; box-shadow: 0 0 0 0.2rem rgba(45,134,89,0.25); outline: none;
+    }
+    .staff-header-title {
+        color: #2d8659; text-align: center; margin-bottom: 6px; font-size: 22px;
+    }
+    .staff-header-subtitle {
+        text-align: center; color: #666; font-size: 13px; margin-bottom: 24px;
+    }
+    .form-group { margin-bottom: 16px; }
+    .staff-error {
+        color: #dc3545; font-size: 12px; margin-top: 4px;
+    }
+    .staff-help {
+        display: block; margin-top: 4px; font-size: 12px; color: #777;
+    }
+    .password-input-wrapper { position: relative; display: flex; align-items: center; }
+    .password-input-wrapper input { flex: 1; padding-right: 42px; }
+    .password-toggle {
+        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+        background: none; border: none; padding: 6px; cursor: pointer; color: #666;
+        font-size: 18px; line-height: 1; border-radius: 4px;
+    }
+    .password-toggle:hover { color: #2d8659; }
+    .staff-actions {
+        display: flex; justify-content: flex-end; margin-top: 20px;
+    }
+    .btn-staff {
+        background-color: #2d8659; border: none; font-weight: 600;
+        padding: 10px 22px; border-radius: 5px; color: white;
+        cursor: pointer; font-size: 15px;
+    }
+    .btn-staff:hover { background-color: #1f5c3d; }
+</style>
+
+<div class="auth-container">
+    <div class="auth-card">
+        <h1 class="staff-header-title">Register Staff Account</h1>
+        <p class="staff-header-subtitle">
+            Create a staff login with limited access to view requests and fill inspection details.
+        </p>
+
+        <form method="post" class="auth-form" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="form-group">
+                <div class="staff-error">{{ form.non_field_errors.0 }}</div>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                <div class="staff-error">{{ form.username.errors.0 }}</div>
+                {% else %}
+                <small class="staff-help">150 characters or fewer. Letters, digits and @/./+/-/_ only.</small>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.first_name.id_for_label }}" class="form-label">First name</label>
+                {{ form.first_name }}
+                {% if form.first_name.errors %}
+                <div class="staff-error">{{ form.first_name.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.last_name.id_for_label }}" class="form-label">Last name</label>
+                {{ form.last_name }}
+                {% if form.last_name.errors %}
+                <div class="staff-error">{{ form.last_name.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.email.id_for_label }}" class="form-label">Email address</label>
+                {{ form.email }}
+                {% if form.email.errors %}
+                <div class="staff-error">{{ form.email.errors.0 }}</div>
+                {% else %}
+                <small class="staff-help">We’ll use this for staff communication and password reset.</small>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.password1.id_for_label }}" class="form-label">Temporary password</label>
+                <div class="password-input-wrapper">
+                    {{ form.password1 }}
+                    <button type="button" class="password-toggle" data-target="{{ form.password1.id_for_label }}">&#128065;</button>
+                </div>
+                {% if form.password1.errors %}
+                <div class="staff-error">{{ form.password1.errors.0 }}</div>
+                {% else %}
+                <small class="staff-help">
+                    This is a temporary password. The staff member will be required to set a new password on first login.
+                </small>
+                {% endif %}
+            </div>
+
+            <div class="staff-actions">
+                <button type="submit" class="btn-staff">Create Staff Account</button>
+            </div>
+        </form>
+    </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.password-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var input = document.getElementById(this.getAttribute('data-target'));
+            if (input) input.type = input.type === 'password' ? 'text' : 'password';
+        });
+    });
+});
+</script>
 {% endblock %}

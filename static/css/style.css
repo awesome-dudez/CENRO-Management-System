@@ -1,4 +1,4 @@
-/* ECO-TRACK - Wetland Management System - Modern Eco-friendly Dashboard */
+/* CENRO Management System - Modern eco dashboard */
 
 :root {
     /* Eco-friendly Color Palette */
@@ -72,9 +72,10 @@ body {
     z-index: 1000;
     height: 70px;
     border-bottom: 2px solid var(--primary-green);
+    overflow: visible;
 }
 
-/* Admin dashboard: hide top-left mini menu (ECO-TRACK | Admin Portal | Profile | Logout); keep main header (center logo + right links) */
+/* Admin dashboard: hide top-left mini menu; keep main header (center logo + right links) */
 body.admin-view #top-nav-left-block,
 .top-nav .nav-container:has(.admin-nav-logo-center) #top-nav-left-block {
     display: none !important;
@@ -96,6 +97,10 @@ body.admin-view .top-nav .logo.admin-nav-logo-center .logo-text {
 }
 body.admin-view .top-nav .logo.admin-nav-logo-center .logo-subtitle {
     color: rgba(255, 255, 255, 0.9);
+}
+body.admin-view .top-nav .logo.admin-nav-logo-center .logo-icon {
+    margin-top: 0;
+    transform: none;
 }
 body.admin-view .top-nav {
     background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-green) 100%);
@@ -141,7 +146,7 @@ body.admin-view .top-nav .btn-logout:hover {
 .logo {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     font-size: 22px;
     font-weight: 700;
     text-decoration: none;
@@ -153,8 +158,24 @@ body.admin-view .top-nav .btn-logout:hover {
 }
 
 .logo-icon {
-    font-size: 32px;
-    animation: float 3s ease-in-out infinite;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    margin-top: 0;
+    overflow: visible;
+}
+
+.logo-icon img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+    border-radius: 0;
+    padding: 0;
 }
 
 @keyframes float {
@@ -163,19 +184,23 @@ body.admin-view .top-nav .btn-logout:hover {
 }
 
 .logo-text {
-    background: linear-gradient(135deg, var(--primary-green), var(--water-teal));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-family: 'Arial', sans-serif;
+    display: block;
+    color: #000;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: 0.01em;
 }
 
 .logo-subtitle {
-    font-size: 11px;
-    color: var(--text-gray);
+    font-size: 1rem;
+    color: #111;
     font-weight: 400;
-    letter-spacing: 1px;
+    letter-spacing: 0;
     display: block;
+    line-height: 1.05;
+    margin-top: 2px;
 }
 
 .top-nav-links {
@@ -225,6 +250,24 @@ body.admin-view .top-nav .btn-logout:hover {
     padding: 8px 15px;
     background: rgba(30, 122, 77, 0.05);
     border-radius: 8px;
+}
+
+/* Align admin user section visually with consumer navbar (no vertical separator line) */
+.admin-user-section {
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+}
+
+/* Force admin header logout button to use red style and remove any subtle separators */
+.admin-top-header .btn-logout {
+    background-color: var(--status-rejected) !important;
+    color: var(--white) !important;
+    border: none;
+}
+
+.admin-top-header .btn-logout:hover {
+    background-color: #c0392b !important;
 }
 
 .user-name {
@@ -598,6 +641,18 @@ select.form-control {
 .btn-warning {
     background-color: var(--orange);
     color: var(--white);
+}
+
+/* Outline button (used for Print Application in admin request detail) */
+.btn-outline {
+    background-color: transparent;
+    color: var(--primary-green);
+    border: 1px solid var(--primary-green);
+}
+
+.btn-outline:hover {
+    background-color: rgba(30, 122, 77, 0.08);
+    color: var(--primary-green);
 }
 
 .btn-info {
@@ -1040,6 +1095,8 @@ select.form-control {
 }
 
 .footer-logo .logo-icon {
+    width: 45px;
+    height: 45px;
     font-size: 1.5rem;
 }
 
@@ -1572,6 +1629,12 @@ body.admin-view .admin-tab.active {
     margin-left: 8px;
     padding-left: 16px;
     border-left: 1px solid var(--medium-gray);
+}
+
+/* In admin header, remove the vertical separator line next to the bell */
+body.admin-view .notif-bell-wrapper {
+    padding-left: 0;
+    border-left: none;
 }
 
 .notif-bell-btn {

@@ -1,7 +1,12 @@
 import re
 
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import (
+    AuthenticationForm,
+    UserCreationForm,
+    PasswordChangeForm,
+    BaseUserCreationForm,
+)
 
 from .models import ConsumerProfile, User
 
@@ -81,6 +86,22 @@ class ConsumerRegistrationForm(UserCreationForm):
         required=False,
         widget=forms.HiddenInput(),
     )
+    captcha_answer = forms.IntegerField(
+        required=True,
+        label="Security question",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Answer the question above",
+            }
+        ),
+    )
+    # Honeypot field: real users never see or fill this.
+    website = forms.CharField(
+        required=False,
+        label="Leave this field blank",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
 
     class Meta(UserCreationForm.Meta):
         model = User
@@ -97,11 +118,23 @@ class ConsumerRegistrationForm(UserCreationForm):
                 cls = field.widget.attrs.get("class", "")
                 field.widget.attrs["class"] = f"{cls} is-invalid".strip()
 
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            return email
+        # Enforce one account per email (case-insensitive).
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("An account with this email already exists.")
+        return email
+
     def clean_mobile_number(self):
         num = self.cleaned_data.get("mobile_number", "")
         cleaned = re.sub(r"[\s\-()]", "", num)
         if not re.match(r"^(\+63|0)?9\d{9}$", cleaned):
             raise forms.ValidationError("Enter a valid Philippine mobile number (e.g. 09XX-XXX-XXXX).")
+        # Enforce one account per mobile number.
+        if ConsumerProfile.objects.filter(mobile_number=cleaned).exists():
+            raise forms.ValidationError("This mobile number is already registered with another account.")
         return cleaned
 
     def clean(self):
@@ -187,11 +220,32 @@ class ProfileUpdateForm(forms.Form):
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
+        self.consumer_profile = kwargs.pop("consumer_profile", None)
+        super().__init__(*args, **kwargs)
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            return email
+        qs = User.objects.filter(email__iexact=email)
+        if self.user is not None:
+            qs = qs.exclude(pk=self.user.pk)
+        if qs.exists():
+            raise forms.ValidationError("This email is already used by another account.")
+        return email
+
     def clean_mobile_number(self):
         num = self.cleaned_data.get("mobile_number", "")
         cleaned = re.sub(r"[\s\-()]", "", num)
         if not re.match(r"^(\+63|0)?9\d{9}$", cleaned):
             raise forms.ValidationError("Enter a valid Philippine mobile number (e.g. 09XX-XXX-XXXX).")
+        qs = ConsumerProfile.objects.filter(mobile_number=cleaned)
+        if self.consumer_profile is not None:
+            qs = qs.exclude(pk=self.consumer_profile.pk)
+        if qs.exists():
+            raise forms.ValidationError("This mobile number is already registered with another account.")
         return cleaned
 
 
@@ -200,11 +254,45 @@ class StaffRegistrationForm(UserCreationForm):
         model = User
         fields = ("username", "first_name", "last_name", "email")
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # No confirmation field shown; password2 is filled from password1 in clean_password2.
+        self.fields["password2"].required = False
+        self.fields["password2"].widget = forms.HiddenInput()
+
+    def clean_password2(self):
+        """
+        For staff accounts, treat the first password as temporary and do not
+        require a separate confirmation field. If password2 is empty, reuse
+        password1 and skip Django's strong-password validators (staff will be
+        forced to change this temporary password on first login).
+        """
+        password1 = self.cleaned_data.get("password1")
+        password2 = self.cleaned_data.get("password2")
+
+        if not password1:
+            return password2
+
+        # If admin didn't provide a confirmation, mirror password1.
+        if not password2:
+            password2 = password1
+            self.cleaned_data["password2"] = password2
+
+        return password2
+
+    def _post_clean(self):
+        """
+        Override default behavior to skip password_validation.validate_password
+        for staff registration. We still want normal ModelForm cleaning.
+        """
+        super(BaseUserCreationForm, self)._post_clean()
+
     def save(self, commit=True):
         user = super().save(commit=False)
         user.role = User.Role.STAFF
         user.is_active = True
-        user.is_approved = False  # Requires admin approval
+        user.is_approved = True  # Admin-created staff can log in immediately
+        user.must_change_password = True  # Force staff to change temporary password on first login
         if commit:
             user.save()
         return user

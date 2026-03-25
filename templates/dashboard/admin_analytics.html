@@ -1,14 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Admin Analytics - ECO-TRACK{% endblock %}
+{% block title %}Admin Analytics - CENRO Management System{% endblock %}
 {% block admin_subtitle %}Analytics{% endblock %}
 {% block content %}
 <div class="analytics-page">
     <div class="analytics-grid">
-        <!-- KPI Card -->
         <div class="analytics-card analytics-kpi">
-            <h3 class="analytics-card-title">Total Requests Past 30 Days</h3>
-            <div class="analytics-kpi-value" id="analyticsKpiValue">0</div>
-            <div class="analytics-kpi-trend" id="analyticsKpiTrend"></div>
+            <h3 class="analytics-card-title">
+                Service Analytics (30 Days)
+                <span class="analytics-split-toggle" id="analyticsSplitToggle">
+                    <button type="button" class="analytics-split-btn active" data-service="desludging">Desludging</button>
+                    <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
+                </span>
+            </h3>
+            <div class="analytics-kpi-value" id="splitKpiValue">0</div>
+            <div class="analytics-kpi-trend" id="splitKpiTrend"></div>
+            <p class="analytics-card-sub" id="splitTopSource">Top source: -</p>
         </div>
 
         <!-- Stacked Bar: New v Returning -->
@@ -37,11 +43,19 @@
             </div>
         </div>
 
-        <!-- Donut: Top Browsers / Service Types -->
+        <!-- Donut: status distribution -->
         <div class="analytics-card">
-            <h3 class="analytics-card-title">Service Type Distribution</h3>
+            <h3 class="analytics-card-title" id="splitDonutTitle">Desludging Status Distribution</h3>
             <div class="analytics-chart-wrap" style="height: 260px;">
                 <canvas id="chartDonut"></canvas>
+            </div>
+        </div>
+
+        <div class="analytics-card">
+            <h3 class="analytics-card-title" id="splitTrendTitle">Desludging Trend</h3>
+            <p class="analytics-card-sub">Incoming vs completed (monthly)</p>
+            <div class="analytics-chart-wrap" style="height: 220px;">
+                <canvas id="chartSplitService"></canvas>
             </div>
         </div>
 
@@ -75,18 +89,39 @@
 
     var charts = {};
     var initialData = null;
+    var latestData = null;
+    var activeService = 'desludging';
     var el = document.getElementById('analytics-data');
     if (el && el.textContent) {
         try { initialData = JSON.parse(el.textContent); } catch (e) {}
     }
 
+    function getSplitData(d) {
+        var split = (d && d.split) || {};
+        return split[activeService] || {};
+    }
+
+    function updateSplitUi(d) {
+        var split = getSplitData(d);
+        var pct = split.trend_pct || 0;
+        var serviceLabel = activeService === 'desludging' ? 'Desludging' : 'Grass Cutting';
+        var valEl = document.getElementById('splitKpiValue');
+        var trendEl = document.getElementById('splitKpiTrend');
+        var srcEl = document.getElementById('splitTopSource');
+        var titleEl = document.getElementById('splitTrendTitle');
+        var donutTitleEl = document.getElementById('splitDonutTitle');
+        if (valEl) valEl.textContent = (split.kpi_30d || 0).toLocaleString();
+        if (trendEl) {
+            trendEl.textContent = (pct >= 0 ? '+' : '') + pct + '% from previous 30 days';
+            trendEl.className = 'analytics-kpi-trend ' + (pct >= 0 ? 'trend-up' : 'trend-down');
+        }
+        if (srcEl) srcEl.textContent = 'Top source: ' + ((split.top_barangay || {}).label || '-') + ' (' + (((split.top_barangay || {}).count) || 0) + ')';
+        if (titleEl) titleEl.textContent = serviceLabel + ' Trend';
+        if (donutTitleEl) donutTitleEl.textContent = serviceLabel + ' Status Distribution';
+    }
+
     function formatKpi(d) {
-        var k = d.kpi;
-        document.getElementById('analyticsKpiValue').textContent = (k.total_visitors_30d || 0).toLocaleString();
-        var trendEl = document.getElementById('analyticsKpiTrend');
-        var pct = k.trend_pct || 0;
-        trendEl.textContent = (pct >= 0 ? '+' : '') + pct + '% from previous 30 days';
-        trendEl.className = 'analytics-kpi-trend ' + (pct >= 0 ? 'trend-up' : 'trend-down');
+        updateSplitUi(d);
     }
 
     function updateTable(rows) {
@@ -116,35 +151,44 @@
 
     function applyData(data) {
         if (!data) return;
+        latestData = data;
         formatKpi(data);
-        updateTable(data.top_pages);
+        var scoped = getSplitData(data);
+        updateTable(scoped.top_pages || []);
 
-        if (charts.newVsReturning && data.new_vs_returning) {
-            var nv = data.new_vs_returning;
+        if (charts.newVsReturning) {
+            var nv = (scoped.new_vs_returning || {});
             charts.newVsReturning.data.labels = nv.labels || [];
             charts.newVsReturning.data.datasets[0].data = nv.new || [];
             charts.newVsReturning.data.datasets[1].data = nv.returning || [];
             charts.newVsReturning.update('none');
         }
-        if (charts.topSources && data.top_sources) {
-            var ts = data.top_sources;
+        if (charts.topSources) {
+            var ts = (scoped.top_sources || {});
             charts.topSources.data.labels = ts.labels || [];
             charts.topSources.data.datasets[0].data = ts.values || [];
             charts.topSources.update('none');
         }
-        if (charts.visitorOverview && data.visitor_overview) {
-            var vo = data.visitor_overview;
+        if (charts.visitorOverview) {
+            var vo = (scoped.visitor_overview || {});
             charts.visitorOverview.data.labels = vo.labels || [];
             charts.visitorOverview.data.datasets[0].data = vo.unique || [];
             charts.visitorOverview.data.datasets[1].data = vo.site || [];
             charts.visitorOverview.data.datasets[2].data = vo.pageViews || [];
             charts.visitorOverview.update('none');
         }
-        if (charts.donut && data.top_browsers) {
-            var tb = data.top_browsers;
+        if (charts.donut) {
+            var tb = (scoped.top_browsers || {});
             charts.donut.data.labels = tb.labels || [];
             charts.donut.data.datasets[0].data = tb.values || [];
             charts.donut.update('none');
+        }
+        if (charts.splitService) {
+            var splitNow = getSplitData(data).new_vs_returning || {};
+            charts.splitService.data.labels = splitNow.labels || [];
+            charts.splitService.data.datasets[0].data = splitNow.new || [];
+            charts.splitService.data.datasets[1].data = splitNow.returning || [];
+            charts.splitService.update('none');
         }
     }
 
@@ -154,8 +198,10 @@
 
         var opts = { responsive: true, maintainAspectRatio: false };
 
-        if (!charts.newVsReturning && d.new_vs_returning) {
-            var nv = d.new_vs_returning;
+        var scoped = getSplitData(d);
+
+        if (!charts.newVsReturning) {
+            var nv = scoped.new_vs_returning || {};
             charts.newVsReturning = new Chart(document.getElementById('chartNewVsReturning'), {
                 type: 'bar',
                 data: {
@@ -169,8 +215,8 @@
             });
         }
 
-        if (!charts.topSources && d.top_sources) {
-            var ts = d.top_sources;
+        if (!charts.topSources) {
+            var ts = scoped.top_sources || {};
             charts.topSources = new Chart(document.getElementById('chartTopSources'), {
                 type: 'bar',
                 data: {
@@ -181,8 +227,8 @@
             });
         }
 
-        if (!charts.visitorOverview && d.visitor_overview) {
-            var vo = d.visitor_overview;
+        if (!charts.visitorOverview) {
+            var vo = scoped.visitor_overview || {};
             charts.visitorOverview = new Chart(document.getElementById('chartVisitorOverview'), {
                 type: 'line',
                 data: {
@@ -197,8 +243,8 @@
             });
         }
 
-        if (!charts.donut && d.top_browsers) {
-            var tb = d.top_browsers;
+        if (!charts.donut) {
+            var tb = scoped.top_browsers || {};
             var colors = ['#2d8659', '#4a9b9e', '#e67e22', '#9b59b6', '#3498db', '#f1c40f', '#1abc9c', '#e74c3c', '#95a5a6', '#34495e'];
             charts.donut = new Chart(document.getElementById('chartDonut'), {
                 type: 'doughnut',
@@ -207,6 +253,21 @@
                     datasets: [{ data: tb.values || [], backgroundColor: colors.slice(0, (tb.labels || []).length), borderWidth: 2 }]
                 },
                 options: Object.assign({}, opts, { plugins: { legend: { position: 'right' } } })
+            });
+        }
+
+        if (!charts.splitService && d.split) {
+            var sr = getSplitData(d).new_vs_returning || {};
+            charts.splitService = new Chart(document.getElementById('chartSplitService'), {
+                type: 'bar',
+                data: {
+                    labels: sr.labels || [],
+                    datasets: [
+                        { label: 'Incoming', data: sr.new || [], backgroundColor: 'rgba(30, 122, 77, 0.8)', borderColor: 'rgb(30, 122, 77)', borderWidth: 1 },
+                        { label: 'Completed', data: sr.returning || [], backgroundColor: 'rgba(74, 155, 158, 0.8)', borderColor: 'rgb(74, 155, 158)', borderWidth: 1 }
+                    ]
+                },
+                options: Object.assign({}, opts, { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } })
             });
         }
 
@@ -231,10 +292,55 @@
     document.addEventListener('DOMContentLoaded', function() {
         if (typeof initialData === 'undefined') initialData = null;
         createCharts(initialData);
+        var splitToggle = document.getElementById('analyticsSplitToggle');
+        if (splitToggle) {
+            splitToggle.addEventListener('click', function(evt) {
+                var btn = evt.target.closest('.analytics-split-btn');
+                if (!btn) return;
+                var next = btn.getAttribute('data-service');
+                if (!next || next === activeService) return;
+                activeService = next;
+                splitToggle.querySelectorAll('.analytics-split-btn').forEach(function(b) {
+                    b.classList.toggle('active', b === btn);
+                });
+                if (latestData) {
+                    updateSplitUi(latestData);
+                    if (charts.splitService) {
+                        var splitNow = getSplitData(latestData).new_vs_returning || {};
+                        charts.splitService.data.labels = splitNow.labels || [];
+                        charts.splitService.data.datasets[0].data = splitNow.new || [];
+                        charts.splitService.data.datasets[1].data = splitNow.returning || [];
+                        charts.splitService.update();
+                    }
+                }
+            });
+        }
         var searchInput = document.getElementById('analyticsTableSearch');
         if (searchInput) searchInput.addEventListener('input', filterTable);
         setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
     });
 })();
 </script>
+<style>
+.analytics-split-toggle {
+    display: inline-flex;
+    margin-left: 10px;
+    border: 1px solid #d8e4de;
+    border-radius: 999px;
+    overflow: hidden;
+    vertical-align: middle;
+}
+.analytics-split-btn {
+    border: none;
+    background: #fff;
+    color: #4a4a4a;
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+.analytics-split-btn.active {
+    background: #2d8659;
+    color: #fff;
+}
+</style>
 {% endblock %}

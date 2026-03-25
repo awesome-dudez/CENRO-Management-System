@@ -33,8 +33,8 @@
         <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
 
-            <!-- Hidden file input (triggered by camera icon) -->
-            <div style="display:none;">{{ form.profile_picture }}</div>
+            {# Do not use display:none — browsers often skip file inputs in non-visible containers. #}
+            <div class="profile-picture-file-sr">{{ form.profile_picture }}</div>
 
             <div class="section-label">Personal Information</div>
 
@@ -129,6 +129,7 @@
 <style>
 .profile-container { max-width: 640px; margin: 40px auto; padding: 0 20px; }
 .profile-card {
+    position: relative;
     background: white; border-radius: 12px; padding: 32px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
@@ -136,6 +137,19 @@
     display: flex; align-items: center; gap: 20px;
     margin-bottom: 28px; padding-bottom: 20px;
     border-bottom: 1px solid #e8e8e8;
+}
+/* Screen-reader / off-screen: keeps file input in the tab order & included in multipart POST */
+.profile-picture-file-sr {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+.profile-picture-file-sr input {
+    margin: 0;
+    font-size: 12px;
 }
 .profile-avatar-wrapper { position: relative; flex-shrink: 0; }
 .profile-avatar {

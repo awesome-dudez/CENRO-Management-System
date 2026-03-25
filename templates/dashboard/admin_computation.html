@@ -1,101 +1,97 @@
 {% extends "base.html" %}
-{% block title %}Cost Computation & Receipt Generation{% endblock %}
+{% block title %}Computation{% endblock %}
 {% block admin_subtitle %}Computation{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">💰 Service Computation & Receipt</h5>
+<div class="container mt-4 admin-computation-page">
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-header py-2">
+                    <h5 class="mb-0">Estimate charges</h5>
                 </div>
-                <div class="card-body">
-                    <h4>Service Details</h4>
-                    <form method="post" class="needs-validation">
+                <div class="card-body py-3">
+                    <form method="post" class="comp-form">
                         {% csrf_token %}
-                        <div class="mb-3">
-                            <label for="id_category" class="form-label">Service Category</label>
-                            {{ form.category }}
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0" for="id_category">Category</label>
+                                {{ form.category }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0" for="id_location">Location</label>
+                                {{ form.location }}
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="id_location" class="form-label">Location</label>
-                            {{ form.location }}
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0" for="id_public_private">{{ form.public_private.label }}</label>
+                                {{ form.public_private }}
+                            </div>
+                            <div class="col-md-6" id="bawadMemberGroup">
+                                <label class="form-label small mb-0" for="id_connected_to_bawad">{{ form.connected_to_bawad.label }}</label>
+                                {{ form.connected_to_bawad }}
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="id_distance_km" class="form-label">Distance from CENRO Office (km)</label>
-                            {{ form.distance_km }}
+                        <div class="mb-2" id="bawadPriorGroup">
+                            <label class="form-label small mb-0" for="id_bawad_prior_used_m3">{{ form.bawad_prior_used_m3.label }}</label>
+                            {{ form.bawad_prior_used_m3 }}
                         </div>
-                        <div class="mb-3">
-                            <label for="id_cubic_meters" class="form-label">Cubic Meters</label>
-                            {{ form.cubic_meters }}
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="id_cubic_meters">m³</label>
+                                {{ form.cubic_meters }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="id_distance_km">Distance (km)</label>
+                                {{ form.distance_km }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="id_personnel_count">Personnel</label>
+                                {{ form.personnel_count }}
+                            </div>
                         </div>
-                        <div class="mb-3" id="meals_field" style="display: none;">
-                            <label for="id_meals_transport" class="form-label">Meals & Transport Allowance (₱)</label>
-                            {{ form.meals_transport }}
-                        </div>
-                        <button type="submit" class="btn btn-success">Calculate Charges</button>
-                        <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-secondary">Back</a>
+                        <button type="submit" class="btn btn-success btn-sm">Calculate</button>
+                        <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-outline-secondary btn-sm">Back</a>
                     </form>
                 </div>
             </div>
         </div>
-        
+
         {% if computation_result %}
-        <div class="col-lg-4">
-            <div class="card bg-light">
-                <div class="card-header">
-                    <h5 class="mb-0">📋 Charges Breakdown</h5>
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-header py-2 bg-transparent border-0">
+                    <h5 class="mb-0">Breakdown</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body pt-0">
+                    <p class="comp-summary-line small text-muted mb-2">
+                        {{ computation_result.category }} · {% if computation_result.location == 'inside' %}Inside{% else %}Outside{% endif %}
+                        · {% if computation_result.public_private == 'PUBLIC' %}Public{% else %}Private{% endif %}
+                        · BAWAD {% if computation_result.connected_to_bawad %}Y{% else %}N{% endif %}{% if computation_result.connected_to_bawad %} · {{ computation_result.bawad_prior_used_m3|floatformat:1 }}/{{ computation_result.bawad_limit_m3|floatformat:0 }} m³{% endif %}
+                        · {{ computation_result.trips }} trip{{ computation_result.trips|pluralize }}
+                    </p>
                     <div class="charges-summary">
-                        <div class="charge-item">
-                            <span>Fixed Trucking Fee</span>
-                            <span>₱{{ computation_result.fixed_trucking|floatformat:2 }}</span>
-                        </div>
-                        <div class="charge-item">
-                            <span>Desludging Fee</span>
-                            <span>₱{{ computation_result.desludging_fee|floatformat:2 }}</span>
-                        </div>
-                        {% if computation_result.desludging_breakdown %}
-                        <div class="charge-subitems">
-                            {% for line in computation_result.desludging_breakdown %}
-                            <div class="charge-subitem">
-                                <span>{{ line.label }}</span>
-                                <span>₱{{ line.amount|floatformat:2 }}</span>
-                            </div>
-                            {% endfor %}
+                        <div class="charge-row"><span>Trucking</span><span>₱{{ computation_result.fixed_trucking|floatformat:2 }}</span></div>
+                        {% for line in computation_result.desludging_breakdown %}
+                        <div class="charge-row sub"><span>{{ line.label }}</span><span>₱{{ line.amount|floatformat:2 }}</span></div>
+                        {% endfor %}
+                        <div class="charge-row"><span>Septage</span><span>₱{{ computation_result.desludging_fee|floatformat:2 }}</span></div>
+                        {% if computation_result.distance_km %}
+                        <div class="charge-row"><span>Distance ({{ computation_result.distance_km|floatformat:0 }} km)</span><span>₱{{ computation_result.distance_travel_fee|floatformat:2 }}</span></div>
+                        {% endif %}
+                        <div class="charge-row"><span>Wear (20%)</span><span>₱{{ computation_result.wear_charge|floatformat:2 }}</span></div>
+                        <div class="charge-row"><span>Meals (×{{ computation_result.personnel_count }})</span><span>₱{{ computation_result.meals_transport_charge|floatformat:2 }}</span></div>
+                        {% if computation_result.free_reason %}
+                        <div class="charge-row strong"><span>Subtotal</span><span>₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span></div>
+                        <div class="charge-row waive">
+                            <span>{% if computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
+                            <span>−₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span>
                         </div>
                         {% endif %}
-                        <div class="charge-item">
-                            <span>Inspection Fee</span>
-                            <span>₱{{ computation_result.inspection_fee|floatformat:2 }}</span>
-                        </div>
-                        <div class="charge-item">
-                            <span>Meals & Transport</span>
-                            <span>₱{{ computation_result.meals_transport|floatformat:2 }}</span>
-                        </div>
-                        {% if computation_result.location == 'outside' %}
-                        <div class="charge-item">
-                            <span>Distance Cost (beyond 20 km from CENRO Office)</span>
-                            <span>₱{{ computation_result.distance_cost|floatformat:2 }}</span>
-                        </div>
-                        <div class="charge-item">
-                            <span>Wear & Tear (20%)</span>
-                            <span>₱{{ computation_result.wear_tear|floatformat:2 }}</span>
-                        </div>
-                        {% endif %}
-                        <div class="charge-item total">
-                            <span><strong>TOTAL CHARGES</strong></span>
-                            <span><strong>₱{{ computation_result.total|floatformat:2 }}</strong></span>
-                        </div>
-                        <div class="prepared-by">
-                            <small><strong>Prepared by:</strong> {{ computation_result.prepared_by }}</small>
-                            <small><strong>Category:</strong> {{ computation_result.category }}</small>
-                        </div>
-                        <button type="button" class="btn btn-success" style="width: 100%; margin-top: 20px;" onclick="printReceipt()">
-                            <span>🖨️</span> Print Receipt
-                        </button>
+                        <div class="charge-row total"><span>Total</span><span>₱{{ computation_result.total_charge|floatformat:2 }}</span></div>
                     </div>
+                    <p class="small text-muted text-center mb-2 mt-2">{{ computation_result.prepared_by }}</p>
+                    <button type="button" class="btn btn-success btn-sm w-100" onclick="window.print()">Print</button>
                 </div>
             </div>
         </div>
@@ -103,86 +99,106 @@
     </div>
 </div>
 
-<script>
-// Show/hide meals field based on location
-const locationSelect = document.getElementById('id_location');
-if (locationSelect) {
-    locationSelect.addEventListener('change', function() {
-        const mealsField = document.getElementById('meals_field');
-        if (this.value === 'outside') {
-            mealsField.style.display = 'block';
-        } else {
-            mealsField.style.display = 'none';
-        }
-    });
-}
-
-// Print receipt
-function printReceipt() {
-    window.print();
-}
-</script>
-
 <style>
+.admin-computation-page .form-label { font-weight: 600; color: #444; }
+.admin-computation-page .form-control, .admin-computation-page select.form-control {
+    font-size: 14px;
+    padding: 6px 10px;
+}
+.comp-form .mb-2 { margin-bottom: 0.5rem !important; }
 .charges-summary {
-    background: var(--light-gray);
-    padding: 20px;
-    border-radius: 8px;
-}
-
-.charge-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--medium-gray);
-}
-
-.charge-subitems {
-    margin-top: -8px;
-    margin-bottom: 8px;
-}
-
-.charge-subitem {
-    display: flex;
-    justify-content: space-between;
     font-size: 13px;
-    color: var(--text-gray);
-    padding: 4px 0;
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 12px;
+    border: 1px solid #e8e8e8;
 }
-
-.charge-item.total {
-    font-weight: 700;
-    font-size: 16px;
-    border-top: 2px solid var(--primary-green);
-    margin-top: 10px;
-    padding-top: 15px;
-    border-bottom: none;
-}
-
-.prepared-by {
-    margin-top: 15px;
-    text-align: center;
-    color: var(--text-gray);
+.charge-row {
     display: flex;
-    flex-direction: column;
-    gap: 5px;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
 }
-
+.charge-row.sub {
+    font-size: 11px;
+    color: #666;
+    padding-left: 8px;
+    border-bottom: none;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+.charge-row.sub span:first-child { line-height: 1.25; }
+.charge-row.strong { font-weight: 600; color: #444; }
+.charge-row.waive { color: #1e8449; font-weight: 600; border-bottom: none; }
+.charge-row.total {
+    font-weight: 700;
+    font-size: 15px;
+    border-top: 2px solid #2d8659;
+    border-bottom: none;
+    margin-top: 4px;
+    padding-top: 10px;
+}
+.comp-summary-line { line-height: 1.35; }
+.comp-form .field-disabled-muted {
+    opacity: 0.5;
+    pointer-events: none;
+}
 @media print {
-    .btn, .container > .row > .col-lg-8 > .card > .card-body > form {
-        display: none;
-    }
-    .col-lg-4 {
-        margin-left: 0;
-        width: 100%;
-    }
-}
-
-@media (max-width: 968px) {
-    .col-lg-8, .col-lg-4 {
-        max-width: 100%;
-        width: 100%;
-    }
+    .admin-computation-page .col-lg-7, .admin-computation-page .btn-outline-secondary { display: none !important; }
+    .admin-computation-page .col-lg-5 { width: 100%; max-width: 100%; }
 }
 </style>
+<script>
+(function() {
+    function syncComputationBawadFields() {
+        var loc = document.getElementById('id_location');
+        var bawad = document.getElementById('id_connected_to_bawad');
+        var prior = document.getElementById('id_bawad_prior_used_m3');
+        var bawadGroup = document.getElementById('bawadMemberGroup');
+        var priorGroup = document.getElementById('bawadPriorGroup');
+        if (!loc || !bawad || !prior) return;
+        var inside = loc.value === 'inside';
+        if (!inside) {
+            bawad.value = 'NO';
+            bawad.disabled = true;
+            prior.value = '0';
+            prior.disabled = true;
+            if (bawadGroup) bawadGroup.classList.add('field-disabled-muted');
+            if (priorGroup) priorGroup.classList.add('field-disabled-muted');
+        } else {
+            bawad.disabled = false;
+            if (bawadGroup) bawadGroup.classList.remove('field-disabled-muted');
+            if (priorGroup) priorGroup.classList.remove('field-disabled-muted');
+            if (bawad.value === 'YES') {
+                prior.disabled = false;
+                if (priorGroup) priorGroup.classList.remove('field-disabled-muted');
+            } else {
+                prior.value = '0';
+                prior.disabled = true;
+                if (priorGroup) priorGroup.classList.add('field-disabled-muted');
+            }
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var form = document.querySelector('.comp-form');
+        var loc = document.getElementById('id_location');
+        var bawad = document.getElementById('id_connected_to_bawad');
+        if (loc) loc.addEventListener('change', syncComputationBawadFields);
+        if (bawad) bawad.addEventListener('change', syncComputationBawadFields);
+        syncComputationBawadFields();
+        if (form) {
+            form.addEventListener('submit', function() {
+                var locEl = document.getElementById('id_location');
+                var bawadEl = document.getElementById('id_connected_to_bawad');
+                var priorEl = document.getElementById('id_bawad_prior_used_m3');
+                if (bawadEl) bawadEl.disabled = false;
+                if (priorEl) priorEl.disabled = false;
+                if (locEl && locEl.value !== 'inside' && bawadEl) bawadEl.value = 'NO';
+                if (bawadEl && bawadEl.value !== 'YES' && priorEl) priorEl.value = '0';
+            });
+        }
+    });
+})();
+</script>
 {% endblock %}

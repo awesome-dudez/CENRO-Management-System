@@ -17,11 +17,13 @@ class ServiceRequest(models.Model):
 
     class Status(models.TextChoices):
         SUBMITTED = "SUBMITTED", "Submitted"
+        INSPECTION_FEE_DUE = "INSPECTION_FEE_DUE", "Inspection Fee Due"
+        INSPECTION_FEE_AWAITING_VERIFICATION = "INSPECTION_FEE_AWAITING_VERIFICATION", "Inspection Fee Awaiting Verification"
         UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
         INSPECTION_SCHEDULED = "INSPECTION_SCHEDULED", "Inspection Scheduled"
         INSPECTED = "INSPECTED", "Inspected"
         COMPUTATION_SENT = "COMPUTATION_SENT", "Computation Sent"
-        AWAITING_PAYMENT = "AWAITING_PAYMENT", "Awaiting Payment"
+        AWAITING_PAYMENT = "AWAITING_PAYMENT", "Awaiting Payment Verification"
         PAID = "PAID", "Paid"
         DESLUDGING_SCHEDULED = "DESLUDGING_SCHEDULED", "Desludging Scheduled"
         COMPLETED = "COMPLETED", "Completed"
@@ -31,6 +33,14 @@ class ServiceRequest(models.Model):
         PRIVATE = "PRIVATE", "Private"
 
     consumer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="service_requests")
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requests_made",
+        help_text="Account that submitted the request when requesting for another person.",
+    )
     client_name = models.CharField(max_length=255, help_text="Client / Establishment Name")
     request_date = models.DateField(default=timezone.now)
     contact_number = models.CharField(max_length=20)
@@ -63,7 +73,7 @@ class ServiceRequest(models.Model):
     location_photo_2 = models.ImageField(upload_to="location_photos/", null=True, blank=True)
 
     notes = models.TextField(blank=True)
-    status = models.CharField(max_length=25, choices=Status.choices, default=Status.SUBMITTED)
+    status = models.CharField(max_length=40, choices=Status.choices, default=Status.SUBMITTED)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -81,6 +91,12 @@ class ServiceRequest(models.Model):
     fee_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     fee_notes = models.CharField(max_length=255, blank=True)
 
+    # Inspection fee tracking (for first-time desludging customers)
+    inspection_fee_receipt = models.FileField(
+        upload_to="inspection_fee_receipts/", null=True, blank=True
+    )
+    inspection_fee_paid = models.BooleanField(default=False)
+
     # Grass Cutting application fields (used only when service_type is GRASS_CUTTING)
     grasscutting_date = models.DateField(null=True, blank=True)
     grasscutting_personnel = models.PositiveIntegerField(null=True, blank=True)
@@ -94,7 +110,21 @@ class ServiceRequest(models.Model):
 
     @property
     def is_within_bayawan(self) -> bool:
-        return self.barangay and self.barangay != "Outside Bayawan City"
+        """
+        Determine if this request is within Bayawan City based on coordinates when available.
+        Falls back to a simple barangay string check for legacy records.
+        """
+        try:
+            if self.gps_latitude is not None and self.gps_longitude is not None:
+                from services.location import within_service_bounds
+
+                return within_service_bounds(
+                    float(self.gps_latitude),
+                    float(self.gps_longitude),
+                )
+        except Exception:
+            pass
+        return bool(self.barangay and self.barangay != "Outside Bayawan City")
 
     @property
     def bawad_free_eligible(self) -> bool:

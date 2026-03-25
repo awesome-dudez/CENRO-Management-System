@@ -61,6 +61,18 @@ class ServiceRequestStep2Form(forms.Form):
 
     LOCATION_MODE_PIN = "PIN"
     LOCATION_MODE_TEXT = "TEXT"
+    REQUEST_FOR_OWNER = "owner"
+    REQUEST_FOR_OTHER = "other"
+
+    request_for = forms.ChoiceField(
+        choices=[
+            (REQUEST_FOR_OWNER, "I am the account owner"),
+            (REQUEST_FOR_OTHER, "Requesting for another person"),
+        ],
+        initial=REQUEST_FOR_OWNER,
+        widget=forms.HiddenInput(attrs={"id": "id_request_for"}),
+        required=False,
+    )
 
     client_name = forms.CharField(
         max_length=255,
@@ -107,6 +119,7 @@ class ServiceRequestStep2Form(forms.Form):
         widget=forms.RadioSelect(attrs={"class": "bawad-radio"}),
         label="Connected to BAWAD?",
         initial="NO",
+        required=False,
     )
     bawad_proof = forms.FileField(
         required=False,
@@ -124,6 +137,8 @@ class ServiceRequestStep2Form(forms.Form):
         widget=forms.FileInput(attrs={"class": "form-control"}),
         label="Client Signature (upload image)",
     )
+    # Optional base64-encoded image produced by the in-browser signature pad.
+    client_signature_data = forms.CharField(required=False, widget=forms.HiddenInput())
     location_photo_1 = forms.ImageField(
         required=False,
         widget=forms.FileInput(attrs={
@@ -150,9 +165,8 @@ class ServiceRequestStep2Form(forms.Form):
         super().__init__(*args, **kwargs)
 
     def clean_request_date(self):
-        from .business_days import next_business_day
-        d = self.cleaned_data["request_date"]
-        return next_business_day(d)
+        # Weekend requests are allowed; keep user-selected date unchanged.
+        return self.cleaned_data["request_date"]
 
     def clean_contact_number(self):
         num = self.cleaned_data["contact_number"]
@@ -201,10 +215,16 @@ class ServiceRequestStep2Form(forms.Form):
                         detected = extract_barangay(address) or nearest_barangay(lat_f, lon_f)
                 if not detected and within_service_bounds(lat_f, lon_f):
                     detected = nearest_barangay(lat_f, lon_f)
+                # For locations outside Bayawan City, keep any manually entered
+                # barangay value instead of forcing a generic label. The system
+                # will still detect inside/outside Bayawan using coordinates.
                 if not detected:
-                    detected = "Outside Bayawan City"
+                    detected = None
 
-            cleaned["barangay"] = detected or cleaned.get("barangay") or ""
+            if detected:
+                cleaned["barangay"] = detected
+            else:
+                cleaned["barangay"] = cleaned.get("barangay") or ""
 
         # Connected to BAWAD + proof:
         # Only enforce this for declogging-type services (residential/commercial desludging).
@@ -215,7 +235,10 @@ class ServiceRequestStep2Form(forms.Form):
         }
 
         if is_declogging:
-            bawad = cleaned.get("connected_to_bawad")
+            # Treat missing selection as "NO" so the field does not block submission,
+            # especially for locations outside Bayawan where we auto-set to non-BAWAD.
+            bawad = cleaned.get("connected_to_bawad") or "NO"
+            cleaned["connected_to_bawad"] = bawad
             if bawad == "YES" and not cleaned.get("bawad_proof") and not self.files.get("bawad_proof"):
                 self.add_error("bawad_proof", "Please upload proof of BAWAD affiliation.")
         else:

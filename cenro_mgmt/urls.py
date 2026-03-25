@@ -1,8 +1,10 @@
+import re
+
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.views.generic import RedirectView
+from django.views.static import serve
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -11,5 +13,17 @@ urlpatterns = [
     path("scheduling/", include(("scheduling.urls", "scheduling"), namespace="scheduling")),
     path("dashboard/", include(("dashboard.urls", "dashboard"), namespace="dashboard")),
     path("", RedirectView.as_view(url="/dashboard/", permanent=False)),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+# django.conf.urls.static.static() refuses to add routes when DEBUG=False; use SERVE_MEDIA instead.
+if getattr(settings, "SERVE_MEDIA", False) and settings.MEDIA_URL and settings.MEDIA_ROOT:
+    _media_prefix = settings.MEDIA_URL.lstrip("/")
+    if _media_prefix:
+        urlpatterns += [
+            re_path(
+                r"^%s(?P<path>.*)$" % re.escape(_media_prefix),
+                serve,
+                {"document_root": str(settings.MEDIA_ROOT)},
+            ),
+        ]
 

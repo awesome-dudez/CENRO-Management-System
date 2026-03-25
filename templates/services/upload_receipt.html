@@ -23,13 +23,17 @@
 <div class="upload-container">
     <div class="upload-card">
         <h2>Upload Payment Receipt</h2>
-        <p>Request #{{ sr.id }} &mdash; {{ sr.get_service_type_display }}<br>Total: &#8369;{% if sr.fee_amount %}{{ sr.fee_amount }}{% else %}See computation{% endif %}</p>
+        <p>{{ sr.get_service_type_display }}<br>Total: &#8369;{% if sr.fee_amount %}{{ sr.fee_amount }}{% else %}See computation{% endif %}</p>
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            <div class="upload-area">
+            {# Clicks on the native file control bubble here; avoid calling .click() again or the picker opens twice. #}
+            <div class="upload-area" onclick="if (!event.target.closest('input[type=file]')) { document.getElementById('id_treasurer_receipt').click(); }">
                 <div style="font-size:40px;margin-bottom:8px;">&#128196;</div>
                 <div>Upload your receipt from the City Treasurer's Office</div>
-                <input type="file" name="treasurer_receipt" accept="image/*,.pdf" required>
+                <div style="font-size:12px;color:#777;margin-top:4px;">
+                    You can choose an existing file or use your device camera to take a photo.
+                </div>
+                <input id="id_treasurer_receipt" type="file" name="treasurer_receipt" accept="image/*,.pdf" capture="environment" required onclick="event.stopPropagation();">
             </div>
             <div class="btn-row">
                 <a href="{% url 'services:request_detail' sr.pk %}" class="btn btn-secondary">Cancel</a>

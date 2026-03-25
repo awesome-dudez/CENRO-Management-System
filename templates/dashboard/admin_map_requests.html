@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}View Map Requests - ECO-TRACK{% endblock %}
+{% block title %}View Map Requests - CENRO Management System{% endblock %}
 {% block admin_subtitle %}View Map Requests{% endblock %}
 {% block content %}
 <style>
@@ -74,8 +74,8 @@
     var defaultCenter = [9.3696, 122.7960];
     var defaultZoom = 11;
     var map = L.map(mapEl, { attributionControl: true }).setView(defaultCenter, defaultZoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 19
     }).addTo(map);
     var markersLayer = L.layerGroup().addTo(map);

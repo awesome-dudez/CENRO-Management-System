@@ -324,6 +324,35 @@
     .req-toggle-btn:hover:not(.active) {
         background: #f0fdf4;
     }
+    .other-person-verify-section {
+        margin: 16px 0 20px;
+        padding: 16px;
+        background: #f0f9ff;
+        border: 1px solid #b8d4f0;
+        border-radius: 8px;
+    }
+    .other-person-verify-section .verify-title {
+        font-weight: 600;
+        color: #2d3142;
+        margin-bottom: 6px;
+    }
+    .btn-verify-other {
+        margin-top: 10px;
+        padding: 10px 20px;
+        border: 2px solid #2980b9;
+        background: #fff;
+        color: #2980b9;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .btn-verify-other:hover { background: #ebf5fb; }
+    #otherVerifyRegisterLink {
+        display: inline-block;
+        margin-top: 10px;
+        font-weight: 600;
+        color: #2980b9;
+    }
 
     /* Service Location mode toggle */
     .location-mode-section { margin-bottom: 20px; }
@@ -365,6 +394,29 @@
     .location-photo-slot .form-control { margin-bottom: 8px; }
     .location-photo-preview { min-height: 80px; margin-top: 6px; border-radius: 8px; overflow: hidden; background: #f0f0f0; }
     .location-photo-preview img { width: 100%; height: 120px; object-fit: cover; display: block; }
+
+    /* Signature capture */
+    .signature-mode-toggle { display:flex; gap:8px; margin-bottom:10px; }
+    .sig-mode-btn {
+        flex:1; padding:8px 14px; border:2px solid #e0e0e0; border-radius:6px;
+        background:#fff; color:#555; font-weight:600; font-size:13px;
+        cursor:pointer; transition:all 0.2s; text-align:center;
+    }
+    .sig-mode-btn:hover { border-color:#1abc9c; color:#1abc9c; }
+    .sig-mode-btn.active { background:#1abc9c; border-color:#1abc9c; color:#fff; }
+    .signature-draw-section { margin-top:10px; }
+    .signature-draw-section.hidden { display:none; }
+    #signaturePad {
+        width:100%; height:180px; border:2px dashed #1abc9c; border-radius:8px;
+        background:#fafafa;
+        touch-action:none;
+    }
+    .signature-actions { margin-top:8px; display:flex; justify-content:flex-end; }
+    .signature-clear-btn {
+        padding:6px 14px; border:1px solid #ccc; border-radius:4px;
+        background:#f8f9fa; font-size:13px; cursor:pointer;
+    }
+    .signature-clear-btn:hover { background:#e9ecef; }
 </style>
 
 <div class="wizard-container">
@@ -422,8 +474,9 @@
                 <label class="form-group-label" style="margin-bottom:8px;">Who is this request for?</label>
                 <div class="requester-toggle">
                     <button type="button" class="req-toggle-btn active" data-value="owner" id="btnOwner">I am the account owner</button>
-                    <button type="button" class="req-toggle-btn" data-value="other" id="btnOther">Registering for another person</button>
+                    <button type="button" class="req-toggle-btn" data-value="other" id="btnOther">Requesting for another person</button>
                 </div>
+                {{ form.request_for }}
             </div>
 
             {% if form.non_field_errors %}
@@ -442,8 +495,6 @@
                     <label for="id_request_date">Request Date <span style="color:red">*</span></label>
                     {{ form.request_date }}
                     {% if form.request_date.errors %}<div class="form-error">{{ form.request_date.errors.0 }}</div>{% endif %}
-                    <div class="form-help-text">Business days only (Mon–Fri, excluding holidays).</div>
-                    <div class="form-error" id="dateWarning" style="display:none;"></div>
                 </div>
             </div>
 
@@ -512,6 +563,17 @@
                 <div class="form-help-text" id="addressHelp">House number, street, near [landmark]. Optional when using Pin on Map.</div>
             </div>
 
+            <div class="other-person-verify-section" id="otherPersonVerifySection" style="display:none;">
+                <div class="verify-title">Verify registered CENRO account</div>
+                <p class="form-help-text" style="margin:0 0 8px;">
+                    Enter the client&rsquo;s <strong>full name</strong>, <strong>barangay</strong>, and <strong>street address</strong> exactly as they appear on the client&rsquo;s CENRO profile, then click Verify.
+                    If there is no match, the client must create a consumer account first.
+                </p>
+                <button type="button" class="btn-verify-other" id="btnVerifyOtherConsumer">Verify client account</button>
+                <div id="otherVerifyMessage" class="form-help-text" style="margin-top:10px;min-height:1.2em;"></div>
+                <a href="{{ consumer_register_url }}" id="otherVerifyRegisterLink" target="_blank" rel="noopener" style="display:none;">Open consumer registration</a>
+            </div>
+
             <div class="form-group">
                 <label for="id_contact_number">Contact Number <span style="color:red">*</span></label>
                 {{ form.contact_number }}
@@ -550,16 +612,9 @@
                 </div>
             </div>
 
-            <div class="form-group">
-                <label for="id_client_signature">Client Signature (upload image)</label>
-                {{ form.client_signature }}
-                {% if form.client_signature.errors %}<div class="form-error">{{ form.client_signature.errors.0 }}</div>{% endif %}
-                <div class="form-help-text">Upload a photo or scan of your signature.</div>
-            </div>
-
             <div class="button-group">
                 <a href="?step=1" class="btn btn-secondary">&larr; Back</a>
-                <button type="submit" class="btn btn-primary">Next Step &rarr;</button>
+                <button type="submit" class="btn btn-primary" id="step2NextBtn">Next Step &rarr;</button>
             </div>
         </form>
 
@@ -616,6 +671,60 @@ document.addEventListener('DOMContentLoaded', function() {
     var clientNameInput = document.getElementById('id_client_name');
     var contactInput = document.getElementById('id_contact_number');
     var addressInput = document.querySelector('input[name="address"]');
+    var requestForInput = document.getElementById('id_request_for');
+    var verifySection = document.getElementById('otherPersonVerifySection');
+    var btnVerifyOther = document.getElementById('btnVerifyOtherConsumer');
+    var otherVerifyMsg = document.getElementById('otherVerifyMessage');
+    var otherVerifyReg = document.getElementById('otherVerifyRegisterLink');
+    var step2NextBtn = document.getElementById('step2NextBtn');
+    var barangayInputEl = document.querySelector('input[name="barangay"]');
+    var verifyUrl = "{{ verify_other_consumer_url|escapejs }}";
+    var serverOtherVerified = {% if step2_other_verified %}true{% else %}false{% endif %};
+    var otherVerified = serverOtherVerified;
+
+    function getCsrfToken() {
+        var el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+    function postVerifyJson(body) {
+        return fetch(verifyUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+        }).then(function(r) { return r.json(); });
+    }
+    function clearOtherVerificationServer() {
+        if (!verifyUrl) return;
+        postVerifyJson({ reset: true }).catch(function() {});
+    }
+    function updateOtherRequesterUI() {
+        var isOther = requestForInput && requestForInput.value === 'other';
+        if (verifySection) verifySection.style.display = isOther ? 'block' : 'none';
+        if (!isOther) {
+            if (otherVerifyMsg) otherVerifyMsg.textContent = '';
+            if (otherVerifyReg) otherVerifyReg.style.display = 'none';
+        }
+        if (step2NextBtn) {
+            if (!isOther) step2NextBtn.disabled = false;
+            else step2NextBtn.disabled = !otherVerified;
+        }
+    }
+    function markOtherVerificationStale() {
+        if (!requestForInput || requestForInput.value !== 'other') return;
+        otherVerified = false;
+        clearOtherVerificationServer();
+        if (otherVerifyMsg) {
+            otherVerifyMsg.style.color = '#e67e22';
+            otherVerifyMsg.textContent = 'Details changed — please verify again before continuing.';
+        }
+        if (otherVerifyReg) otherVerifyReg.style.display = 'none';
+        updateOtherRequesterUI();
+    }
+    window.markOtherVerificationStale = markOtherVerificationStale;
 
     function useDeviceLocation() {
         if (!navigator.geolocation) return;
@@ -628,10 +737,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }, function() {}, { enableHighAccuracy: true, timeout: 10000 });
     }
 
-    function setRequesterMode(mode) {
+    function setRequesterMode(mode, opts) {
+        opts = opts || {};
+        var skipResetVerify = !!opts.skipResetVerify;
         btnOwner.classList.toggle('active', mode === 'owner');
         btnOther.classList.toggle('active', mode === 'other');
+        if (requestForInput) {
+            requestForInput.value = mode;
+        }
         if (mode === 'owner') {
+            clearOtherVerificationServer();
+            otherVerified = false;
             if (clientNameInput && ownerProfile.client_name) clientNameInput.value = ownerProfile.client_name;
             if (contactInput && ownerProfile.contact_number) contactInput.value = ownerProfile.contact_number;
             if (addressInput && ownerProfile.address) { addressInput.value = ownerProfile.address; window.lastAutoAddress = ownerProfile.address; }
@@ -643,15 +759,60 @@ document.addEventListener('DOMContentLoaded', function() {
                 useDeviceLocation();
             }
         } else {
+            if (!skipResetVerify) {
+                otherVerified = false;
+                clearOtherVerificationServer();
+            }
             if (clientNameInput) clientNameInput.value = '';
             if (contactInput) contactInput.value = '';
             if (addressInput) { addressInput.value = ''; window.lastAutoAddress = ''; }
             useDeviceLocation();
         }
+        if (otherVerifyMsg) { otherVerifyMsg.style.color = ''; }
+        updateOtherRequesterUI();
     }
 
     if (btnOwner) btnOwner.addEventListener('click', function() { setRequesterMode('owner'); });
     if (btnOther) btnOther.addEventListener('click', function() { setRequesterMode('other'); });
+
+    // Default behavior: respect whatever is currently stored in the hidden
+    // request_for field (so going Back from step 3 preserves the choice).
+    var initialMode = (requestForInput && requestForInput.value === 'other') ? 'other' : 'owner';
+    // Only preserve session + UI verification when server confirms it still matches form fields.
+    setRequesterMode(initialMode, { skipResetVerify: initialMode === 'other' && serverOtherVerified });
+
+    if (btnVerifyOther && verifyUrl) {
+        btnVerifyOther.addEventListener('click', function() {
+            var cn = clientNameInput ? clientNameInput.value.trim() : '';
+            var bg = barangayInputEl ? barangayInputEl.value.trim() : '';
+            var ad = addressInput ? addressInput.value.trim() : '';
+            if (otherVerifyMsg) { otherVerifyMsg.style.color = '#666'; otherVerifyMsg.textContent = 'Checking…'; }
+            postVerifyJson({ client_name: cn, barangay: bg, address: ad })
+                .then(function(data) {
+                    if (data.ok) {
+                        otherVerified = true;
+                        if (otherVerifyMsg) { otherVerifyMsg.style.color = '#1a7f5a'; otherVerifyMsg.textContent = data.message || 'Verified.'; }
+                        if (otherVerifyReg) otherVerifyReg.style.display = 'none';
+                    } else {
+                        otherVerified = false;
+                        if (otherVerifyMsg) { otherVerifyMsg.style.color = '#c0392b'; otherVerifyMsg.textContent = data.message || 'No matching account.'; }
+                        if (otherVerifyReg && data.register_url) {
+                            otherVerifyReg.href = data.register_url;
+                            otherVerifyReg.style.display = 'inline-block';
+                        }
+                    }
+                    updateOtherRequesterUI();
+                })
+                .catch(function() {
+                    otherVerified = false;
+                    if (otherVerifyMsg) { otherVerifyMsg.style.color = '#c0392b'; otherVerifyMsg.textContent = 'Verification request failed. Please try again.'; }
+                    updateOtherRequesterUI();
+                });
+        });
+    }
+    if (clientNameInput) clientNameInput.addEventListener('input', markOtherVerificationStale);
+    if (addressInput) addressInput.addEventListener('input', markOtherVerificationStale);
+    if (barangayInputEl) barangayInputEl.addEventListener('change', markOtherVerificationStale);
 
     var radios = document.querySelectorAll('[name="connected_to_bawad"]');
     var proofSection = document.getElementById('bawadProofSection');
@@ -699,46 +860,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     updateBawadVisibility();
 
-    // ---- Request date: business-day enforcement ----
-    var holidays = {{ holidays_json|safe }};
-    var dateInput = document.getElementById('id_request_date');
-    var dateWarning = document.getElementById('dateWarning');
-
-    function isHoliday(dateStr) {
-        return holidays.indexOf(dateStr) !== -1;
-    }
-    function nextBusinessDay(d) {
-        while (d.getDay() === 0 || d.getDay() === 6 || isHoliday(d.toISOString().slice(0, 10))) {
-            d = new Date(d.getTime() + 86400000);
-        }
-        return d;
-    }
-    function formatDate(d) {
-        var y = d.getFullYear();
-        var m = String(d.getMonth() + 1).padStart(2, '0');
-        var day = String(d.getDate()).padStart(2, '0');
-        return y + '-' + m + '-' + day;
-    }
-    function validateRequestDate() {
-        if (!dateInput || !dateInput.value) return;
-        var parts = dateInput.value.split('-');
-        var picked = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        var day = picked.getDay();
-        if (day === 0 || day === 6 || isHoliday(dateInput.value)) {
-            var corrected = nextBusinessDay(new Date(picked.getTime()));
-            dateInput.value = formatDate(corrected);
-            var reason = (day === 0 || day === 6) ? 'a weekend' : 'a holiday';
-            if (dateWarning) {
-                dateWarning.textContent = 'Selected date falls on ' + reason + '. Moved to next business day: ' + formatDate(corrected) + '.';
-                dateWarning.style.display = 'block';
-                dateWarning.style.color = '#e67e22';
-            }
-        } else {
-            if (dateWarning) dateWarning.style.display = 'none';
-        }
-    }
-    if (dateInput) dateInput.addEventListener('change', validateRequestDate);
-
     // ---- Service Location mode: Pin on Map vs Type Address ----
     var locationModeInput = document.getElementById('id_location_mode');
     var btnLocationPin = document.getElementById('btnLocationPin');
@@ -767,7 +888,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (barangayHelp) barangayHelp.textContent = isPin ? 'Auto-detected from the pin or type manually.' : 'Required when using Type Address.';
         if (addressHelp) addressHelp.textContent = isPin ? 'House number, street, near [landmark]. Optional when using Pin on Map.' : 'Required when using Type Address.';
         if (!isPin && latField && lonField) { latField.value = ''; lonField.value = ''; }
-        if (typeof mapInstance !== 'undefined' && mapInstance) setTimeout(function() { mapInstance.invalidateSize(); }, 150);
+
+        // When switching to Pin on Map, if we don't yet have coordinates,
+        // auto-locate using the device GPS (for both owner and other modes).
+        if (isPin && latField && lonField && (!latField.value || !lonField.value) && typeof useDeviceLocation === 'function') {
+            useDeviceLocation();
+        }
+
+        if (typeof mapInstance !== 'undefined' && mapInstance) {
+            setTimeout(function() { mapInstance.invalidateSize(); }, 150);
+        }
     }
     if (btnLocationPin) btnLocationPin.addEventListener('click', function() { setLocationMode('PIN'); });
     if (btnLocationText) btnLocationText.addEventListener('click', function() { setLocationMode('TEXT'); });
@@ -839,6 +969,122 @@ document.addEventListener('DOMContentLoaded', function() {
             toggleBawad();
         }
     };
+
+    // ---- Signature capture: upload vs draw ----
+    var sigModeUpload = document.getElementById('sigModeUpload');
+    var sigModeDraw = document.getElementById('sigModeDraw');
+    var sigUploadSection = document.getElementById('signatureUploadSection');
+    var sigDrawSection = document.getElementById('signatureDrawSection');
+    var sigCanvas = document.getElementById('signaturePad');
+    var sigClearBtn = document.getElementById('signatureClearBtn');
+    var sigHiddenInput = document.querySelector('input[name="client_signature_data"]');
+    var sigFileInput = document.getElementById('id_client_signature');
+
+    function setSignatureMode(mode) {
+        var draw = mode === 'draw';
+        if (sigModeUpload) sigModeUpload.classList.toggle('active', !draw);
+        if (sigModeDraw) sigModeDraw.classList.toggle('active', draw);
+        if (sigUploadSection) sigUploadSection.style.display = draw ? 'none' : '';
+        if (sigDrawSection) sigDrawSection.classList.toggle('hidden', !draw);
+        if (!draw && sigHiddenInput) {
+            sigHiddenInput.value = '';
+        }
+        // When switching to draw mode, (re)calibrate the canvas after it becomes visible.
+        if (draw && typeof window.calibrateSignatureCanvas === 'function' && sigCanvas) {
+            requestAnimationFrame(function() {
+                window.calibrateSignatureCanvas();
+            });
+        }
+    }
+    if (sigModeUpload) sigModeUpload.addEventListener('click', function() { setSignatureMode('upload'); });
+    if (sigModeDraw) sigModeDraw.addEventListener('click', function() { setSignatureMode('draw'); });
+
+    var sigDrawing = false;
+    var sigCtx = sigCanvas ? sigCanvas.getContext('2d') : null;
+    if (sigCtx && sigCanvas) {
+        // Expose a reusable calibration function so we can call it
+        // after the canvas is shown or when the window resizes.
+        window.calibrateSignatureCanvas = function calibrateSignatureCanvas() {
+            var rect = sigCanvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            var ratio = window.devicePixelRatio || 1;
+            sigCanvas.width = rect.width * ratio;
+            sigCanvas.height = rect.height * ratio;
+            sigCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        };
+        window.calibrateSignatureCanvas();
+        window.addEventListener('resize', function() {
+            if (sigDrawSection && !sigDrawSection.classList.contains('hidden')) {
+                window.calibrateSignatureCanvas();
+            }
+        });
+
+        sigCtx.strokeStyle = '#222';
+        sigCtx.lineWidth = 2;
+        function getSigPos(e) {
+            var rect = sigCanvas.getBoundingClientRect();
+            var clientX, clientY;
+            if (e.touches && e.touches.length) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+        function sigStart(e) {
+            sigDrawing = true;
+            var p = getSigPos(e);
+            sigCtx.beginPath();
+            sigCtx.moveTo(p.x, p.y);
+            e.preventDefault();
+        }
+        function sigMove(e) {
+            if (!sigDrawing) return;
+            var p = getSigPos(e);
+            sigCtx.lineTo(p.x, p.y);
+            sigCtx.stroke();
+            e.preventDefault();
+        }
+        function sigEnd(e) {
+            sigDrawing = false;
+            if (e) e.preventDefault();
+        }
+        sigCanvas.addEventListener('mousedown', sigStart);
+        sigCanvas.addEventListener('mousemove', sigMove);
+        sigCanvas.addEventListener('mouseup', sigEnd);
+        sigCanvas.addEventListener('mouseleave', sigEnd);
+        sigCanvas.addEventListener('touchstart', sigStart, { passive: false });
+        sigCanvas.addEventListener('touchmove', sigMove, { passive: false });
+        sigCanvas.addEventListener('touchend', sigEnd, { passive: false });
+
+        if (sigClearBtn) {
+            sigClearBtn.addEventListener('click', function() {
+                sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+                if (sigHiddenInput) sigHiddenInput.value = '';
+            });
+        }
+    }
+
+    // Hint to devices that camera capture is allowed.
+    if (sigFileInput) {
+        sigFileInput.setAttribute('accept', 'image/*');
+        sigFileInput.setAttribute('capture', 'environment');
+    }
+
+    // Block step-2 submit when "another person" is selected but verify was not completed
+    // (runs even if map script exits early — cannot bypass via re-enabling the Next button).
+    var wizardFormOtherGuard = document.querySelector('.wizard-form');
+    if (wizardFormOtherGuard) {
+        wizardFormOtherGuard.addEventListener('submit', function(evt) {
+            if (requestForInput && requestForInput.value === 'other' && !otherVerified) {
+                evt.preventDefault();
+                alert('Please click “Verify client account” first. The client’s name and address must match a registered CENRO account. If they are not registered yet, use the registration link shown after verification.');
+                if (btnVerifyOther) btnVerifyOther.focus();
+            }
+        });
+    }
 });
 </script>
 <script>
@@ -997,7 +1243,21 @@ document.addEventListener('DOMContentLoaded', function() {
         const serverBarangay = payload && payload.barangay ? payload.barangay : null;
         const serverWithin = payload && typeof payload.within_bayawan === 'boolean' ? payload.within_bayawan : null;
         const withinCity = withinCityBoundary || (serverWithin === true);
-        const finalBarangay = withinCity ? (detectedBarangay || serverBarangay || 'Bayawan City') : 'Outside Bayawan City';
+
+        // Prefer the more precise barangay coming from the server whenever
+        // it is available. Front-end GeoJSON detection sometimes only knows
+        // "Bayawan City" (city boundary), while the server can return a
+        // specific barangay like "Napit-an".
+        let finalBarangay;
+        if (withinCity) {
+            if (serverBarangay && serverBarangay !== 'Bayawan City') {
+                finalBarangay = serverBarangay;
+            } else {
+                finalBarangay = detectedBarangay || serverBarangay || 'Bayawan City';
+            }
+        } else {
+            finalBarangay = serverBarangay || detectedBarangay || 'Outside Bayawan City';
+        }
 
         isLocationValid = true;
         if (barangayInput) { barangayInput.value = finalBarangay || ''; barangayInput.dispatchEvent(new Event('change', { bubbles: true })); }
@@ -1024,7 +1284,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (addressInput) addressInput.addEventListener('input', function() { addressTouched = true; });
 
         mapInstance = L.map('map', { zoomControl: true, attributionControl: true }).setView([BAYAWAN_CENTER.lat, BAYAWAN_CENTER.lon], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OpenStreetMap contributors', maxZoom: 19 }).addTo(mapInstance);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 19 }).addTo(mapInstance);
 
         loadBarangayGeoJSON().then(function() {
             if (barangayGeoJSON && barangayGeoJSON.features) {
@@ -1079,6 +1339,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (wizardForm) {
             wizardForm.addEventListener('submit', function(evt) {
+                if (evt.defaultPrevented) return;
                 var locMode = (document.getElementById('id_location_mode') || {}).value || 'PIN';
                 if (locMode === 'PIN') {
                     if (!latField.value || !lonField.value) { evt.preventDefault(); alert('Please drop a pin on the map before continuing.'); return; }
@@ -1089,6 +1350,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!bar) { evt.preventDefault(); alert('Please enter Barangay when using Type Address.'); if (barangayInput) barangayInput.focus(); return; }
                     if (!addr) { evt.preventDefault(); alert('Please enter Complete Address / Landmark when using Type Address.'); if (addressInput) addressInput.focus(); return; }
                 }
+
+                // If draw mode is active, capture canvas as base64 before submit.
+                if (sigDrawSection && !sigDrawSection.classList.contains('hidden') && sigCanvas && sigHiddenInput) {
+                    try {
+                        var dataUrl = sigCanvas.toDataURL('image/png');
+                        // Avoid obviously blank canvas (very small data URLs)
+                        if (dataUrl && dataUrl.length > 200) {
+                            sigHiddenInput.value = dataUrl;
+                            if (sigFileInput) sigFileInput.value = '';
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+
                 document.querySelectorAll('[name="connected_to_bawad"]').forEach(function(r) { r.disabled = false; });
             });
         }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -81,6 +81,7 @@ class ServiceComputation(models.Model):
 
     class PaymentStatus(models.TextChoices):
         PENDING = "PENDING", "Pending"
+        AWAITING_VERIFICATION = "AWAITING_VERIFICATION", "Awaiting Verification"
         PAID = "PAID", "Paid"
         FREE = "FREE", "Free (BAWAD)"
 
@@ -103,17 +104,23 @@ class ServiceComputation(models.Model):
     fixed_trucking = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     desludging_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     distance_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    distance_travel_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     wear_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     meals_transport_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     inspection_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     payment_status = models.CharField(
-        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
+        max_length=25, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
     )
     prepared_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, related_name="computations_prepared"
     )
+    prepared_by_signature = models.FileField(
+        upload_to="computation_signatures/", null=True, blank=True
+    )
+    is_finalized = models.BooleanField(default=False)
+    finalized_at = models.DateTimeField(null=True, blank=True)
     receipt_generated = models.BooleanField(default=False)
     receipt_date = models.DateTimeField(null=True, blank=True)
 
@@ -125,7 +132,8 @@ class ServiceComputation(models.Model):
 
     def get_desludging_breakdown(self):
         """Return a list of {label, amount} for detailed desludging fee breakdown.
-        Trip 1: max 5 m³ × base rate. Trip 2+: remaining volume × (base + ₱360 surcharge).
+        Trip 1: fixed 5 m³ × base rate.
+        Remaining volume (any additional trips) is grouped as "Excess trip(s)" × (base + ₱360 surcharge).
         """
         R = ConfigurableRate.get
         desludging_per_m3 = R("desludging_per_m3")
@@ -135,26 +143,22 @@ class ServiceComputation(models.Model):
         effective_m3 = max(self.cubic_meters, min_m3)
         rate_extra = desludging_per_m3 + second_trip_surcharge
         lines = []
-        for t in range(self.trips):
-            if t == 0:
-                vol_this_trip = max_m3_per_trip  # First trip always 5 m³ (min and max)
-            else:
-                remaining = effective_m3 - (t * max_m3_per_trip)
-                vol_this_trip = min(max_m3_per_trip, max(Decimal("0"), remaining))
-            if vol_this_trip <= 0:
-                continue
-            rate = desludging_per_m3 if t == 0 else rate_extra
-            amt = vol_this_trip * rate
-            if t == 0:
-                lines.append({
-                    "label": f"Trip 1: 5 m³ × ₱{desludging_per_m3}/m³ (min 5 m³, max 5 m³)",
-                    "amount": amt,
-                })
-            else:
-                lines.append({
-                    "label": f"Trip {t + 1}: {vol_this_trip} m³ × ₱{rate_extra}/m³ (₱{desludging_per_m3} + ₱{second_trip_surcharge} surcharge)",
-                    "amount": amt,
-                })
+        # Trip 1 (always 5 m³ billed at base rate)
+        first_trip_volume = max_m3_per_trip
+        first_trip_amount = first_trip_volume * desludging_per_m3
+        lines.append({
+            "label": f"Trip 1: 5 m³ × ₱{desludging_per_m3}/m³ (min 5 m³, max 5 m³)",
+            "amount": first_trip_amount,
+        })
+
+        # Excess trips: group all remaining volume beyond the first 5 m³
+        remaining_volume = effective_m3 - max_m3_per_trip
+        if remaining_volume > 0:
+            excess_amount = remaining_volume * rate_extra
+            lines.append({
+                "label": f"Excess trip(s): {remaining_volume} m³ × ₱{rate_extra}/m³ (₱{desludging_per_m3} + ₱{second_trip_surcharge} surcharge)",
+                "amount": excess_amount,
+            })
         return lines
 
     def calculate_charges(self):
@@ -198,42 +202,178 @@ class ServiceComputation(models.Model):
             rate = desludging_per_m3 if t == 0 else (desludging_per_m3 + second_trip_surcharge)
             self.desludging_fee += vol_this_trip * rate
 
-        # Distance charge: excess beyond free_km
-        dist = self.distance_km or Decimal("0")
-        excess_km = max(Decimal("0"), dist - free_km)
-        self.distance_charge = excess_km * per_km_rate * 2
+        # Distance Travel Fee: distance_km × 20 × 2 (rounded down to whole km)
+        raw_dist = self.distance_km or Decimal("0")
+        dist = raw_dist.quantize(Decimal("1"), rounding=ROUND_DOWN)
+        self.distance_km = dist
+        self.distance_travel_fee = dist * Decimal("20") * 2
+        self.distance_charge = Decimal("0")  # no longer used in breakdown
 
-        # Meals and transportation
+        # Meals and transportation: ₱200 per personnel (driver + helpers)
         self.meals_transport_charge = self.personnel_count * meals_per_head
 
-        # Inspection
-        self.inspection_charge = inspection_fee
+        # Inspection fee removed from computation (paid separately at the beginning)
+        self.inspection_charge = Decimal("0")
 
-        # Wear and tear (outside Bayawan only)
-        if self.is_outside_bayawan:
-            base_for_wear = R("outside_trucking") + self.distance_charge + (effective_m3 * desludging_per_m3)
-            self.wear_charge = base_for_wear * wear_pct
-        else:
-            self.wear_charge = Decimal("0")
+        # Wear and tear: 20% of (Fixed Trucking + Distance Travel Fee)
+        base_for_wear = self.fixed_trucking + self.distance_travel_fee
+        self.wear_charge = base_for_wear * wear_pct
 
-        # Total
+        # Total (no inspection_charge)
         self.total_charge = (
             self.fixed_trucking
             + self.desludging_fee
-            + self.distance_charge
+            + self.distance_travel_fee
             + self.wear_charge
             + self.meals_transport_charge
-            + self.inspection_charge
         )
 
-        # BAWAD discount
-        if sr.connected_to_bawad and sr.bawad_free_eligible:
+        # Public area within Bayawan City: wave off payment
+        try:
+            is_public = sr.public_private == ServiceRequest.PublicPrivate.PUBLIC
+        except Exception:
+            is_public = False
+
+        if is_public and sr.is_within_bayawan:
+            self.total_charge = Decimal("0")
+            self.payment_status = self.PaymentStatus.FREE
+        # BAWAD discount (applies only if not already free above)
+        elif sr.connected_to_bawad and sr.bawad_free_eligible:
             self.total_charge = Decimal("0")
             self.payment_status = self.PaymentStatus.FREE
 
     def save(self, *args, **kwargs):
         self.calculate_charges()
         super().save(*args, **kwargs)
+
+
+def compute_quick_desludging_estimate(
+    *,
+    category: str,
+    location: str,
+    cubic_meters: Decimal,
+    distance_km: Decimal,
+    personnel_count: int,
+    meals_transport_override: Decimal | None,
+    connected_to_bawad: bool,
+    public_private: str,
+    bawad_prior_used_m3: Decimal,
+) -> dict:
+    """
+    Same charge math as ServiceComputation.calculate_charges, for admin demo / quick calculator.
+    Pass explicit BAWAD prior usage (m³ in current cycle) instead of querying the database.
+    """
+    from services.models import ServiceRequest
+
+    R = ConfigurableRate.get
+    desludging_per_m3 = R("desludging_per_m3")
+    second_trip_surcharge = R("second_trip_surcharge")
+    meals_per_head = R("meals_per_head")
+    wear_pct = R("wear_tear_pct") / Decimal("100")
+    min_m3 = R("min_cubic_meters")
+    bawad_limit = R("bawad_free_limit_m3", 5)
+
+    is_outside = location == "outside"
+    is_within_bayawan = not is_outside
+    st = (
+        ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING
+        if category == "COMMERCIAL"
+        else ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING
+    )
+
+    effective_m3 = max(cubic_meters, min_m3)
+    max_m3_per_trip = Decimal("5")
+    trips = max(1, math.ceil(float(cubic_meters) / float(max_m3_per_trip)))
+
+    if is_outside:
+        fixed_trucking = R("outside_trucking")
+    elif st == ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING:
+        fixed_trucking = R("commercial_trucking_within")
+    else:
+        fixed_trucking = R("residential_trucking_within")
+
+    desludging_fee = Decimal("0")
+    for t in range(trips):
+        if t == 0:
+            vol_this_trip = max_m3_per_trip
+        else:
+            remaining = effective_m3 - (t * max_m3_per_trip)
+            vol_this_trip = min(max_m3_per_trip, max(Decimal("0"), remaining))
+        rate = desludging_per_m3 if t == 0 else (desludging_per_m3 + second_trip_surcharge)
+        desludging_fee += vol_this_trip * rate
+
+    raw_dist = distance_km or Decimal("0")
+    dist = raw_dist.quantize(Decimal("1"), rounding=ROUND_DOWN)
+    distance_travel_fee = dist * Decimal("20") * 2
+
+    if meals_transport_override is not None and meals_transport_override > 0:
+        meals_transport_charge = meals_transport_override
+    else:
+        meals_transport_charge = Decimal(personnel_count) * meals_per_head
+
+    base_for_wear = fixed_trucking + distance_travel_fee
+    wear_charge = base_for_wear * wear_pct
+
+    subtotal = (
+        fixed_trucking
+        + desludging_fee
+        + distance_travel_fee
+        + wear_charge
+        + meals_transport_charge
+    )
+
+    # Desludging line items (same labels as ServiceComputation.get_desludging_breakdown)
+    rate_extra = desludging_per_m3 + second_trip_surcharge
+    desludging_breakdown = [
+        {
+            "label": f"Trip 1 · 5 m³ @ ₱{desludging_per_m3}",
+            "amount": max_m3_per_trip * desludging_per_m3,
+        }
+    ]
+    remaining_volume = effective_m3 - max_m3_per_trip
+    if remaining_volume > 0:
+        desludging_breakdown.append({
+            "label": f"Excess · {remaining_volume} m³ @ ₱{rate_extra}",
+            "amount": remaining_volume * rate_extra,
+        })
+
+    is_public = public_private == ServiceRequest.PublicPrivate.PUBLIC
+    bawad_eligible = connected_to_bawad and bawad_prior_used_m3 < bawad_limit
+
+    free_reason = None
+    total_charge = subtotal
+    if is_public and is_within_bayawan:
+        total_charge = Decimal("0")
+        free_reason = "public_area"
+    elif connected_to_bawad and bawad_eligible:
+        total_charge = Decimal("0")
+        free_reason = "bawad"
+
+    return {
+        "trips": trips,
+        "effective_m3": effective_m3,
+        "fixed_trucking": fixed_trucking,
+        "desludging_fee": desludging_fee,
+        "desludging_breakdown": desludging_breakdown,
+        "distance_km": dist,
+        "distance_travel_fee": distance_travel_fee,
+        "wear_charge": wear_charge,
+        "meals_transport_charge": meals_transport_charge,
+        "personnel_count": personnel_count,
+        "subtotal_before_waiver": subtotal,
+        "total_charge": total_charge,
+        "free_reason": free_reason,
+        "is_public": is_public,
+        "is_within_bayawan": is_within_bayawan,
+        "connected_to_bawad": connected_to_bawad,
+        "bawad_eligible": bawad_eligible,
+        "bawad_prior_used_m3": bawad_prior_used_m3,
+        "bawad_limit_m3": bawad_limit,
+        "public_private": public_private,
+        "category": category,
+        "location": location,
+        "cubic_meters": cubic_meters,
+    }
 
 
 class DecloggingApplication(models.Model):

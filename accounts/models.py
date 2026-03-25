@@ -19,6 +19,14 @@ class User(AbstractUser):
         default=False,
         help_text="For staff and consumer accounts that require admin approval.",
     )
+    must_change_password = models.BooleanField(
+        default=False,
+        help_text="If true, user must change password on next login (staff temp passwords; consumer after admin reset).",
+    )
+    is_legacy_record = models.BooleanField(
+        default=False,
+        help_text="True when this consumer account was created by admin from pre-system/manual records.",
+    )
 
     def save(self, *args, **kwargs):
         if self.first_name:
@@ -68,6 +76,12 @@ class ConsumerProfile(models.Model):
     barangay = models.CharField(max_length=255, blank=True)
     municipality = models.CharField(max_length=255, blank=True)
     province = models.CharField(max_length=255, blank=True)
+    prior_desludging_m3_4y = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=0,
+        help_text="Desludging volume (m³) from manual/pre-system records in the past 4 years.",
+    )
     gps_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     gps_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 

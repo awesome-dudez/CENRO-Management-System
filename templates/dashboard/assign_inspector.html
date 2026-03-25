@@ -16,22 +16,41 @@
 </style>
 <div class="form-container">
     <div class="form-card">
-        <h2>Assign Inspector &mdash; Request #{{ service_request.id }}</h2>
+        <h2>Assign Inspector</h2>
         <p style="color:#666;margin-bottom:20px;">{{ service_request.get_service_type_display }} &bull; {{ service_request.client_name }}</p>
         <form method="post">
             {% csrf_token %}
             <div class="form-group">
                 <label>Inspector <span style="color:red">*</span></label>
-                <select name="inspector_id" required>
+                <select name="inspector_id" id="inspectorSelect" required>
                     <option value="">-- Select Inspector --</option>
-                    {% for staff in staff_members %}
-                    <option value="{{ staff.id }}">{{ staff.get_full_name }} ({{ staff.get_role_display }})</option>
+                    {% for inspector in inspectors %}
+                    <option value="{{ inspector.id }}" {% if inspector.id|stringformat:"s" == initial_inspector_id|stringformat:"s" %}selected{% endif %}>
+                        {{ inspector.get_full_name|default:inspector.username }}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="form-group">
                 <label>Inspection Date <span style="color:red">*</span></label>
-                <input type="date" name="inspection_date" required>
+                <input type="date" name="inspection_date" id="inspectionDate" value="{{ initial_date }}" required>
+            </div>
+            <div class="form-group">
+                <label>Inspection Time <span style="color:red">*</span></label>
+                <select name="inspection_time" id="inspectionTime" required>
+                    <option value="">-- Select Time --</option>
+                    <option value="9:00 AM" {% if initial_time == "9:00 AM" %}selected{% endif %}>9:00 AM</option>
+                    <option value="10:00 AM" {% if initial_time == "10:00 AM" %}selected{% endif %}>10:00 AM</option>
+                    <option value="11:00 AM" {% if initial_time == "11:00 AM" %}selected{% endif %}>11:00 AM</option>
+                    <option value="1:00 PM" {% if initial_time == "1:00 PM" %}selected{% endif %}>1:00 PM</option>
+                    <option value="2:00 PM" {% if initial_time == "2:00 PM" %}selected{% endif %}>2:00 PM</option>
+                    <option value="3:00 PM" {% if initial_time == "3:00 PM" %}selected{% endif %}>3:00 PM</option>
+                </select>
+                <small class="form-text text-muted">Inspection window is between 9:00 AM and 3:00 PM (excluding lunch break).</small>
+            </div>
+            <div class="form-group" id="changeReasonGroup" style="display:{% if had_prior_schedule %}none{% else %}none{% endif %};">
+                <label>Reason for Changes <span style="color:red">*</span></label>
+                <textarea name="change_reason" id="changeReason" rows="3" class="form-control">{{ change_reason }}</textarea>
             </div>
             <div class="btn-row">
                 <a href="{% url 'services:request_detail' service_request.pk %}" class="btn btn-secondary">Cancel</a>
@@ -40,4 +59,43 @@
         </form>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var origInspector = "{{ initial_inspector_label|default:'' }}";
+    var origDate = "{{ initial_date|default:'' }}";
+    var origTime = "{{ initial_time|default:'' }}";
+    var hadPrior = {{ had_prior_schedule|yesno:"true,false" }};
+    var selInspector = document.getElementById('inspectorSelect');
+    var inpDate = document.getElementById('inspectionDate');
+    var selTime = document.getElementById('inspectionTime');
+    var reasonGroup = document.getElementById('changeReasonGroup');
+    var reasonInput = document.getElementById('changeReason');
+
+    function checkChanges() {
+        if (!hadPrior) {
+            // Initial assignment: never require or show "Reason for Changes".
+            reasonGroup.style.display = 'none';
+            if (reasonInput) reasonInput.required = false;
+            return;
+        }
+        var changed =
+            (selInspector && selInspector.value && selInspector.value !== origInspector) ||
+            (inpDate && inpDate.value && inpDate.value !== origDate) ||
+            (selTime && selTime.value && selTime.value !== origTime);
+        if (changed) {
+            reasonGroup.style.display = 'block';
+            if (reasonInput) reasonInput.required = true;
+        } else {
+            reasonGroup.style.display = 'none';
+            if (reasonInput) reasonInput.required = false;
+        }
+    }
+
+    if (selInspector) selInspector.addEventListener('change', checkChanges);
+    if (inpDate) inpDate.addEventListener('change', checkChanges);
+    if (selTime) selTime.addEventListener('change', checkChanges);
+
+    checkChanges();
+});
+</script>
 {% endblock %}

@@ -1,39 +1,131 @@
 {% extends "base.html" %}
-{% block title %}Staff Approvals{% endblock %}
+{% block title %}Staff Management{% endblock %}
+{% block admin_subtitle %}Staff{% endblock %}
 {% block content %}
-<div class="container">
-    <h1>Staff Account Approvals</h1>
-    <div class="table-card">
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h3 class="card-title">Staff Accounts</h3>
+            <p class="card-subtitle">Set each account to <strong>Active</strong> (can sign in) or <strong>Inactive</strong> (cannot sign in), or remove access entirely.</p>
+        </div>
+        <a href="{% url 'accounts:staff_register' %}" class="btn btn-primary">Register New Staff</a>
+    </div>
+    <div class="table-responsive">
         <table class="data-table">
             <thead>
                 <tr>
                     <th>Username</th>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for staff in pending_staff %}
+                {% for staff in all_staff %}
                 <tr>
                     <td>{{ staff.username }}</td>
-                    <td>{{ staff.get_full_name }}</td>
-                    <td>{{ staff.email }}</td>
+                    <td>{{ staff.get_full_name|default:staff.username }}</td>
+                    <td>{{ staff.email|default:"-" }}</td>
                     <td>
-                        <form method="post" style="display: inline;">
+                        {% if staff.is_approved and staff.is_active %}
+                            <span style="color:#27ae60;font-weight:600;">Active</span>
+                        {% else %}
+                            <span style="color:#7f8c8d;font-weight:600;">Inactive</span>
+                        {% endif %}
+                        {% if staff != request.user %}
+                        <form method="post" style="display: inline-block; margin-left: 10px; vertical-align: middle;">
                             {% csrf_token %}
                             <input type="hidden" name="user_id" value="{{ staff.id }}">
-                            <button type="submit" class="btn btn-success">Approve</button>
+                            <input type="hidden" name="action" value="set_staff_status">
+                            <select name="status"
+                                    id="staff-status-{{ staff.id }}"
+                                    class="form-control"
+                                    aria-label="Change status for {{ staff.username }}"
+                                    style="display: inline-block; width: auto; min-width: 118px; padding: 6px 10px; font-size: 13px; border-radius: 6px;"
+                                    onchange="this.form.submit()">
+                                <option value="active" {% if staff.is_approved and staff.is_active %}selected{% endif %}>Active</option>
+                                <option value="inactive" {% if not staff.is_approved or not staff.is_active %}selected{% endif %}>Inactive</option>
+                            </select>
                         </form>
+                        {% else %}
+                        <span style="font-size:12px;color:#999;margin-left:8px;">(you)</span>
+                        {% endif %}
+                    </td>
+                    <td style="white-space: nowrap;">
+                        {% if staff != request.user %}
+                        <button type="button"
+                                class="btn btn-sm btn-danger"
+                                onclick="openDeleteStaffModal('{{ staff.id }}', '{{ staff.username }}')">
+                            Delete
+                        </button>
+                        {% else %}
+                        <span style="font-size:12px;color:#999;">—</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4">No pending staff approvals.</td>
+                    <td colspan="5">No staff accounts found.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<div id="deleteStaffModal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1050;align-items:center;justify-content:center;">
+    <div class="modal-card" style="background:#fff;border-radius:10px;max-width:420px;width:100%;padding:22px 24px;box-shadow:0 8px 24px rgba(0,0,0,0.18);">
+        <h2 style="margin:0 0 8px;font-size:18px;color:#2d3142;">Confirm Staff Deletion</h2>
+        <p id="deleteStaffMessage" style="font-size:13px;color:#555;margin:0 0 12px;">
+            This will permanently remove the staff account.
+        </p>
+        <p style="font-size:13px;color:#c0392b;margin:0 0 12px;">
+            To confirm, please type <strong>DELETE</strong> in the box below and click Delete.
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="user_id" id="deleteStaffUserId">
+            <input type="hidden" name="action" value="delete">
+            <input type="text"
+                   name="confirm_text"
+                   id="deleteStaffConfirmText"
+                   placeholder="Type DELETE to confirm"
+                   style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #d0d4e4;font-size:13px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:flex-end;gap:8px;">
+                <button type="button"
+                        class="btn btn-secondary"
+                        style="padding:8px 16px;border-radius:6px;border:none;background:#e0e0e0;color:#2d3142;font-size:13px;font-weight:600;cursor:pointer;"
+                        onclick="closeDeleteStaffModal()">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="btn btn-danger"
+                        style="padding:8px 16px;border-radius:6px;border:none;background:#e74c3c;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">
+                    Delete
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openDeleteStaffModal(userId, username) {
+    var modal = document.getElementById('deleteStaffModal');
+    var userInput = document.getElementById('deleteStaffUserId');
+    var confirmInput = document.getElementById('deleteStaffConfirmText');
+    var msg = document.getElementById('deleteStaffMessage');
+    if (!modal || !userInput || !confirmInput || !msg) return;
+    userInput.value = userId;
+    confirmInput.value = '';
+    msg.textContent = 'You are about to delete staff account "' + username + '". This action cannot be undone.';
+    modal.style.display = 'flex';
+}
+function closeDeleteStaffModal() {
+    var modal = document.getElementById('deleteStaffModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+</script>
 {% endblock %}

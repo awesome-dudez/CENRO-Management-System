@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Upload Inspection Fee Receipt{% endblock %}
+{% block content %}
+<style>
+    .form-container { max-width: 600px; margin: 30px auto; padding: 20px; }
+    .form-card { background: white; border: 2px solid #1abc9c; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    .form-card h2 { color: #2d3142; border-bottom: 2px solid #1abc9c; padding-bottom: 12px; margin-bottom: 20px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display:block; margin-bottom:6px; font-weight:600; color:#2d3142; }
+    .form-group input { width:100%; padding:10px 12px; border-radius:5px; border:1px solid #ddd; }
+    .help-text { font-size:13px; color:#666; margin-top:4px; }
+    .btn-row { display:flex; gap:12px; justify-content:flex-end; margin-top:24px; }
+    .btn { padding:10px 24px; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; }
+    .btn-primary { background:#1abc9c; color:white; }
+    .btn-primary:hover { background:#16a085; }
+    .btn-secondary { background:#e0e0e0; color:#2d3142; }
+</style>
+<div class="form-container">
+    <div class="form-card">
+        <h2>Upload Inspection Fee Receipt</h2>
+        <p class="help-text">
+            Please upload a clear photo or scanned copy of the official receipt issued by the Treasurer's Office
+            for the <strong>₱150.00 inspection fee</strong>.
+        </p>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>Inspection Fee Receipt <span style="color:red">*</span></label>
+                <input type="file" name="inspection_fee_receipt" accept="image/*,application/pdf" required>
+                <div class="help-text">Accepted formats: JPG, PNG, or PDF. Max 10MB.</div>
+            </div>
+            <div class="btn-row">
+                <a href="{% url 'services:request_detail' sr.pk %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Upload Receipt</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+

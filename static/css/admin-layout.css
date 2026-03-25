@@ -13,7 +13,7 @@ body.admin-view {
     top: 0;
     left: 0;
     right: 0;
-    height: 60px;
+    height: 70px;
     background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-green) 100%);
     color: var(--white);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
@@ -33,7 +33,7 @@ body.admin-view {
 .admin-logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     color: var(--white);
     text-decoration: none;
     font-weight: 700;
@@ -48,7 +48,45 @@ body.admin-view {
 }
 
 .admin-logo-icon {
-    font-size: 1.5rem;
+    display: inline-flex;
+    width: 60px;
+    height: 60px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0;
+    transform: none;
+}
+
+.admin-logo-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    border-radius: 0;
+    padding: 0;
+}
+
+.admin-logo-text-wrap {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1.05;
+}
+
+.admin-logo-text {
+    font-size: 2rem;
+    font-weight: 800;
+    display: block;
+    line-height: 0.95;
+    letter-spacing: 0.01em;
+}
+
+.admin-logo-subtitle {
+    font-size: 1rem;
+    font-weight: 400;
+    opacity: 0.95;
+    display: block;
+    line-height: 1.05;
+    margin-top: 2px;
 }
 
 .admin-header-right {
@@ -62,21 +100,21 @@ body.admin-view {
     font-weight: 500;
 }
 
+/* Make admin logout button reuse the standard red logout styling */
 .admin-btn-logout {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.2);
+    background-color: var(--status-rejected);
     color: var(--white);
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 500;
+    border-radius: 6px;
     text-decoration: none;
-    transition: background 0.2s;
+    border: none;
 }
 
 .admin-btn-logout:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background-color: #c0392b;
     color: var(--white);
 }
 
@@ -84,12 +122,12 @@ body.admin-view {
 .admin-layout-wrapper {
     display: flex;
     min-height: 100vh;
-    padding-top: 60px;
+    padding-top: 70px;
 }
 
 .admin-sidebar {
     position: fixed;
-    top: 60px;
+    top: 70px;
     left: 0;
     bottom: 0;
     width: 240px;
@@ -159,7 +197,7 @@ body.admin-view {
 .admin-main {
     flex: 1;
     margin-left: 240px;
-    min-height: calc(100vh - 60px);
+    min-height: calc(100vh - 70px);
     background: var(--off-white);
     padding: 28px 32px 48px;
 }

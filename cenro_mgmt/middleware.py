@@ -32,10 +32,10 @@ class LoginRequiredMiddleware:
     - /accounts/logout/ (logout)
     - /accounts/register/ (registration pages)
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
-        
+
         # Pages that don't require login
         self.public_paths = [
             '/accounts/login/',
@@ -45,11 +45,44 @@ class LoginRequiredMiddleware:
             '/static/',
             '/media/',
         ]
-    
+
     def __call__(self, request):
         # Check if path is public
         is_public = any(request.path.startswith(path) for path in self.public_paths)
         # Only access .is_authenticated (safe for AnonymousUser); never .role or .is_approved here
         if not is_public and getattr(request.user, "is_authenticated", False) is False:
             return redirect(f"{reverse('accounts:login')}?next={request.path}")
+        return self.get_response(request)
+
+
+class ForceStaffPasswordChangeMiddleware:
+    """
+    If a staff or consumer account has `must_change_password=True`, force them to complete
+    the password-change flow before accessing any other authenticated pages.
+    Allowed while locked:
+    - force_password_change view
+    - logout
+    - static/media assets
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        # Must be authenticated and flagged for forced change
+        if getattr(user, "is_authenticated", False) and getattr(user, "must_change_password", False):
+            role = getattr(user, "role", None)
+            if role in ("STAFF", "CONSUMER"):
+                path = request.path
+                # Paths that remain accessible while locked
+                allowed_prefixes = (
+                    "/accounts/staff/change-password/",
+                    "/accounts/logout/",
+                    "/static/",
+                    "/media/",
+                )
+                if not any(path.startswith(p) for p in allowed_prefixes):
+                    return redirect("accounts:force_password_change")
+
         return self.get_response(request)

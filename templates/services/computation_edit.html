@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Edit Computation - Request #{{ sr.id }}{% endblock %}
+{% load static %}
+{% block title %}Edit Computation{% endblock %}
 {% block content %}
 <style>
     .form-container { max-width: 700px; margin: 30px auto; padding: 20px; }
@@ -24,11 +25,11 @@
 </style>
 <div class="form-container">
     <div class="form-card">
-        <h2>Edit Computation</h2>
-        <p class="subtitle">Request #{{ sr.id }} &bull; {{ sr.get_service_type_display }} &bull; {{ sr.client_name }}</p>
-        <p class="subtitle" style="margin-top: -12px;">Charges are recalculated automatically when you save.</p>
+        <h2>Edit / Finalize Computation</h2>
+        <p class="subtitle">{{ sr.get_service_type_display }} &bull; {{ sr.client_name }}</p>
+        <p class="subtitle" style="margin-top: -12px;">Charges are recalculated automatically when you save. Finalize to attach your signature and send to the customer.</p>
 
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             {% if form.non_field_errors %}
             <div class="form-error" style="margin-bottom: 12px;">{{ form.non_field_errors }}</div>
@@ -60,23 +61,25 @@
             </div>
 
             <div class="form-group">
-                <div class="form-check">
-                    {{ form.is_outside_bayawan }}
-                    <label for="id_is_outside_bayawan" style="margin:0;">{{ form.is_outside_bayawan.label }}</label>
-                </div>
-                {% if form.is_outside_bayawan.errors %}<div class="form-error">{{ form.is_outside_bayawan.errors.0 }}</div>{% endif %}
-            </div>
-
-            <div class="form-group">
                 <label for="id_distance_km">{{ form.distance_km.label }}</label>
                 {{ form.distance_km }}
                 {% if form.distance_km.help_text %}<p style="font-size:12px;color:#666;margin-top:4px;">{{ form.distance_km.help_text }}</p>{% endif %}
                 {% if form.distance_km.errors %}<div class="form-error">{{ form.distance_km.errors.0 }}</div>{% endif %}
             </div>
 
+            <div class="form-group">
+                <label>Prepared by signature (optional until finalization)</label>
+                <div style="margin-bottom:8px;">
+                    <img src="{% static 'signatures/signature.png' %}" alt="Current signature" style="max-height:80px; display:block;">
+                </div>
+                <input type="file" name="prepared_by_signature" accept="image/*">
+                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a scanned or digital signature that will appear on the computation letter.</p>
+            </div>
+
             <div class="btn-row">
                 <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-secondary">Cancel</a>
-                <button type="submit" class="btn btn-primary">Save &amp; Recalculate</button>
+                <button type="submit" name="action" value="save" class="btn btn-primary">Save &amp; Recalculate</button>
+                <button type="submit" name="action" value="finalize" class="btn btn-primary">Finalize &amp; Send to Customer</button>
             </div>
         </form>
     </div>

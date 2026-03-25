@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Grasscutting Application – Request #{{ sr.id }}{% endblock %}
+{% block title %}Grasscutting Application{% endblock %}
 {% block content %}
 <style>
     .grasscutting-view-page { max-width: 960px; margin: 30px auto; padding: 10px 10px 30px; }
@@ -96,7 +96,7 @@
 
 <div class="grasscutting-view-page">
     <div class="gc-view-header">
-        <a href="{% url 'services:request_detail' sr.pk %}" class="back-link">← Back to Service Request #{{ sr.id }}</a>
+        <a href="{% url 'services:request_detail' sr.pk %}" class="back-link">← Back to Service Request</a>
     </div>
 
     <div class="grasscutting-form-page">

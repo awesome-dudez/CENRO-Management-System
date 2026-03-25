@@ -4,17 +4,28 @@ Icons beside each item; active page highlighted.
 {% endcomment %}
 <aside class="admin-sidebar" id="adminSidebar" role="navigation" aria-label="Admin navigation">
     <nav class="admin-sidebar-nav">
+        {% if user.is_admin %}
         <a href="{% url 'dashboard:admin_dashboard' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}">
             <span class="admin-sidebar-icon" aria-hidden="true">📊</span>
             <span>Dashboard</span>
         </a>
+        {% endif %}
         <a href="{% url 'dashboard:admin_requests' %}" class="admin-sidebar-link {% if 'admin_requests' in request.resolver_match.url_name or 'approve_request' in request.resolver_match.url_name or 'assign_inspector' in request.resolver_match.url_name or 'schedule_desludging' in request.resolver_match.url_name or 'confirm_payment' in request.resolver_match.url_name or 'admin_schedule' in request.resolver_match.url_name %}active{% endif %}">
             <span class="admin-sidebar-icon" aria-hidden="true">📋</span>
             <span>Requests</span>
         </a>
+        <a href="{% url 'services:history' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">📜</span>
+            <span>History</span>
+        </a>
+        {% if user.is_admin %}
         <a href="{% url 'dashboard:admin_membership' %}" class="admin-sidebar-link {% if 'admin_membership' in request.resolver_match.url_name or 'member_service_history' in request.resolver_match.url_name %}active{% endif %}">
             <span class="admin-sidebar-icon" aria-hidden="true">👥</span>
             <span>Members</span>
+        </a>
+        <a href="{% url 'accounts:staff_approval_list' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'staff_approval_list' or request.resolver_match.url_name == 'staff_register' %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">🧑‍💼</span>
+            <span>Staff</span>
         </a>
         <a href="{% url 'dashboard:admin_computation' %}" class="admin-sidebar-link {% if 'admin_computation' in request.resolver_match.url_name or 'generate_receipt' in request.resolver_match.url_name %}active{% endif %}">
             <span class="admin-sidebar-icon" aria-hidden="true">💰</span>
@@ -28,6 +39,7 @@ Icons beside each item; active page highlighted.
             <span class="admin-sidebar-icon" aria-hidden="true">📈</span>
             <span>Analytics</span>
         </a>
+        {% endif %}
     </nav>
     <button type="button" class="admin-sidebar-close" id="adminSidebarClose" aria-label="Close menu" title="Close menu">
         <span aria-hidden="true">×</span>

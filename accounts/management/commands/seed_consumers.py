@@ -9,11 +9,12 @@ Usage: python manage.py seed_consumers
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from accounts.constants import CONSUMER_DEFAULT_RESET_PASSWORD
 from accounts.models import ConsumerProfile
 
 
 User = get_user_model()
-DEFAULT_PASSWORD = "Password123!"
+DEFAULT_PASSWORD = CONSUMER_DEFAULT_RESET_PASSWORD
 
 # 20 realistic names (First, Last) – Philippine-style names
 CONSUMER_DATA = [

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Inspection Details - Request #{{ sr.id }}{% endblock %}
+{% block title %}Inspection Details{% endblock %}
 {% block content %}
 <style>
     .form-container { max-width: 700px; margin: 30px auto; padding: 20px; }
@@ -14,24 +14,75 @@
     .btn-primary { background: #1abc9c; color: white; }
     .btn-primary:hover { background: #16a085; }
     .btn-secondary { background: #e0e0e0; color: #2d3142; }
+
+    /* Signature capture styling for clearer pad edges */
+    .signature-mode-toggle { display:flex; gap:8px; margin-bottom:10px; }
+    .sig-mode-btn {
+        flex:1; padding:8px 14px; border:2px solid #e0e0e0; border-radius:6px;
+        background:#fff; color:#555; font-weight:600; font-size:13px;
+        cursor:pointer; transition:all 0.2s; text-align:center;
+    }
+    .sig-mode-btn:hover { border-color:#1abc9c; color:#1abc9c; }
+    .sig-mode-btn.active { background:#1abc9c; border-color:#1abc9c; color:#fff; }
+    .signature-draw-section { margin-top:10px; padding:10px; border-radius:10px; background:#f4f6f8; border:1px solid #cfd4e3; }
+    .signature-draw-section.hidden { display:none; }
+    #witnessSignaturePad {
+        width:100%; height:180px; border:3px dashed #1abc9c; border-radius:8px;
+        background:#ffffff;
+        box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.2);
+        touch-action:none;
+    }
+    .signature-actions { margin-top:8px; display:flex; justify-content:flex-end; }
+    .signature-clear-btn {
+        padding:6px 14px; border:1px solid #ccc; border-radius:4px;
+        background:#f8f9fa; font-size:13px; cursor:pointer;
+    }
+    .signature-clear-btn:hover { background:#e9ecef; }
 </style>
 <div class="form-container">
     <div class="form-card">
-        <h2>Inspection Details &mdash; Request #{{ sr.id }}</h2>
+        <h2>Inspection Details</h2>
         <p style="color:#666;margin-bottom:20px;">{{ sr.get_service_type_display }} &bull; {{ sr.client_name }} &bull; {{ sr.barangay }}</p>
-        <form method="post" enctype="multipart/form-data">
+        <form method="post">
             {% csrf_token %}
             <div class="form-group">
                 <label>Inspection Date <span style="color:red">*</span></label>
-                <input type="date" name="inspection_date" required value="{{ sr.inspection_date|date:'Y-m-d' }}">
+                <input type="date" name="inspection_date" value="{{ sr.inspection_date|date:'Y-m-d' }}" readonly>
+            </div>
+            <div class="form-group">
+                <label>Inspection Time <span style="color:red">*</span></label>
+                <input type="text" name="inspection_time" readonly value="{{ inspection_time|default:'11:00 AM' }}">
             </div>
             <div class="form-group">
                 <label>Inspected By <span style="color:red">*</span></label>
-                <input type="text" name="inspected_by" required placeholder="Inspector name">
+                <input type="text" name="inspected_by" placeholder="Inspector name" value="{{ inspector_label|default:'Inspector 1' }}" readonly>
+            </div>
+
+            <div class="form-group">
+                <label>Witnessed By (Household/Establishment Representative)</label>
+                <input type="text" name="witnessed_by_name" placeholder="Name">
             </div>
             <div class="form-group">
-                <label>Inspector Signature (upload)</label>
-                <input type="file" name="inspector_signature" accept="image/*">
+                <label>Witness Signature</label>
+                <div class="signature-mode-toggle">
+                    <button type="button" class="sig-mode-btn active" id="witnessSigModeUpload">Upload / Use Camera</button>
+                    <button type="button" class="sig-mode-btn" id="witnessSigModeDraw">Draw Signature</button>
+                </div>
+                <div id="witnessSignatureUploadSection">
+                    <input type="file" name="witnessed_by_signature" id="witnessSignatureFile" accept="image/*">
+                </div>
+                <div id="witnessSignatureDrawSection" class="signature-draw-section hidden">
+                    <canvas id="witnessSignaturePad"></canvas>
+                    <div class="signature-actions">
+                        <button type="button" id="witnessSignatureClearBtn" class="signature-clear-btn">Clear</button>
+                    </div>
+                    <input type="hidden" name="witness_signature_data" id="witnessSignatureData">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Volume Desludged (cubic meters) <span style="color:red">*</span></label>
+                <input type="number" name="cubic_meters" step="1" min="0" placeholder="e.g. 5" required>
             </div>
             <div class="form-group">
                 <label>Remarks</label>
@@ -44,4 +95,121 @@
         </form>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modeUploadBtn = document.getElementById('witnessSigModeUpload');
+    var modeDrawBtn = document.getElementById('witnessSigModeDraw');
+    var uploadSection = document.getElementById('witnessSignatureUploadSection');
+    var drawSection = document.getElementById('witnessSignatureDrawSection');
+    var fileInput = document.getElementById('witnessSignatureFile');
+    var canvas = document.getElementById('witnessSignaturePad');
+    var clearBtn = document.getElementById('witnessSignatureClearBtn');
+    var hiddenInput = document.getElementById('witnessSignatureData');
+
+    function setMode(mode) {
+        var draw = mode === 'draw';
+        if (modeUploadBtn) modeUploadBtn.classList.toggle('active', !draw);
+        if (modeDrawBtn) modeDrawBtn.classList.toggle('active', draw);
+        if (uploadSection) uploadSection.style.display = draw ? 'none' : '';
+        if (drawSection) drawSection.classList.toggle('hidden', !draw);
+        if (draw && fileInput) fileInput.value = '';
+        if (!draw && hiddenInput) hiddenInput.value = '';
+        if (draw && canvas) {
+            // When switching to draw mode, ensure the canvas is calibrated
+            // after it becomes visible.
+            requestAnimationFrame(function() {
+                var evt = document.createEvent('Event');
+                evt.initEvent('resize', true, true);
+                window.dispatchEvent(evt);
+            });
+        }
+    }
+    if (modeUploadBtn) modeUploadBtn.addEventListener('click', function() { setMode('upload'); });
+    if (modeDrawBtn) modeDrawBtn.addEventListener('click', function() { setMode('draw'); });
+
+    if (fileInput) {
+        fileInput.setAttribute('accept', 'image/*');
+        fileInput.setAttribute('capture', 'environment');
+    }
+
+    if (canvas && hiddenInput) {
+        var ctx = canvas.getContext('2d');
+
+        // Calibrate canvas size to match its displayed size when visible,
+        // so pointer positions and strokes line up correctly.
+        function calibrateSignatureCanvas() {
+            var rect = canvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        window.addEventListener('resize', function() {
+            if (!drawSection.classList.contains('hidden')) {
+                calibrateSignatureCanvas();
+            }
+        });
+
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 2;
+        var drawing = false;
+
+        function getPos(e) {
+            var rect = canvas.getBoundingClientRect();
+            var clientX, clientY;
+            if (e.touches && e.touches.length) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+        function start(e) {
+            if (canvas.width === 300 && canvas.height === 150) {
+                // Default size: calibrate the first time the user draws.
+                calibrateSignatureCanvas();
+            }
+            drawing = true;
+            var p = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            e.preventDefault();
+        }
+        function move(e) {
+            if (!drawing) return;
+            var p = getPos(e);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            e.preventDefault();
+        }
+        function end(e) {
+            drawing = false;
+            if (e) e.preventDefault();
+            try {
+                var dataUrl = canvas.toDataURL('image/png');
+                if (dataUrl && dataUrl.length > 200) {
+                    hiddenInput.value = dataUrl;
+                }
+            } catch (err) {}
+        }
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        canvas.addEventListener('mouseup', end);
+        canvas.addEventListener('mouseleave', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        canvas.addEventListener('touchend', end, { passive: false });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                hiddenInput.value = '';
+            });
+        }
+    }
+});
+</script>
 {% endblock %}

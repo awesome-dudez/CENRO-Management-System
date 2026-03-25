@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Computation Letter - Request #{{ sr.id }}{% endblock %}
+{% load static %}
+{% block title %}Computation Letter{% endblock %}
 {% block content %}
 <style>
     .letter-container { max-width: 800px; margin: 30px auto; padding: 20px; }
@@ -20,6 +21,12 @@
     .breakdown-table tr.total td { border-top: 2px solid #2d3142; font-weight: 700; font-size: 16px; color: #1abc9c; }
     .breakdown-table tr.subtotal td { font-weight: 600; color: #555; }
     .breakdown-table tr.free td { color: #27ae60; font-weight: 700; }
+    .breakdown-table tr.used-for-computation td {
+        background: #e8f8f5;
+        border-bottom-color: #c7efe6;
+    }
+    .breakdown-table tr.used-for-computation td:first-child { font-weight: 700; }
+    .breakdown-table tr.used-for-computation td:last-child { font-weight: 700; color: #1abc9c; }
     .print-bar { display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
     .btn { padding: 10px 24px; border: 2px solid transparent; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
     .btn-primary { background: #1abc9c; color: white; border-color: #1abc9c; }
@@ -57,10 +64,10 @@
                 <tr><td>Reference</td><td>ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</td></tr>
                 <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
                 <tr><td>Client</td><td>{{ sr.client_name }}</td></tr>
-                <tr><td>Address</td><td>{{ sr.address }}, {{ sr.barangay }}</td></tr>
+                <tr><td>Address</td><td>{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</td></tr>
                 <tr><td>BAWAD Member</td><td>{% if sr.connected_to_bawad %}Yes{% else %}No{% endif %}</td></tr>
-                <tr><td>Volume</td><td>{{ comp.cubic_meters }} cubic meters</td></tr>
-                {% if comp.distance_km %}<tr><td>Distance from CENRO Office</td><td>{{ comp.distance_km }} km</td></tr>{% endif %}
+                <tr><td>Volume</td><td>{{ comp.cubic_meters|floatformat:0 }} cubic meters</td></tr>
+                {% if comp.distance_km %}<tr><td>Distance from CENRO Office</td><td>{{ comp.distance_km|floatformat:0 }} km</td></tr>{% endif %}
                 <tr><td>Trips</td><td>{{ comp.trips }}</td></tr>
             </table>
         </div>
@@ -68,15 +75,14 @@
         <div class="letter-section">
             <h4>Declogging Fee Breakdown</h4>
             <table class="breakdown-table">
-                <tr><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking }}</td></tr>
+                <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking }}</td></tr>
                 {% for line in comp.get_desludging_breakdown %}
                 <tr><td>{{ line.label }}</td><td>&#8369;{{ line.amount }}</td></tr>
                 {% endfor %}
-                <tr class="subtotal"><td>Desludging Fee (subtotal)</td><td>&#8369;{{ comp.desludging_fee }}</td></tr>
-                {% if comp.distance_charge %}<tr><td>Distance Charge (beyond 20 km from CENRO Office)</td><td>&#8369;{{ comp.distance_charge }}</td></tr>{% endif %}
-                {% if comp.wear_charge %}<tr><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>{% endif %}
-                <tr><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
-                <tr><td>Inspection Fee</td><td>&#8369;{{ comp.inspection_charge }}</td></tr>
+                <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td>&#8369;{{ comp.desludging_fee }}</td></tr>
+                {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee ({{ comp.distance_km|floatformat:0 }} km &#215; &#8369;20 &#215; 2)</td><td>&#8369;{{ comp.distance_travel_fee }}</td></tr>{% endif %}
+                <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>
+                <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
                 {% if comp.payment_status == "FREE" %}
                 <tr class="free"><td>BAWAD Discount (Free Service)</td><td>- &#8369;{{ comp.total_charge }}</td></tr>
                 <tr class="total"><td>TOTAL</td><td>&#8369;0.00</td></tr>
@@ -86,15 +92,32 @@
             </table>
         </div>
 
-        {% if comp.prepared_by %}
         <div style="margin-top: 30px; font-size: 13px; color: #666;">
-            <p>Prepared by: {{ comp.prepared_by.get_full_name }}</p>
+            <div style="margin-bottom:8px;">
+                <img src="{% static 'signatures/signature.png' %}" alt="Prepared by signature" style="max-height:80px; display:block;">
+            </div>
+            <p>Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>
         </div>
+
+        {% if user.is_admin %}
+        {% if not comp.is_finalized %}
+        <form method="post" enctype="multipart/form-data" style="margin-top:16px;">
+            {% csrf_token %}
+            <div class="form-group">
+                <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature (optional until finalization)</label>
+                <input type="file" name="prepared_by_signature" accept="image/*">
+                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a scanned or digital signature that will appear on the computation letter.</p>
+            </div>
+            <div style="margin-top:10px;">
+                <button type="submit" name="action" value="finalize" class="btn btn-primary">Finalize &amp; Send to Customer</button>
+            </div>
+        </form>
+        {% endif %}
         {% endif %}
     </div>
 
     <div class="print-bar">
-        {% if user.is_admin or user.is_staff_member %}
+        {% if user.is_admin %}
         <a href="{% url 'services:edit_computation' sr.pk %}" class="btn btn-edit">Edit Computation</a>
         {% endif %}
         <button type="button" class="btn btn-primary" onclick="window.print()">Print</button>

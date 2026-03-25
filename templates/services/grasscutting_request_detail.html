@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Grasscutting Application – Request #{{ sr.id }}{% endblock %}
+{% block title %}Grasscutting Application{% endblock %}
 {% block content %}
 <style>
     .grasscutting-detail-page { max-width: 960px; margin: 30px auto; padding: 10px 10px 30px; }
@@ -112,7 +112,7 @@
 
 <div class="grasscutting-detail-page">
     <div class="gc-admin-header">
-        <a href="{% url 'services:request_detail' sr.pk %}" class="back-link">← Back to Service Request #{{ sr.id }}</a>
+        <a href="{% url 'services:request_detail' sr.pk %}" class="back-link">← Back to Service Request</a>
         <button type="button" class="edit-toggle-btn" id="gcEditToggle">Edit</button>
     </div>
 
