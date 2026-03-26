@@ -480,6 +480,11 @@ def create_request(request):
                         return redirect(reverse("services:create_request") + "?step=2")
 
                 # Prevent duplicate active requests of the same type for the same owner.
+                # Also expire stale inspection-fee pending requests so they don't block resubmission.
+                try:
+                    ServiceRequest.expire_pending_inspection_fees(days=7)
+                except Exception:
+                    pass
                 existing_open = ServiceRequest.objects.filter(
                     consumer=target_consumer,
                     service_type=form_data.get("service_type", "RESIDENTIAL_DESLUDGING"),
@@ -789,6 +794,12 @@ def grasscutting_application(request):
                     messages.error(request, "Verified account is no longer available. Please verify again on step 2.")
                     return redirect(reverse("services:create_request") + "?step=2")
                 requested_by_user = request.user
+
+            # Also expire stale inspection-fee pending requests so they don't block resubmission.
+            try:
+                ServiceRequest.expire_pending_inspection_fees(days=7)
+            except Exception:
+                pass
 
             existing_open = ServiceRequest.objects.filter(
                 consumer=target_consumer,
@@ -1254,6 +1265,12 @@ def reverse_geocode(request):
 
 @login_required
 def request_list(request):
+    # Cleanup before listing requests (keeps the workflow from accumulating stale pending items).
+    try:
+        ServiceRequest.expire_pending_inspection_fees(days=7)
+    except Exception:
+        pass
+
     if request.user.is_admin():
         requests_qs = ServiceRequest.objects.all().select_related("consumer").order_by("-created_at")
     elif request.user.is_staff_member():
@@ -1284,6 +1301,12 @@ def request_list(request):
 
 @login_required
 def request_detail(request, pk):
+    # Cleanup so customers/admins see the latest status (e.g., inspection-fee expired).
+    try:
+        ServiceRequest.expire_pending_inspection_fees(days=7)
+    except Exception:
+        pass
+
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     is_admin = request.user.is_admin()
     is_staff = request.user.is_staff_member()

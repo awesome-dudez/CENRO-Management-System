@@ -26,6 +26,13 @@ def _get_dashboard_context(request):
     today = date.today()
     start_of_month = today.replace(day=1)
 
+    # Keep the admin workflow clean: expire inspection-fee pending requests older than a week.
+    try:
+        ServiceRequest.expire_pending_inspection_fees(days=7)
+    except Exception:
+        # Never block page rendering if cleanup fails.
+        pass
+
     total_requests = ServiceRequest.objects.count()
     pending_count = ServiceRequest.objects.filter(
         status__in=[ServiceRequest.Status.SUBMITTED, ServiceRequest.Status.UNDER_REVIEW]
@@ -455,6 +462,12 @@ def analytics_api(request):
 @role_required("ADMIN", "STAFF")
 def admin_requests(request):
     """Admin requests view with sub-tabs"""
+    # Cleanup before we build the Pending tab list.
+    try:
+        ServiceRequest.expire_pending_inspection_fees(days=7)
+    except Exception:
+        pass
+
     tab = request.GET.get("tab")
     if not tab:
         # For staff/inspectors, default to the Inspection tab since

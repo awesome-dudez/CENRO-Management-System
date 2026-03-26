@@ -19,6 +19,7 @@ class ServiceRequest(models.Model):
         SUBMITTED = "SUBMITTED", "Submitted"
         INSPECTION_FEE_DUE = "INSPECTION_FEE_DUE", "Inspection Fee Due"
         INSPECTION_FEE_AWAITING_VERIFICATION = "INSPECTION_FEE_AWAITING_VERIFICATION", "Inspection Fee Awaiting Verification"
+        EXPIRED = "EXPIRED", "Expired"
         UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
         INSPECTION_SCHEDULED = "INSPECTION_SCHEDULED", "Inspection Scheduled"
         INSPECTED = "INSPECTED", "Inspected"
@@ -107,6 +108,30 @@ class ServiceRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.get_service_type_display()} - {self.consumer} ({self.barangay})"
+
+    @classmethod
+    def expire_pending_inspection_fees(cls, days: int = 7) -> int:
+        """
+        Expire inspection-fee pending requests that haven't been verified/paid yet.
+
+        Prevents the admin "Pending" tab from accumulating stale requests.
+        """
+        cutoff = timezone.now() - timedelta(days=days)
+        pending_statuses = [
+            cls.Status.INSPECTION_FEE_DUE,
+            cls.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+        ]
+        expired_qs = cls.objects.filter(
+            inspection_fee_paid=False,
+            status__in=pending_statuses,
+            created_at__lt=cutoff,
+        )
+        expired_ids = list(expired_qs.values_list("id", flat=True))
+        if not expired_ids:
+            return 0
+
+        cls.objects.filter(id__in=expired_ids).update(status=cls.Status.EXPIRED)
+        return len(expired_ids)
 
     @property
     def is_within_bayawan(self) -> bool:
