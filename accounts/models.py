@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import random
+import secrets
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 
 class User(AbstractUser):
@@ -92,4 +96,44 @@ class ConsumerProfile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.get_full_name()} - {self.barangay or self.municipality}"
+
+
+class PasswordResetToken(models.Model):
+    """One-time password reset token stored in the database."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_tokens",
+    )
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    code = models.CharField(max_length=6, blank=True)   # 6-digit OTP alternative
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @classmethod
+    def create_for_user(cls, user, minutes: int = 15) -> "PasswordResetToken":
+        """Invalidate any existing tokens for this user, then issue a fresh one."""
+        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+        otp = "".join(str(random.randint(0, 9)) for _ in range(6))
+        return cls.objects.create(
+            user=user,
+            token=secrets.token_urlsafe(40),
+            code=otp,
+            expires_at=timezone.now() + timezone.timedelta(minutes=minutes),
+        )
+
+    def is_valid(self) -> bool:
+        return not self.is_used and timezone.now() <= self.expires_at
+
+    def invalidate(self) -> None:
+        self.is_used = True
+        self.save(update_fields=["is_used"])
+
+    def __str__(self) -> str:
+        return f"ResetToken({self.user.username}, expires={self.expires_at:%Y-%m-%d %H:%M})"
 

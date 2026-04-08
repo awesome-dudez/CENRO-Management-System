@@ -1,17 +1,28 @@
 import logging
 import random
 
+from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.utils import IntegrityError, OperationalError, ProgrammingError
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
-from .forms import ConsumerRegistrationForm, LoginForm, ProfileUpdateForm, StaffRegistrationForm
-from .models import ConsumerProfile, User
+from .forms import (
+    ConsumerRegistrationForm,
+    ForgotPasswordForm,
+    LoginForm,
+    ProfileUpdateForm,
+    SetNewPasswordForm,
+    StaffRegistrationForm,
+    VerifyCodeForm,
+)
+from .models import ConsumerProfile, PasswordResetToken, User
 
 logger = logging.getLogger(__name__)
 
@@ -321,6 +332,164 @@ def profile(request):
 def logout_view(request):
     logout(request)
     return redirect("accounts:login")
+
+
+# ---------------------------------------------------------------------------
+# Password Reset via secure database token
+# ---------------------------------------------------------------------------
+
+def forgot_password_view(request):
+    """Step 1 — user enters email; we create a DB token and email a reset link."""
+    if request.method == "POST":
+        form = ForgotPasswordForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data["username"].strip()
+            email = form.cleaned_data["email"].strip().lower()
+
+            # Check username exists first
+            try:
+                user_by_username = User.objects.get(username__iexact=username)
+            except User.DoesNotExist:
+                user_by_username = None
+
+            if user_by_username is None:
+                form.add_error("username", "No account found with this username.")
+                return render(request, "accounts/forgot_password.html", {"form": form})
+
+            # Check email matches that account
+            if user_by_username.email.lower() != email:
+                form.add_error("email", "This email does not match the account for that username.")
+                return render(request, "accounts/forgot_password.html", {"form": form})
+
+            user = user_by_username
+
+            if user is not None:
+                # Cooldown: one token per 60 seconds per user to prevent spam
+                latest = (
+                    PasswordResetToken.objects
+                    .filter(user=user, is_used=False)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if latest and (timezone.now() - latest.created_at).total_seconds() < 60:
+                    messages.warning(
+                        request,
+                        "A reset email was already sent recently. Please wait a moment before requesting another.",
+                    )
+                    return render(request, "accounts/forgot_password.html", {"form": form})
+
+                reset_token = PasswordResetToken.create_for_user(user, minutes=15)
+                reset_url = request.build_absolute_uri(
+                    f"/accounts/reset-password/{reset_token.token}/"
+                )
+                verify_url = request.build_absolute_uri("/accounts/verify-code/")
+
+                try:
+                    send_mail(
+                        subject="CENRO Management System — Password Reset",
+                        message=(
+                            f"Hello {user.get_full_name() or user.username},\n\n"
+                            f"We received a request to reset your CENRO Management System password.\n\n"
+                            f"Please reset your password by clicking this link:\n"
+                            f"  {reset_url}\n\n"
+                            f"Or enter this one-time verification code on the site:\n"
+                            f"  {reset_token.code}\n\n"
+                            f"To enter the code manually, go to:\n"
+                            f"  {verify_url}\n\n"
+                            f"This code expires in 15 minutes.\n\n"
+                            f"If you did not request a password reset, you can safely ignore this email.\n\n"
+                            f"— CENRO Management System, Bayawan City"
+                        ),
+                        from_email=django_settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[user.email],
+                        fail_silently=False,
+                    )
+                except Exception as e:
+                    logger.exception("Failed to send password reset email: %s", e)
+                    messages.error(
+                        request,
+                        "Could not send the email. Please check the server email configuration or contact the administrator.",
+                    )
+                    return render(request, "accounts/forgot_password.html", {"form": form})
+
+            # Always show the same message — do NOT reveal if email exists
+            messages.success(
+                request,
+                "If that email address is registered, a password reset email has been sent. "
+                "Check your inbox (and spam folder), then enter the code below.",
+            )
+            return redirect("accounts:verify_code")
+    else:
+        form = ForgotPasswordForm()
+
+    return render(request, "accounts/forgot_password.html", {"form": form})
+
+
+def verify_code_view(request):
+    """Alternative step: user enters the 6-digit code from the email instead of clicking the link."""
+    if request.method == "POST":
+        form = VerifyCodeForm(request.POST)
+        if form.is_valid():
+            code = form.cleaned_data["code"]
+            try:
+                reset_token = (
+                    PasswordResetToken.objects
+                    .select_related("user")
+                    .filter(code=code, is_used=False)
+                    .order_by("-created_at")
+                    .first()
+                )
+            except Exception:
+                reset_token = None
+
+            if reset_token is None or not reset_token.is_valid():
+                form.add_error("code", "This code is invalid or has expired. Please request a new reset email.")
+            else:
+                return redirect("accounts:reset_password", token=reset_token.token)
+    else:
+        form = VerifyCodeForm()
+
+    return render(request, "accounts/verify_code.html", {"form": form})
+
+
+def reset_password_view(request, token: str):
+    """Step 2 — validate token from URL, let user set a new password."""
+    try:
+        reset_token = PasswordResetToken.objects.select_related("user").get(token=token)
+    except PasswordResetToken.DoesNotExist:
+        messages.error(request, "This password reset link is invalid or has already been used.")
+        return redirect("accounts:forgot_password")
+
+    if not reset_token.is_valid():
+        messages.error(
+            request,
+            "This password reset link has expired or already been used. Please request a new one.",
+        )
+        return redirect("accounts:forgot_password")
+
+    if request.method == "POST":
+        form = SetNewPasswordForm(request.POST)
+        if form.is_valid():
+            user = reset_token.user
+            user.set_password(form.cleaned_data["new_password1"])
+            user.must_change_password = False
+            user.save(update_fields=["password", "must_change_password"])
+
+            # Invalidate the token so it cannot be reused
+            reset_token.invalidate()
+
+            messages.success(
+                request,
+                "Your password has been reset successfully. Please sign in with your new password.",
+            )
+            return redirect("accounts:login")
+    else:
+        form = SetNewPasswordForm()
+
+    return render(request, "accounts/reset_password_new.html", {
+        "form": form,
+        "token": token,
+    })
 
 
 @login_required

@@ -240,10 +240,97 @@
     }
     .map-instructions {
         padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107;
-        border-radius: 5px; margin-bottom: 15px; font-size: 13px; color: #856404;
-        display: flex; align-items: center; gap: 10px;
+        border-radius: 5px; margin-bottom: 10px; font-size: 13px; color: #856404;
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     }
+    .map-instructions-text { flex: 1 1 220px; min-width: 0; line-height: 1.45; }
     .map-instructions.success { background: #d4edda; border-left-color: #28a745; color: #155724; }
+    .map-location-actions {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
+        margin-bottom: 14px;
+    }
+    .btn-map-locate {
+        padding: 10px 18px; border: 2px solid #1abc9c; background: #fff; color: #117a65;
+        border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+        transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .btn-map-locate:hover:not(:disabled) {
+        background: #1abc9c; color: #fff; border-color: #16a085;
+    }
+    .btn-map-locate:disabled { opacity: 0.7; cursor: wait; }
+    .btn-clear-pin {
+        padding: 10px 18px; border: 2px solid #dc3545; background: #fff; color: #dc3545;
+        border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+        transition: background 0.2s, color 0.2s;
+        display: none;
+    }
+    .btn-clear-pin.visible { display: inline-flex; align-items: center; gap: 6px; }
+    .btn-clear-pin:hover { background: #dc3545; color: #fff; }
+    .map-location-hint {
+        font-size: 13px; color: #555; flex: 1 1 200px; min-width: 0; line-height: 1.4;
+    }
+
+    /* ── Layer Switcher ── */
+    .ls-wrap {
+        position: relative;
+        display: inline-block;
+    }
+    .ls-btn {
+        display: flex; align-items: center; gap: 6px;
+        padding: 7px 13px;
+        background: #fff;
+        border: none; border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.30);
+        font-size: 13px; font-weight: 600; color: #333;
+        cursor: pointer; white-space: nowrap;
+        transition: background 0.15s;
+        line-height: 1;
+    }
+    .ls-btn:hover { background: #f5f5f5; }
+    .ls-panel {
+        display: none;
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 0;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+        padding: 14px 14px 10px;
+        min-width: 200px;
+        z-index: 9999;
+    }
+    .ls-panel.ls-open { display: block; }
+    .ls-panel-title {
+        font-size: 11px; font-weight: 700; color: #888;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        margin-bottom: 12px;
+    }
+    .ls-options { display: flex; gap: 10px; }
+    .ls-opt {
+        display: flex; flex-direction: column; align-items: center;
+        cursor: pointer; border-radius: 8px;
+        border: 2.5px solid transparent;
+        padding: 3px;
+        transition: border-color 0.15s;
+        background: none;
+    }
+    .ls-opt:hover { border-color: #ccc; }
+    .ls-opt.ls-active { border-color: #1abc9c; }
+    .ls-thumb {
+        width: 68px; height: 52px; border-radius: 6px;
+        overflow: hidden; background-size: cover; background-position: center;
+    }
+    .ls-thumb-default {
+        background-image: url('https://a.basemaps.cartocdn.com/rastertiles/voyager/13/6891/3880.png');
+    }
+    .ls-thumb-satellite {
+        background-image: url('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/13/3880/6891');
+    }
+    .ls-opt-label {
+        font-size: 11px; font-weight: 600; color: #444;
+        margin-top: 5px; text-align: center;
+    }
+    .ls-opt.ls-active .ls-opt-label { color: #1abc9c; }
     .map-status-badge {
         display: inline-block; padding: 4px 12px; background: #1abc9c; color: white;
         border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: auto;
@@ -256,6 +343,41 @@
     }
     .location-validation.valid { background: #d4edda; color: #155724; }
     .location-validation.invalid { background: #f8d7da; color: #721c24; }
+
+    /* Grass-cutting: outside-city block overlay */
+    #gcOutsideOverlay {
+        display: none;
+        position: absolute;
+        inset: 0;
+        z-index: 700;
+        pointer-events: none;
+        align-items: center;
+        justify-content: center;
+    }
+    #gcOutsideOverlay.active {
+        display: flex;
+    }
+    .gc-outside-msg {
+        background: rgba(220,53,69,0.93);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 12px 22px;
+        border-radius: 10px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+        max-width: 300px;
+        text-align: center;
+        animation: gcOutsideFadeIn 0.18s ease;
+    }
+    @keyframes gcOutsideFadeIn {
+        from { opacity: 0; transform: scale(0.9); }
+        to   { opacity: 1; transform: scale(1); }
+    }
+    /* Dim the outside area: tint the map container with a red border */
+    #map-container.gc-outside-flash {
+        border-color: #dc3545;
+        transition: border-color 0.3s;
+    }
 
     /* Summary table */
     .summary-table { width: 100%; border-collapse: collapse; }
@@ -509,11 +631,23 @@
                 <!-- Pin on Map: map only -->
                 <div class="location-pin-section" id="locationPinSection">
                     <div class="map-instructions" id="mapInstructions">
-                        <span>Click the map to drop a pin, then drag to refine.</span>
+                        <span class="map-instructions-text">Tap or click the map to <strong>pinpoint</strong> the service location, or use <strong>Use my current location</strong> below. Drag the pin to fine-tune.</span>
                         <span class="map-status-badge" id="mapStatusBadge">Waiting for pin</span>
+                    </div>
+                    <div class="map-location-actions">
+                        <button type="button" class="btn-map-locate" id="btnUseMyLocation" aria-label="Place pin at my current GPS location">
+                            Use my current location
+                        </button>
+                        <button type="button" class="btn-clear-pin" id="btnClearPin" aria-label="Remove the pinned location">
+                            &#10005; Clear Pin
+                        </button>
+                        <span class="map-location-hint" id="mapLocateHint" role="status" aria-live="polite"></span>
                     </div>
                     <div id="map-container">
                         <div id="map" style="width:100%;height:100%;"></div>
+                        <div id="gcOutsideOverlay">
+                            <div class="gc-outside-msg">&#128683; This location is outside Bayawan City.<br>Grass-cutting requests must be within city limits.</div>
+                        </div>
                         <div id="pin-info-card" class="pin-info-card">
                             <div class="pin-info-title" id="pinInfoBarangay">Select a location</div>
                             <div class="pin-info-coords" id="pinInfoCoords">--</div>
@@ -1283,8 +1417,73 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!latField || !lonField) return;
         if (addressInput) addressInput.addEventListener('input', function() { addressTouched = true; });
 
-        mapInstance = L.map('map', { zoomControl: true, attributionControl: true }).setView([BAYAWAN_CENTER.lat, BAYAWAN_CENTER.lon], 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 19 }).addTo(mapInstance);
+        mapInstance = L.map('map', { zoomControl: true, attributionControl: true, maxZoom: 20 }).setView([BAYAWAN_CENTER.lat, BAYAWAN_CENTER.lon], 13);
+
+        // ---- Layer definitions (all free, no API key) ----
+        // maxNativeZoom: highest zoom the tile server has tiles for this area.
+        // Leaflet will upscale (stretch) those tiles when the user zooms beyond that
+        // instead of requesting missing tiles and showing "Map data not yet available".
+        var _streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            maxZoom: 22, maxNativeZoom: 20
+        });
+        var _satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+            maxZoom: 22, maxNativeZoom: 18
+        });
+        var _labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '', maxZoom: 22, maxNativeZoom: 18, opacity: 0.85
+        });
+
+        // Start on satellite view
+        _satLayer.addTo(mapInstance);
+        _labelsLayer.addTo(mapInstance);
+
+        // ---- Layer Switcher Control (bottom-left) ----
+        (function buildLayerSwitcher(map) {
+            var mode = 'satellite';
+            var Ctrl = L.Control.extend({
+                options: { position: 'bottomleft' },
+                onAdd: function() {
+                    var c = L.DomUtil.create('div', 'ls-wrap');
+                    L.DomEvent.disableClickPropagation(c);
+                    L.DomEvent.disableScrollPropagation(c);
+                    c.innerHTML =
+                        '<div class="ls-panel" id="lsPanel_map">' +
+                            '<div class="ls-panel-title">Map type</div>' +
+                            '<div class="ls-options">' +
+                                '<button type="button" class="ls-opt" id="lsD_map"><div class="ls-thumb ls-thumb-default"></div><span class="ls-opt-label">Default</span></button>' +
+                                '<button type="button" class="ls-opt ls-active" id="lsS_map"><div class="ls-thumb ls-thumb-satellite"></div><span class="ls-opt-label">Satellite</span></button>' +
+                            '</div>' +
+                        '</div>' +
+                        '<button class="ls-btn" type="button" aria-label="Switch map layer">' +
+                            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>' +
+                            'Layers' +
+                        '</button>';
+                    var panel = c.querySelector('#lsPanel_map');
+                    var optD = c.querySelector('#lsD_map');
+                    var optS = c.querySelector('#lsS_map');
+                    c.querySelector('.ls-btn').addEventListener('click', function(e) { e.stopPropagation(); panel.classList.toggle('ls-open'); });
+                    document.addEventListener('click', function() { panel.classList.remove('ls-open'); });
+                    optD.addEventListener('click', function() {
+                        if (mode === 'default') return;
+                        mode = 'default';
+                        map.removeLayer(_satLayer); map.removeLayer(_labelsLayer); _streetLayer.addTo(map);
+                        optD.classList.add('ls-active'); optS.classList.remove('ls-active');
+                        panel.classList.remove('ls-open');
+                    });
+                    optS.addEventListener('click', function() {
+                        if (mode === 'satellite') return;
+                        mode = 'satellite';
+                        map.removeLayer(_streetLayer); _satLayer.addTo(map); _labelsLayer.addTo(map);
+                        optS.classList.add('ls-active'); optD.classList.remove('ls-active');
+                        panel.classList.remove('ls-open');
+                    });
+                    return c;
+                }
+            });
+            new Ctrl().addTo(map);
+        })(mapInstance);
 
         loadBarangayGeoJSON().then(function() {
             if (barangayGeoJSON && barangayGeoJSON.features) {
@@ -1299,7 +1498,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (marker) {
                 var pos = marker.getLatLng();
-                handleLocationChange(pos.lat, pos.lng, { latField, lonField, barangayInput, addressInput });
+                // Now that the city boundary is loaded, validate any auto-placed pin.
+                // For grass-cutting: remove the pin if it landed outside city limits.
+                if (gcRestrictToCity && cityBoundaryFeature && !isInsideBayawanCity(pos.lat, pos.lng)) {
+                    marker.remove();
+                    marker = null;
+                    lastValidLat = null; lastValidLon = null;
+                    if (latField) latField.value = '';
+                    if (lonField) lonField.value = '';
+                    var hint = document.getElementById('mapLocateHint');
+                    if (hint) hint.textContent = 'Your saved location is outside Bayawan City. Please tap inside the city boundary on the map to set the grass-cutting location.';
+                    showGcOutsideMsg();
+                } else {
+                    handleLocationChange(pos.lat, pos.lng, { latField, lonField, barangayInput, addressInput });
+                }
             }
         });
 
@@ -1309,7 +1521,26 @@ document.addEventListener('DOMContentLoaded', function() {
             iconSize: [30, 42], iconAnchor: [15, 42], popupAnchor: [0, -36],
         });
 
+        // Tracks the last accepted lat/lon so the drag snap-back knows where to return
+        var lastValidLat = null, lastValidLon = null;
+
+        function gcBlockOutside(lat, lon, hintMsg) {
+            // Show the red overlay and an optional hint message, then scroll the map to the rejected point.
+            showGcOutsideMsg();
+            var hint = document.getElementById('mapLocateHint');
+            if (hint) hint.textContent = hintMsg || 'That location is outside Bayawan City. Grass-cutting requests must be within city limits.';
+            if (mapInstance) mapInstance.panTo([lat, lon]);
+        }
+
         window.placeMarker = function placeMarker(lat, lon, panToPin) {
+            // For grass-cutting: once the city-boundary GeoJSON is loaded, reject any
+            // pin placement outside Bayawan City — regardless of how it was triggered
+            // (map click, "Use my location" button, owner profile auto-place, etc.).
+            if (gcRestrictToCity && cityBoundaryFeature && !isInsideBayawanCity(lat, lon)) {
+                gcBlockOutside(lat, lon, 'That location is outside Bayawan City. Grass-cutting requests must be within city limits. Please choose a location inside the city boundary.');
+                return;
+            }
+
             if (!marker) {
                 marker = L.marker([lat, lon], { draggable: true, icon: pinIcon, autoPan: true }).addTo(mapInstance);
                 marker.on('drag', function() {
@@ -1320,16 +1551,123 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 marker.on('dragend', function() {
                     const pos = marker.getLatLng();
+                    // For grass-cutting: snap the pin back if dragged outside city boundary
+                    if (gcRestrictToCity && cityBoundaryFeature && !isInsideBayawanCity(pos.lat, pos.lng)) {
+                        if (lastValidLat !== null) marker.setLatLng([lastValidLat, lastValidLon]);
+                        gcBlockOutside(pos.lat, pos.lng, 'You cannot drag the pin outside Bayawan City for grass-cutting requests.');
+                        return;
+                    }
+                    lastValidLat = pos.lat; lastValidLon = pos.lng;
                     handleLocationChange(pos.lat, pos.lng, { latField, lonField, barangayInput, addressInput });
                 });
             } else { marker.setLatLng([lat, lon]); }
+
+            lastValidLat = lat; lastValidLon = lon;
             if (panToPin) mapInstance.panTo([lat, lon]);
+            showClearPin(true);
             handleLocationChange(lat, lon, { latField, lonField, barangayInput, addressInput });
         }
 
-        mapInstance.on('click', function(e) { placeMarker(e.latlng.lat, e.latlng.lng, true); });
+        var gcOutsideOverlay = document.getElementById('gcOutsideOverlay');
+        var gcOutsideTimer = null;
+        var gcRestrictToCity = ("{{ form_data.service_type|default:'' }}" === 'GRASS_CUTTING');
+
+        function showGcOutsideMsg() {
+            if (!gcOutsideOverlay) return;
+            clearTimeout(gcOutsideTimer);
+            gcOutsideOverlay.classList.add('active');
+            var mapContainer = document.getElementById('map-container');
+            if (mapContainer) mapContainer.classList.add('gc-outside-flash');
+            gcOutsideTimer = setTimeout(function() {
+                gcOutsideOverlay.classList.remove('active');
+                if (mapContainer) mapContainer.classList.remove('gc-outside-flash');
+            }, 2500);
+        }
+
+        mapInstance.on('click', function(e) {
+            if (gcRestrictToCity) {
+                var inside = isInsideBayawanCity(e.latlng.lat, e.latlng.lng);
+                if (!inside) { showGcOutsideMsg(); return; }
+            }
+            placeMarker(e.latlng.lat, e.latlng.lng, true);
+        });
         mapInstance.on('move', updatePinCardPosition);
         mapInstance.on('zoom', updatePinCardPosition);
+
+        var btnUseMyLocation = document.getElementById('btnUseMyLocation');
+        var btnClearPin = document.getElementById('btnClearPin');
+        var mapLocateHint = document.getElementById('mapLocateHint');
+        var locateRequestInProgress = false;
+
+        function showClearPin(show) {
+            if (btnClearPin) btnClearPin.classList.toggle('visible', !!show);
+        }
+
+        if (btnClearPin) {
+            btnClearPin.addEventListener('click', function() {
+                if (marker) { marker.remove(); marker = null; }
+                lastValidLat = null; lastValidLon = null;
+                if (latField) latField.value = '';
+                if (lonField) lonField.value = '';
+                if (barangayInput) { barangayInput.value = ''; barangayInput.dispatchEvent(new Event('change', { bubbles: true })); }
+                isLocationValid = false;
+                showClearPin(false);
+                var card = document.getElementById('pin-info-card');
+                if (card) card.classList.remove('active');
+                var badge = document.getElementById('mapStatusBadge');
+                if (badge) { badge.textContent = 'Waiting for pin'; badge.className = 'map-status-badge'; }
+                var validation = document.getElementById('locationValidation');
+                if (validation) { validation.textContent = 'Place the pin inside Bayawan City to continue.'; validation.className = 'location-validation'; }
+                var instructions = document.getElementById('mapInstructions');
+                if (instructions) instructions.classList.remove('success');
+                if (mapLocateHint) mapLocateHint.textContent = '';
+            });
+        }
+        function setLocateButtonLoading(loading) {
+            if (!btnUseMyLocation) return;
+            btnUseMyLocation.disabled = !!loading;
+            btnUseMyLocation.setAttribute('aria-busy', loading ? 'true' : 'false');
+            btnUseMyLocation.textContent = loading ? 'Getting location…' : 'Use my current location';
+        }
+        if (btnUseMyLocation) {
+            btnUseMyLocation.addEventListener('click', function() {
+                if (locateRequestInProgress) return;
+                if (mapLocateHint) mapLocateHint.textContent = '';
+                if (!navigator.geolocation) {
+                    if (mapLocateHint) mapLocateHint.textContent = 'Your browser does not support GPS location. Tap the map to pinpoint instead.';
+                    return;
+                }
+                locateRequestInProgress = true;
+                setLocateButtonLoading(true);
+                if (mapLocateHint) mapLocateHint.textContent = 'If your browser asks, allow location access.';
+                function onFound(e) {
+                    locateRequestInProgress = false;
+                    setLocateButtonLoading(false);
+                    // For grass cutting: reject the GPS position if it is outside Bayawan City
+                    if (gcRestrictToCity && !isInsideBayawanCity(e.latlng.lat, e.latlng.lng)) {
+                        if (mapLocateHint) mapLocateHint.textContent = 'Your current location is outside Bayawan City. Grass-cutting requests must be within city limits. Tap inside the city boundary on the map to pinpoint.';
+                        mapInstance.setView(e.latlng, 13);
+                        return;
+                    }
+                    if (mapLocateHint) mapLocateHint.textContent = '';
+                    placeMarker(e.latlng.lat, e.latlng.lng, false);
+                    mapInstance.setView(e.latlng, 17);
+                }
+                function onErr(err) {
+                    locateRequestInProgress = false;
+                    setLocateButtonLoading(false);
+                    var code = err && typeof err.code === 'number' ? err.code : -1;
+                    var msg = 'Could not get your location. Tap the map to pinpoint instead.';
+                    if (code === 1) msg = 'Location permission denied. Enable it in browser settings, or tap the map to pinpoint.';
+                    else if (code === 2) msg = 'Position unavailable. Try again or pinpoint on the map.';
+                    else if (code === 3) msg = 'Location timed out. Try again or pinpoint on the map.';
+                    if (mapLocateHint) mapLocateHint.textContent = msg;
+                }
+                mapInstance.once('locationfound', onFound);
+                mapInstance.once('locationerror', onErr);
+                mapInstance.locate({ setView: false, enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
+            });
+        }
 
         if (latField.value && lonField.value) {
             const lat = parseFloat(latField.value);
@@ -1343,6 +1681,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 var locMode = (document.getElementById('id_location_mode') || {}).value || 'PIN';
                 if (locMode === 'PIN') {
                     if (!latField.value || !lonField.value) { evt.preventDefault(); alert('Please drop a pin on the map before continuing.'); return; }
+                    // Grass-cutting: enforce inside Bayawan City at submit time too
+                    if (gcRestrictToCity) {
+                        var pinLat = parseFloat(latField.value);
+                        var pinLon = parseFloat(lonField.value);
+                        if (!isInsideBayawanCity(pinLat, pinLon)) {
+                            evt.preventDefault();
+                            alert('The pinned location is outside Bayawan City. Grass-cutting requests can only be submitted for locations within the city. Please move the pin inside the city boundary.');
+                            showGcOutsideMsg();
+                            return;
+                        }
+                    }
                     if (!barangayInput.value || !barangayInput.value.trim()) barangayInput.value = 'Outside Bayawan City';
                 } else {
                     var bar = (barangayInput && barangayInput.value) ? barangayInput.value.trim() : '';

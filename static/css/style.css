@@ -1811,3 +1811,113 @@ body.admin-view .notif-bell-wrapper {
     background-color: #f8f9fa;
 }
 
+/* ============================================================
+   MAP LAYER SWITCHER  (shared across all Leaflet maps)
+   ============================================================ */
+.ls-container {
+    font-family: inherit;
+    user-select: none;
+}
+.ls-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    background: #fff;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.28);
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+.ls-toggle:hover { background: #f0f0f0; }
+.ls-toggle svg { flex-shrink: 0; }
+.ls-panel {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+    padding: 12px 14px 10px;
+    min-width: 180px;
+    z-index: 9999;
+}
+.ls-panel.open { display: block; }
+.ls-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #555;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.ls-options {
+    display: flex;
+    gap: 12px;
+}
+.ls-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+}
+.ls-option:hover { border-color: #aaa; }
+.ls-option.active { border-color: #1abc9c; }
+.ls-thumb {
+    width: 64px;
+    height: 48px;
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+}
+/* Default/street thumb: light map appearance */
+.ls-thumb-default {
+    background: #e8f4f8;
+    background-image:
+        linear-gradient(#cde 1px, transparent 1px),
+        linear-gradient(90deg, #cde 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.6) 2px, transparent 2px),
+        linear-gradient(90deg, rgba(255,255,255,0.6) 2px, transparent 2px);
+    background-size: 24px 24px, 24px 24px, 8px 8px, 8px 8px;
+}
+.ls-thumb-default::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(35deg, transparent 40%, #b8d4e8 40%, #b8d4e8 44%, transparent 44%),
+        linear-gradient(120deg, transparent 60%, #c8e0b0 60%);
+}
+/* Satellite thumb: aerial photo appearance */
+.ls-thumb-satellite {
+    background: #3a5a3a;
+    background-image:
+        radial-gradient(ellipse 30px 20px at 20% 30%, #4a7a4a 0%, transparent 100%),
+        radial-gradient(ellipse 20px 30px at 70% 60%, #5a8a5a 0%, transparent 100%),
+        radial-gradient(ellipse 40px 15px at 50% 80%, #6a7a50 0%, transparent 100%),
+        linear-gradient(160deg, #2a4a2a 0%, #3d6b3d 40%, #4a6a3a 100%);
+}
+.ls-thumb-satellite::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(210deg, transparent 55%, rgba(180,160,100,0.4) 100%);
+}
+.ls-option span {
+    font-size: 11px;
+    margin-top: 5px;
+    font-weight: 600;
+    color: #444;
+}
+.ls-option.active span { color: #1abc9c; }
+

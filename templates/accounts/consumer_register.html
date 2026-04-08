@@ -201,6 +201,21 @@
 </div>
 
 <style>
+    .ls-wrap { position: relative; display: inline-block; }
+    .ls-btn { display: flex; align-items: center; gap: 6px; padding: 7px 13px; background: #fff; border: none; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.30); font-size: 13px; font-weight: 600; color: #333; cursor: pointer; white-space: nowrap; transition: background 0.15s; line-height: 1; }
+    .ls-btn:hover { background: #f5f5f5; }
+    .ls-panel { display: none; position: absolute; bottom: calc(100% + 8px); left: 0; background: #fff; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.22); padding: 14px 14px 10px; min-width: 200px; z-index: 9999; }
+    .ls-panel.ls-open { display: block; }
+    .ls-panel-title { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+    .ls-options { display: flex; gap: 10px; }
+    .ls-opt { display: flex; flex-direction: column; align-items: center; cursor: pointer; border-radius: 8px; border: 2.5px solid transparent; padding: 3px; transition: border-color 0.15s; background: none; }
+    .ls-opt:hover { border-color: #ccc; }
+    .ls-opt.ls-active { border-color: #1abc9c; }
+    .ls-thumb { width: 68px; height: 52px; border-radius: 6px; overflow: hidden; background-size: cover; background-position: center; }
+    .ls-thumb-default { background-image: url('https://a.basemaps.cartocdn.com/rastertiles/voyager/13/6891/3880.png'); }
+    .ls-thumb-satellite { background-image: url('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/13/3880/6891'); }
+    .ls-opt-label { font-size: 11px; font-weight: 600; color: #444; margin-top: 5px; text-align: center; }
+    .ls-opt.ls-active .ls-opt-label { color: #1abc9c; }
     .auth-container {
         display: flex; justify-content: center; align-items: center;
         min-height: calc(100vh - 100px);
@@ -340,13 +355,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ---- MAP SETUP ----
     var BAYAWAN_CENTER = [9.470, 122.821];
-    var map = L.map('reg-map', { zoomControl: true }).setView(BAYAWAN_CENTER, 13);
+    var map = L.map('reg-map', { zoomControl: true, maxZoom: 20 }).setView(BAYAWAN_CENTER, 13);
     window._regMap = map;
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 19
-    }).addTo(map);
+    var _crStreet = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 22, maxNativeZoom: 20
+    });
+    var _crSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community', maxZoom: 22, maxNativeZoom: 18
+    });
+    var _crLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '', maxZoom: 22, maxNativeZoom: 18, opacity: 0.85
+    });
+    _crSat.addTo(map); _crLabels.addTo(map);
+    (function(m) {
+        var mode = 'satellite';
+        var Ctrl = L.Control.extend({
+            options: { position: 'bottomleft' },
+            onAdd: function() {
+                var c = L.DomUtil.create('div', 'ls-wrap');
+                L.DomEvent.disableClickPropagation(c); L.DomEvent.disableScrollPropagation(c);
+                c.innerHTML = '<div class="ls-panel" id="lsPanel_cr"><div class="ls-panel-title">Map type</div><div class="ls-options"><button type="button" class="ls-opt" id="lsD_cr"><div class="ls-thumb ls-thumb-default"></div><span class="ls-opt-label">Default</span></button><button type="button" class="ls-opt ls-active" id="lsS_cr"><div class="ls-thumb ls-thumb-satellite"></div><span class="ls-opt-label">Satellite</span></button></div></div><button class="ls-btn" type="button" aria-label="Switch map layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Layers</button>';
+                var panel = c.querySelector('#lsPanel_cr'), optD = c.querySelector('#lsD_cr'), optS = c.querySelector('#lsS_cr');
+                c.querySelector('.ls-btn').addEventListener('click', function(e) { e.stopPropagation(); panel.classList.toggle('ls-open'); });
+                document.addEventListener('click', function() { panel.classList.remove('ls-open'); });
+                optD.addEventListener('click', function() { if (mode==='default') return; mode='default'; m.removeLayer(_crSat); m.removeLayer(_crLabels); _crStreet.addTo(m); optD.classList.add('ls-active'); optS.classList.remove('ls-active'); panel.classList.remove('ls-open'); });
+                optS.addEventListener('click', function() { if (mode==='satellite') return; mode='satellite'; m.removeLayer(_crStreet); _crSat.addTo(m); _crLabels.addTo(m); optS.classList.add('ls-active'); optD.classList.remove('ls-active'); panel.classList.remove('ls-open'); });
+                return c;
+            }
+        });
+        new Ctrl().addTo(m);
+    })(map);
 
     var pinIcon = L.divIcon({
         className: 'reg-pin-icon',

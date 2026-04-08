@@ -1,32 +1,40 @@
+# Environment variables — NEVER commit real credentials
+.env
+*.env
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
 *.so
-.Python
+
+# Virtual environment
 venv/
 env/
-ENV/
-.venv
+.venv/
+.env/
 
 # Django
-*.log
-# db.sqlite3 — tracked for shared dev data (collaborators pull same DB)
+db.sqlite3
 db.sqlite3-journal
-/media
-/staticfiles
+*.log
+media/
+staticfiles/
+/static/collected/
 
-# IDE
+# IDE / OS
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Environment
-.env
-.env.local
+desktop.ini

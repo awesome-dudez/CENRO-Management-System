@@ -73,20 +73,27 @@ body.admin-view {
 }
 
 .admin-logo-text {
-    font-size: 2rem;
+    font-size: 1.6rem;
     font-weight: 800;
     display: block;
     line-height: 0.95;
     letter-spacing: 0.01em;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
 }
 
 .admin-logo-subtitle {
-    font-size: 1rem;
+    font-size: 0.85rem;
     font-weight: 400;
     opacity: 0.95;
     display: block;
     line-height: 1.05;
     margin-top: 2px;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
 
 .admin-header-right {
@@ -263,9 +270,14 @@ body.admin-view {
     opacity: 1;
 }
 
-/* ---- Responsive: collapse sidebar to hamburger ---- */
+/* ---- Responsive: collapse sidebar to off-canvas drawer ---- */
 @media (max-width: 992px) {
     .admin-sidebar {
+        position: fixed;
+        top: 70px;
+        left: 0;
+        bottom: 0;
+        z-index: 1000;
         transform: translateX(-100%);
     }
 
@@ -279,7 +291,8 @@ body.admin-view {
     }
 
     .admin-main {
-        margin-left: 0;
+        width: 100%;
+        min-width: 0;
     }
 
     .admin-sidebar-toggle {
@@ -287,7 +300,21 @@ body.admin-view {
     }
 
     .admin-header-inner {
-        padding-left: 72px;
+        padding-left: 68px;
+    }
+
+    /* Shrink logo on tablet/mobile so it fits next to hamburger */
+    .admin-logo-icon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .admin-logo-text {
+        font-size: 1.2rem !important;
+    }
+
+    .admin-logo-subtitle {
+        font-size: 0.75rem !important;
     }
 }
 
@@ -297,7 +324,21 @@ body.admin-view {
     }
 
     .admin-main-title {
-        font-size: 1.4rem;
+        font-size: 1.3rem;
+    }
+
+    /* On very small phones, hide the subtitle to save space */
+    .admin-logo-subtitle {
+        display: none !important;
+    }
+
+    .admin-logo-text {
+        font-size: 1.1rem !important;
+    }
+
+    .admin-user-name,
+    .user-name-link span:last-child {
+        display: none;
     }
 }
 

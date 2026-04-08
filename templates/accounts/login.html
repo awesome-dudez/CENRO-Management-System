@@ -21,6 +21,9 @@
                     <button type="button" class="password-toggle" data-target="{{ form.password.id_for_label }}" title="Show password" aria-label="Toggle password visibility">👁</button>
                 </div>
                 {% if form.password.errors %}<small class="text-danger">{{ form.password.errors.0 }}</small>{% endif %}
+                <div style="text-align:right; margin-top:6px;">
+                    <a href="{% url 'accounts:forgot_password' %}" style="font-size:13px; color:#2d8659; text-decoration:none; font-weight:500;">Forgot Password?</a>
+                </div>
             </div>
             <button type="submit" class="btn btn-primary btn-login">Sign in</button>
         </form>

@@ -228,9 +228,14 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Avoid manifest-related 500s (safer while debugging)
+# Let WhiteNoise find files from STATICFILES_DIRS without needing collectstatic first.
+# Safe for both DEBUG and non-DEBUG — collected files are still used when present.
+WHITENOISE_USE_FINDERS = True
+
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # CompressedStaticFilesStorage compresses + serves from STATIC_ROOT (after collectstatic).
+    # WHITENOISE_USE_FINDERS above also enables serving directly from STATICFILES_DIRS.
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
 
@@ -246,6 +251,29 @@ CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
 # Default auto field
 # -------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# -------------------------
+# Email (Gmail SMTP for password reset OTP)
+# -------------------------
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "noreply@cenro.gov.ph"
+
+_email_configured = (
+    EMAIL_HOST_USER
+    and EMAIL_HOST_USER not in ("your-cenro-gmail@gmail.com", "your-gmail@gmail.com", "")
+    and EMAIL_HOST_PASSWORD
+    and EMAIL_HOST_PASSWORD not in ("your-16-char-app-password", "")
+)
+if _email_configured:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    # No real credentials yet — print OTP to the server console so you can test the flow
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 
 # -------------------------

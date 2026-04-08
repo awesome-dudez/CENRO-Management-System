@@ -249,6 +249,80 @@ class ProfileUpdateForm(forms.Form):
         return cleaned
 
 
+class ForgotPasswordForm(forms.Form):
+    username = forms.CharField(
+        label="Username",
+        max_length=150,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Enter your username",
+            "autofocus": True,
+            "autocomplete": "username",
+        }),
+    )
+    email = forms.EmailField(
+        label="Email address",
+        widget=forms.EmailInput(attrs={
+            "class": "form-control",
+            "placeholder": "Enter your registered email address",
+            "autocomplete": "email",
+        }),
+        error_messages={"invalid": "Please enter a valid email address."},
+    )
+
+
+class VerifyCodeForm(forms.Form):
+    code = forms.CharField(
+        label="Verification code",
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            "class": "form-control otp-input",
+            "placeholder": "Enter 6-digit code",
+            "maxlength": "6",
+            "inputmode": "numeric",
+            "pattern": "[0-9]{6}",
+            "autocomplete": "one-time-code",
+            "autofocus": True,
+            "style": "font-size:1.6rem; letter-spacing:0.4em; text-align:center;",
+        }),
+    )
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip()
+        if not code.isdigit() or len(code) != 6:
+            raise forms.ValidationError("Enter the 6-digit number from your email.")
+        return code
+
+
+class SetNewPasswordForm(forms.Form):
+    new_password1 = forms.CharField(
+        label="New Password",
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "placeholder": "New password (min. 8 characters)",
+            "autofocus": True,
+        }),
+    )
+    new_password2 = forms.CharField(
+        label="Confirm New Password",
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "placeholder": "Confirm new password",
+        }),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        p1 = cleaned.get("new_password1", "")
+        p2 = cleaned.get("new_password2", "")
+        if p1 and len(p1) < 8:
+            raise forms.ValidationError("Password must be at least 8 characters long.")
+        if p1 and p2 and p1 != p2:
+            raise forms.ValidationError("Passwords do not match. Please try again.")
+        return cleaned
+
+
 class StaffRegistrationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = User

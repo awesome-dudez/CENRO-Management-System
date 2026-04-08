@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CENRO Management System{% endblock %}</title>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260309-admin-logo-fix">
-    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260309-admin-logo-fix">
-    {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
-    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260309-admin-logo-fix">
-    {% endif %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260407-layers">
+    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260407-layers">
+    {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
+    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260407-layers">
+    {% endif %}{% endif %}
     <!-- Leaflet Map Library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <!-- Turf.js for advanced geospatial operations (point-in-polygon) -->
@@ -149,24 +149,32 @@
     </header>
     {% endif %}
 
-    {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
-    <!-- Admin layout: fixed header + sidebar + main -->
+    {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
+    <!-- Admin portal: fixed header + sticky sidebar in flex wrapper -->
     {% include "admin/_header.html" %}
-    {% include "admin/_sidebar.html" %}
     <div class="admin-layout-wrapper">
-    {% endif %}
-    <main class="{% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-main{% else %}main-content{% endif %}">
-        {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
+    {% include "admin/_sidebar.html" %}
+    {% endif %}{% endif %}
+    <main class="{% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}admin-main{% else %}main-content{% endif %}{% else %}main-content{% endif %}">
+        {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
         <h1 class="admin-main-title">CENRO Management System</h1>
         <p class="admin-main-subtitle">{% block admin_subtitle %}System Dashboard{% endblock %}</p>
-        {% endif %}
+        {% endif %}{% endif %}
         {% block content %}{% endblock %}
     </main>
-        {% if user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}
+    {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
     </div>
-    {% endif %}
+    <!-- Mobile sidebar controls (outside flex wrapper so they don't become flex items) -->
+    <div class="admin-sidebar-overlay" id="adminSidebarOverlay" aria-hidden="true"></div>
+    <button type="button" class="admin-sidebar-toggle" id="adminSidebarToggle" aria-label="Open menu" aria-expanded="false" aria-controls="adminSidebar">
+        <span class="admin-hamburger-bar"></span>
+        <span class="admin-hamburger-bar"></span>
+        <span class="admin-hamburger-bar"></span>
+    </button>
+    {% endif %}{% endif %}
 
-    <!-- Footer -->
+    <!-- Footer: only for guests and consumer accounts, never for admin/staff -->
+    {% if not user.is_authenticated or user.is_authenticated and not user.is_admin and not user.is_staff_member %}
     <footer class="footer">
         <div class="footer-content">
             <div class="footer-section">
@@ -204,6 +212,7 @@
             <p>© 2026 CENRO Bayawan City. All rights reserved.</p>
         </div>
     </footer>
+    {% endif %}
 
     <!-- Toast Notification Popup -->
     {% if messages %}

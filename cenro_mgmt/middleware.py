@@ -42,6 +42,9 @@ class LoginRequiredMiddleware:
             '/accounts/logout/',
             '/accounts/register/consumer/',
             '/accounts/register/staff/',
+            '/accounts/forgot-password/',
+            '/accounts/verify-code/',      # enter 6-digit code from email
+            '/accounts/reset-password/',   # token link from email
             '/static/',
             '/media/',
         ]
