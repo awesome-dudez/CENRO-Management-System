@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CENRO Management System{% endblock %}</title>
     {% load static %}
+    <!-- Apply saved theme before CSS loads to avoid flash -->
+    <script>
+    (function(){var t=localStorage.getItem('cenro-theme');if(t==='dark')document.documentElement.classList.add('dark-mode');else if(t==='light')document.documentElement.classList.add('light-mode');})();
+    </script>
     <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260413-enhanced">
     <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260413-enhanced">
     <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260413-enhanced">
@@ -107,6 +111,11 @@
                 {% endif %}
 
                 {% if user.is_authenticated %}
+                <!-- Dark / Light mode toggle -->
+                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark/light mode" title="Toggle dark/light mode">
+                    <span class="icon-moon">🌙</span>
+                    <span class="icon-sun">☀️</span>
+                </button>
                 <!-- Notification: icon only, no text -->
                 <div class="notif-bell-wrapper" id="notifBellWrapper">
                     <button type="button" class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
@@ -432,5 +441,39 @@
     </script>
     {% endif %}
     {% block extra_js %}{% endblock %}
+
+    <!-- Dark / Light Mode Toggle Logic -->
+    <script>
+    (function() {
+        var html = document.documentElement;
+        var btn = document.getElementById('themeToggleBtn');
+
+        // Apply saved theme immediately (before paint)
+        var saved = localStorage.getItem('cenro-theme');
+        if (saved === 'dark') {
+            html.classList.add('dark-mode');
+            html.classList.remove('light-mode');
+        } else if (saved === 'light') {
+            html.classList.add('light-mode');
+            html.classList.remove('dark-mode');
+        }
+        // If no preference saved, system @media handles it automatically
+
+        if (btn) {
+            btn.addEventListener('click', function() {
+                var isDark = html.classList.contains('dark-mode');
+                if (isDark) {
+                    html.classList.remove('dark-mode');
+                    html.classList.add('light-mode');
+                    localStorage.setItem('cenro-theme', 'light');
+                } else {
+                    html.classList.remove('light-mode');
+                    html.classList.add('dark-mode');
+                    localStorage.setItem('cenro-theme', 'dark');
+                }
+            });
+        }
+    })();
+    </script>
 </body>
 </html>

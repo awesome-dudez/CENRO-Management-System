@@ -28,7 +28,8 @@
     --ce-input-border: rgba(30,122,77,0.2);
 }
 
-/* ---------- CSS Variables (Dark) ---------- */
+/* ---------- CSS Variables (Dark) — triggered by .dark-mode on <html> or system pref ---------- */
+html.dark-mode,
 @media (prefers-color-scheme: dark) {
     :root {
         --ce-bg-start: #0f1929;
@@ -49,6 +50,88 @@
         --ce-input-border: rgba(100,180,255,0.2);
     }
 }
+
+/* Override system dark when user explicitly chose light */
+html.light-mode {
+    --ce-bg-start: #e8f4fd;
+    --ce-bg-end: #f0faf4;
+    --ce-orb-1: rgba(59, 130, 246, 0.18);
+    --ce-orb-2: rgba(34, 197, 94, 0.15);
+    --ce-orb-3: rgba(168, 85, 247, 0.12);
+    --ce-nav-bg: rgba(255,255,255,0.85);
+    --ce-nav-border: rgba(255,255,255,0.6);
+    --ce-card-bg: rgba(255,255,255,0.72);
+    --ce-card-border: rgba(255,255,255,0.9);
+    --ce-card-shadow: 0 8px 32px rgba(30,122,77,0.10), 0 1px 4px rgba(59,130,246,0.06);
+    --ce-card-hover-shadow: 0 16px 48px rgba(30,122,77,0.18), 0 4px 12px rgba(59,130,246,0.10);
+    --ce-text-primary: #1a2340;
+    --ce-text-secondary: #4a5568;
+    --ce-dot-color: rgba(30,122,77,0.08);
+    --ce-input-bg: rgba(255,255,255,0.9);
+    --ce-input-border: rgba(30,122,77,0.2);
+}
+
+/* ============================================================
+   DARK MODE body overrides
+   ============================================================ */
+html.dark-mode body.consumer-view,
+html.dark-mode body.consumer-view .ce-section-header h2,
+html.dark-mode body.consumer-view .ce-stat-info h3,
+html.dark-mode body.consumer-view .ce-table tbody td {
+    color: var(--ce-text-primary);
+}
+
+html.dark-mode body.consumer-view .ce-section-card,
+html.dark-mode body.consumer-view .ce-wizard-card,
+html.dark-mode body.consumer-view .ce-stat-card {
+    background: var(--ce-card-bg);
+    border-color: var(--ce-card-border);
+}
+
+html.dark-mode body.consumer-view .ce-table tbody tr:hover {
+    background: linear-gradient(90deg, rgba(30,122,77,0.12), rgba(59,130,246,0.06));
+}
+
+html.dark-mode body.consumer-view .ce-search-input,
+html.dark-mode body.consumer-view .ce-filter-select {
+    background: var(--ce-input-bg);
+    border-color: var(--ce-input-border);
+    color: var(--ce-text-primary);
+}
+
+html.dark-mode body.consumer-view .ce-section-header {
+    border-bottom-color: rgba(255,255,255,0.06);
+}
+
+html.dark-mode body.consumer-view .top-nav {
+    background: var(--ce-nav-bg) !important;
+}
+
+/* Theme toggle button */
+.theme-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    line-height: 1;
+    transition: background 0.2s, transform 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle-btn:hover {
+    background: rgba(30,122,77,0.10);
+    transform: rotate(20deg) scale(1.1);
+}
+
+.theme-toggle-btn .icon-sun  { display: none; }
+.theme-toggle-btn .icon-moon { display: block; }
+
+html.dark-mode .theme-toggle-btn .icon-sun  { display: block; }
+html.dark-mode .theme-toggle-btn .icon-moon { display: none; }
 
 /* ============================================================
    BODY — Gradient BG + Dot Texture
