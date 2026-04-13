@@ -28,10 +28,29 @@
     --ce-input-border: rgba(30,122,77,0.2);
 }
 
-/* ---------- CSS Variables (Dark) — triggered by .dark-mode on <html> or system pref ---------- */
-html.dark-mode,
+/* ---------- CSS Variables (Dark) — explicit toggle on <html> ---------- */
+html.dark-mode {
+    --ce-bg-start: #0f1929;
+    --ce-bg-end: #0a1f14;
+    --ce-orb-1: rgba(59, 130, 246, 0.12);
+    --ce-orb-2: rgba(34, 197, 94, 0.10);
+    --ce-orb-3: rgba(168, 85, 247, 0.09);
+    --ce-nav-bg: rgba(15,25,41,0.9);
+    --ce-nav-border: rgba(255,255,255,0.08);
+    --ce-card-bg: rgba(20,35,55,0.75);
+    --ce-card-border: rgba(255,255,255,0.08);
+    --ce-card-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 1px 4px rgba(59,130,246,0.08);
+    --ce-card-hover-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 4px 12px rgba(59,130,246,0.14);
+    --ce-text-primary: #e2e8f0;
+    --ce-text-secondary: #94a3b8;
+    --ce-dot-color: rgba(255,255,255,0.04);
+    --ce-input-bg: rgba(20,35,55,0.8);
+    --ce-input-border: rgba(100,180,255,0.2);
+}
+
+/* System dark when user has not chosen light mode explicitly */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not(.light-mode):not(.dark-mode) {
         --ce-bg-start: #0f1929;
         --ce-bg-end: #0a1f14;
         --ce-orb-1: rgba(59, 130, 246, 0.12);
@@ -120,6 +139,10 @@ html.dark-mode body.consumer-view .top-nav {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    z-index: 1002;
+    flex-shrink: 0;
+    pointer-events: auto;
 }
 
 .theme-toggle-btn:hover {
