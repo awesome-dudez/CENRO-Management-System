@@ -1629,6 +1629,7 @@ body.admin-view .admin-tab.active {
     margin-left: 8px;
     padding-left: 16px;
     border-left: 1px solid var(--medium-gray);
+    z-index: 10000;
 }
 
 /* In admin header, remove the vertical separator line next to the bell */
@@ -1684,15 +1685,15 @@ body.admin-view .notif-bell-wrapper {
 /* Popup panel (compact, not full tab) */
 .notif-dropdown {
     display: none;
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
+    position: fixed;
+    top: 70px;
+    right: 12px;
     width: 320px;
     max-height: 380px;
     background: #fff;
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 0 1px rgba(0,0,0,0.1);
-    z-index: 9999;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 0 1px rgba(0,0,0,0.12);
+    z-index: 99999;
     overflow: hidden;
     flex-direction: column;
     border: 1px solid #eee;
