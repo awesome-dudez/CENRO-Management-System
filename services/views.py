@@ -846,6 +846,35 @@ def grasscutting_application(request):
                 grasscutting_hours=Decimal(str(hours)),
             )
 
+            # Save client signature (upload or drawn canvas data URL)
+            gc_sig_file = request.FILES.get("gc_client_signature")
+            gc_sig_data = (request.POST.get("gc_signature_data") or "").strip()
+            try:
+                if gc_sig_data and gc_sig_data.startswith("data:image"):
+                    header, b64_data = gc_sig_data.split(",", 1)
+                    ext = ".png"
+                    if "jpeg" in header or "jpg" in header:
+                        ext = ".jpg"
+                    elif "webp" in header:
+                        ext = ".webp"
+                    binary = base64.b64decode(b64_data)
+                    service_request.client_signature.save(
+                        f"client_signatures/gc_{service_request.id}{ext}",
+                        ContentFile(binary),
+                        save=True,
+                    )
+                elif gc_sig_file:
+                    ext = os.path.splitext(gc_sig_file.name)[1] or ".jpg"
+                    if ext.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                        ext = ".jpg"
+                    service_request.client_signature.save(
+                        f"client_signatures/gc_{service_request.id}{ext}",
+                        ContentFile(gc_sig_file.read()),
+                        save=True,
+                    )
+            except Exception:
+                pass
+
             admin_users = User.objects.filter(
                 Q(role=User.Role.ADMIN) | Q(is_superuser=True) | Q(is_staff=True)
             )

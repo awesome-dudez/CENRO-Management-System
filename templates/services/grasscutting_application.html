@@ -92,6 +92,27 @@
     .grasscutting-form-page .btn-submit:hover {
         background: #16a085;
     }
+    /* Signature capture */
+    .gc-sig-mode-toggle { display:flex; gap:8px; margin-bottom:10px; }
+    .gc-sig-btn {
+        flex:1; padding:8px 14px; border:2px solid #e0e0e0; border-radius:6px;
+        background:#fff; color:#555; font-weight:600; font-size:13px;
+        cursor:pointer; transition:all 0.2s; text-align:center;
+    }
+    .gc-sig-btn:hover { border-color:#1abc9c; color:#1abc9c; }
+    .gc-sig-btn.active { background:#1abc9c; border-color:#1abc9c; color:#fff; }
+    .gc-sig-draw-section { margin-top:10px; }
+    .gc-sig-draw-section.hidden { display:none; }
+    #gcSignaturePad {
+        width:100%; height:180px; border:2px dashed #1abc9c; border-radius:8px;
+        background:#fafafa; touch-action:none; cursor:crosshair;
+    }
+    .gc-sig-actions { margin-top:8px; display:flex; justify-content:flex-end; }
+    .gc-sig-clear-btn {
+        padding:6px 14px; border:1px solid #ccc; border-radius:4px;
+        background:#f8f9fa; font-size:13px; cursor:pointer;
+    }
+    .gc-sig-clear-btn:hover { background:#e9ecef; }
     @media print {
         .grasscutting-form-page { box-shadow: none; border: 1px solid #ccc; }
         .no-print { display: none !important; }
@@ -101,7 +122,7 @@
 <div class="grasscutting-form-page">
     <h1 class="form-title">Grasscutting Services Application Form</h1>
 
-    <form method="post" action="" id="grasscuttingForm">
+    <form method="post" action="" id="grasscuttingForm" enctype="multipart/form-data">
         {% csrf_token %}
 
         <!-- 1. Date -->
@@ -134,6 +155,31 @@
                 <label for="id_signature_over_printed_name">Signature over printed name <span style="color:red">*</span></label>
                 {{ form.signature_over_printed_name }}
                 {% if form.signature_over_printed_name.errors %}<div class="form-error">{{ form.signature_over_printed_name.errors.0 }}</div>{% endif %}
+            </div>
+
+            <!-- Signature capture: upload or draw -->
+            <div class="form-group no-print" style="margin-bottom:14px;">
+                <label>Signature <span style="color:#888;font-weight:400;font-size:12px;">(optional — upload a photo or draw below)</span></label>
+                <div class="gc-sig-mode-toggle">
+                    <button type="button" class="gc-sig-btn active" id="gcSigModeUpload">📁 Upload Image</button>
+                    <button type="button" class="gc-sig-btn" id="gcSigModeDraw">✏️ Draw Signature</button>
+                </div>
+                <!-- Upload section -->
+                <div id="gcSignatureUploadSection">
+                    <input type="file" name="gc_client_signature" id="id_gc_client_signature"
+                           class="form-control" accept="image/jpeg,image/jpg,image/png,image/webp"
+                           style="margin-top:4px;">
+                    <div class="form-help-text" style="font-size:12px;color:#888;margin-top:4px;">JPG, PNG or WEBP, max 5MB.</div>
+                </div>
+                <!-- Draw section -->
+                <div class="gc-sig-draw-section hidden" id="gcSignatureDrawSection">
+                    <canvas id="gcSignaturePad"></canvas>
+                    <div class="gc-sig-actions">
+                        <button type="button" class="gc-sig-clear-btn" id="gcSignatureClearBtn">Clear</button>
+                    </div>
+                    <div class="form-help-text" style="font-size:12px;color:#888;margin-top:4px;">Draw your signature above using mouse or finger.</div>
+                </div>
+                <input type="hidden" name="gc_signature_data" id="gcSignatureData">
             </div>
             <div class="form-group" style="margin-bottom:14px;">
                 <label for="id_contact_number">Contact Number <span style="color:red">*</span></label>
@@ -217,6 +263,72 @@
         hoursEl.addEventListener('change', updateTotal);
     }
     updateTotal();
+})();
+
+// ---- Signature capture: upload vs draw ----
+(function() {
+    var btnUpload = document.getElementById('gcSigModeUpload');
+    var btnDraw   = document.getElementById('gcSigModeDraw');
+    var uploadSec = document.getElementById('gcSignatureUploadSection');
+    var drawSec   = document.getElementById('gcSignatureDrawSection');
+    var canvas    = document.getElementById('gcSignaturePad');
+    var clearBtn  = document.getElementById('gcSignatureClearBtn');
+    var hiddenInput = document.getElementById('gcSignatureData');
+    var ctx = canvas ? canvas.getContext('2d') : null;
+    var drawing = false;
+
+    function setMode(mode) {
+        var isDraw = mode === 'draw';
+        btnUpload.classList.toggle('active', !isDraw);
+        btnDraw.classList.toggle('active', isDraw);
+        uploadSec.style.display = isDraw ? 'none' : '';
+        drawSec.classList.toggle('hidden', !isDraw);
+        if (!isDraw && hiddenInput) hiddenInput.value = '';
+        if (isDraw) requestAnimationFrame(calibrate);
+    }
+
+    function calibrate() {
+        if (!canvas) return;
+        var rect = canvas.getBoundingClientRect();
+        if (!rect.width) return;
+        var r = window.devicePixelRatio || 1;
+        canvas.width  = rect.width  * r;
+        canvas.height = rect.height * r;
+        ctx.setTransform(r, 0, 0, r, 0, 0);
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    }
+
+    function getPos(e) {
+        var rect = canvas.getBoundingClientRect();
+        var cx = e.touches ? e.touches[0].clientX : e.clientX;
+        var cy = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: cx - rect.left, y: cy - rect.top };
+    }
+
+    if (ctx) {
+        calibrate();
+        window.addEventListener('resize', calibrate);
+
+        canvas.addEventListener('mousedown',  function(e) { drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
+        canvas.addEventListener('mousemove',  function(e) { if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
+        canvas.addEventListener('mouseup',    function()  { drawing = false; if (hiddenInput) hiddenInput.value = canvas.toDataURL('image/png'); });
+        canvas.addEventListener('mouseleave', function()  { drawing = false; });
+        canvas.addEventListener('touchstart', function(e) { drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
+        canvas.addEventListener('touchmove',  function(e) { if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
+        canvas.addEventListener('touchend',   function()  { drawing = false; if (hiddenInput) hiddenInput.value = canvas.toDataURL('image/png'); });
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            if (ctx && canvas) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+            if (hiddenInput) hiddenInput.value = '';
+        });
+    }
+    if (btnUpload) btnUpload.addEventListener('click', function() { setMode('upload'); });
+    if (btnDraw)   btnDraw.addEventListener('click',   function() { setMode('draw');   });
 })();
 </script>
 {% endblock %}
