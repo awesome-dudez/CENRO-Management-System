@@ -3,7 +3,7 @@ import re
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
-from django.views.generic import RedirectView
+from django.views.generic import RedirectView, TemplateView
 from django.views.static import serve
 
 urlpatterns = [
@@ -12,6 +12,8 @@ urlpatterns = [
     path("services/", include(("services.urls", "services"), namespace="services")),
     path("scheduling/", include(("scheduling.urls", "scheduling"), namespace="scheduling")),
     path("dashboard/", include(("dashboard.urls", "dashboard"), namespace="dashboard")),
+    path("offline/", TemplateView.as_view(template_name="offline.html"), name="offline"),
+    path("sw.js", TemplateView.as_view(template_name="sw.js", content_type="application/javascript"), name="sw"),
     path("", RedirectView.as_view(url="/dashboard/", permanent=False)),
 ]
 

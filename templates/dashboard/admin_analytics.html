@@ -3,14 +3,23 @@
 {% block admin_subtitle %}Analytics{% endblock %}
 {% block content %}
 <div class="analytics-page">
+    <div class="analytics-refresh-bar" id="analyticsRefreshBar" aria-hidden="true" role="presentation"></div>
+    <div class="analytics-print-summary" id="analyticsPrintSummary" aria-hidden="true">
+        <div class="analytics-print-summary-inner" id="analyticsPrintSummaryInner"></div>
+    </div>
     <div class="analytics-grid">
         <div class="analytics-card analytics-kpi">
-            <h3 class="analytics-card-title">
-                Service Analytics (30 Days)
-                <span class="analytics-split-toggle" id="analyticsSplitToggle">
-                    <button type="button" class="analytics-split-btn active" data-service="desludging">Desludging</button>
-                    <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
+            <h3 class="analytics-card-title analytics-card-title-row">
+                <span class="analytics-card-title-main">
+                    Service Analytics (30 Days)
+                    <span class="analytics-split-toggle" id="analyticsSplitToggle">
+                        <button type="button" class="analytics-split-btn active" data-service="desludging">Desludging</button>
+                        <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
+                    </span>
                 </span>
+                <button type="button" class="analytics-print-btn" id="analyticsPrintBtn" title="Print a text summary for the service type shown above">
+                    <span aria-hidden="true">🖨️</span> Print summary
+                </button>
             </h3>
             <div class="analytics-kpi-value" id="splitKpiValue">0</div>
             <div class="analytics-kpi-trend" id="splitKpiTrend"></div>
@@ -85,7 +94,7 @@
 <script>
 (function() {
     var API_URL = "{% url 'dashboard:admin_analytics_api' %}";
-    var POLL_INTERVAL_MS = 8000;
+    var POLL_INTERVAL_MS = 5000;
 
     var charts = {};
     var initialData = null;
@@ -137,6 +146,96 @@
         var div = document.createElement('div');
         div.textContent = s;
         return div.innerHTML;
+    }
+
+    function fillPrintSummary() {
+        var inner = document.getElementById('analyticsPrintSummaryInner');
+        if (!inner) return;
+        var d = latestData || initialData;
+        var serviceLabel = activeService === 'desludging' ? 'Desludging' : 'Grass Cutting';
+        var s = (d && d.split && d.split[activeService]) || {};
+        var parts = [];
+        var pct = s.trend_pct != null ? s.trend_pct : 0;
+        var tb = s.top_barangay || {};
+
+        parts.push('<header class="analytics-print-header">');
+        parts.push('<h1>CENRO Management System</h1>');
+        parts.push('<p class="analytics-print-meta analytics-print-service">Analytics Summary <span class="analytics-print-service-badge">' + escapeHtml(serviceLabel) + '</span></p>');
+        parts.push('<p class="analytics-print-meta">Generated on ' + escapeHtml(new Date().toLocaleString()) + '</p>');
+        parts.push('</header>');
+
+        parts.push('<section class="analytics-print-overview">');
+        parts.push('<h2>30-Day Overview</h2>');
+        parts.push('<div class="analytics-print-kpis">');
+        parts.push('<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Requests</div><div class="analytics-print-kpi-value">' + (s.kpi_30d != null ? s.kpi_30d : 0) + '</div><div class="analytics-print-kpi-sub">Last 30 days</div></div>');
+        parts.push('<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Trend</div><div class="analytics-print-kpi-value">' + (pct >= 0 ? '+' : '') + pct + '%</div><div class="analytics-print-kpi-sub">vs prior 30 days</div></div>');
+        parts.push('<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Top Barangay</div><div class="analytics-print-kpi-value">' + escapeHtml(tb.label || '—') + '</div><div class="analytics-print-kpi-sub">' + (tb.count != null ? tb.count : 0) + ' request(s)</div></div>');
+        parts.push('</div>');
+        parts.push('</section>');
+
+        var nv = s.new_vs_returning || {};
+        var nvLabels = nv.labels || [];
+        parts.push('<section class="analytics-print-section"><h2>Incoming vs Completed (By Month)</h2>');
+        parts.push('<table class="analytics-print-table"><thead><tr><th>Month</th><th>Incoming</th><th>Completed</th></tr></thead><tbody>');
+        for (var i = 0; i < nvLabels.length; i++) {
+            parts.push('<tr><td>' + escapeHtml(String(nvLabels[i])) + '</td><td>' + ((nv.new || [])[i] != null ? (nv.new || [])[i] : 0) + '</td><td>' + ((nv.returning || [])[i] != null ? (nv.returning || [])[i] : 0) + '</td></tr>');
+        }
+        if (!nvLabels.length) {
+            parts.push('<tr><td colspan="3">No data</td></tr>');
+        }
+        parts.push('</tbody></table></section>');
+
+        var ts = s.top_sources || {};
+        var tsLabels = ts.labels || [];
+        var tsVals = ts.values || [];
+        parts.push('<section class="analytics-print-section"><h2>Top Request Sources (Barangay)</h2>');
+        parts.push('<table class="analytics-print-table"><thead><tr><th>Barangay</th><th>Requests</th></tr></thead><tbody>');
+        for (var j = 0; j < tsLabels.length; j++) {
+            parts.push('<tr><td>' + escapeHtml(String(tsLabels[j])) + '</td><td>' + (tsVals[j] != null ? tsVals[j] : 0) + '</td></tr>');
+        }
+        if (!tsLabels.length) {
+            parts.push('<tr><td colspan="2">No data</td></tr>');
+        }
+        parts.push('</tbody></table></section>');
+
+        var vo = s.visitor_overview || {};
+        var voLabels = vo.labels || [];
+        parts.push('<section class="analytics-print-section"><h2>Request Overview (By Week)</h2>');
+        parts.push('<table class="analytics-print-table"><thead><tr><th>Week</th><th>Incoming</th><th>Completed</th><th>Total</th></tr></thead><tbody>');
+        for (var k = 0; k < voLabels.length; k++) {
+            parts.push('<tr><td>' + escapeHtml(String(voLabels[k])) + '</td><td>' + ((vo.unique || [])[k] != null ? (vo.unique || [])[k] : 0) + '</td><td>' + ((vo.site || [])[k] != null ? (vo.site || [])[k] : 0) + '</td><td>' + ((vo.pageViews || [])[k] != null ? (vo.pageViews || [])[k] : 0) + '</td></tr>');
+        }
+        if (!voLabels.length) {
+            parts.push('<tr><td colspan="4">No data</td></tr>');
+        }
+        parts.push('</tbody></table></section>');
+
+        var st = s.top_browsers || {};
+        var stLabels = st.labels || [];
+        var stVals = st.values || [];
+        parts.push('<section class="analytics-print-section"><h2>Status Distribution</h2>');
+        parts.push('<table class="analytics-print-table"><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>');
+        for (var m = 0; m < stLabels.length; m++) {
+            parts.push('<tr><td>' + escapeHtml(String(stLabels[m])) + '</td><td>' + (stVals[m] != null ? stVals[m] : 0) + '</td></tr>');
+        }
+        if (!stLabels.length) {
+            parts.push('<tr><td colspan="2">No data</td></tr>');
+        }
+        parts.push('</tbody></table></section>');
+
+        var topPages = s.top_pages || [];
+        parts.push('<section class="analytics-print-section"><h2>Top Request Count by Source</h2>');
+        parts.push('<table class="analytics-print-table"><thead><tr><th>Source</th><th># Requests</th></tr></thead><tbody>');
+        for (var n = 0; n < topPages.length; n++) {
+            var row = topPages[n];
+            parts.push('<tr><td>' + escapeHtml(String(row.name || '—')) + '</td><td>' + (row.views != null ? row.views : 0) + '</td></tr>');
+        }
+        if (!topPages.length) {
+            parts.push('<tr><td colspan="2">No data</td></tr>');
+        }
+        parts.push('</tbody></table></section>');
+
+        inner.innerHTML = parts.join('');
     }
 
     function filterTable() {
@@ -274,17 +373,29 @@
         applyData(d);
     }
 
+    function setRefreshLoading(on) {
+        var bar = document.getElementById('analyticsRefreshBar');
+        if (!bar) return;
+        bar.classList.toggle('is-active', !!on);
+        bar.setAttribute('aria-busy', on ? 'true' : 'false');
+    }
+
     function fetchAndUpdate() {
+        setRefreshLoading(true);
         var xhr = new XMLHttpRequest();
         xhr.open('GET', API_URL);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.onload = function() {
+            setRefreshLoading(false);
             if (xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
                     applyData(data);
                 } catch (e) {}
             }
+        };
+        xhr.onerror = function() {
+            setRefreshLoading(false);
         };
         xhr.send();
     }
@@ -304,24 +415,72 @@
                     b.classList.toggle('active', b === btn);
                 });
                 if (latestData) {
-                    updateSplitUi(latestData);
-                    if (charts.splitService) {
-                        var splitNow = getSplitData(latestData).new_vs_returning || {};
-                        charts.splitService.data.labels = splitNow.labels || [];
-                        charts.splitService.data.datasets[0].data = splitNow.new || [];
-                        charts.splitService.data.datasets[1].data = splitNow.returning || [];
-                        charts.splitService.update();
-                    }
+                    // Refresh ALL analytics panels immediately on toggle.
+                    // applyData() already uses chart.update('none') for snappy switching.
+                    applyData(latestData);
                 }
             });
         }
         var searchInput = document.getElementById('analyticsTableSearch');
         if (searchInput) searchInput.addEventListener('input', filterTable);
+        var printBtn = document.getElementById('analyticsPrintBtn');
+        if (printBtn) {
+            printBtn.addEventListener('click', function() {
+                fillPrintSummary();
+                document.body.classList.add('analytics-print-mode');
+                var onAfter = function() {
+                    document.body.classList.remove('analytics-print-mode');
+                    window.removeEventListener('afterprint', onAfter);
+                };
+                window.addEventListener('afterprint', onAfter);
+                window.print();
+            });
+        }
         setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
     });
 })();
 </script>
 <style>
+.analytics-page {
+    position: relative;
+}
+.analytics-refresh-bar {
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    margin: -4px 0 8px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 6;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    border-radius: 2px;
+}
+.analytics-refresh-bar.is-active {
+    opacity: 1;
+}
+.analytics-refresh-bar::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 35%;
+    max-width: 180px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(45, 134, 89, 0.35),
+        rgba(74, 155, 158, 0.65),
+        rgba(45, 134, 89, 0.35),
+        transparent
+    );
+    animation: analytics-refresh-shimmer 0.85s ease-in-out infinite;
+}
+@keyframes analytics-refresh-shimmer {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(420%); }
+}
 .analytics-split-toggle {
     display: inline-flex;
     margin-left: 10px;
@@ -341,6 +500,202 @@
 .analytics-split-btn.active {
     background: #2d8659;
     color: #fff;
+}
+.analytics-card-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.analytics-card-title-main {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.analytics-print-btn {
+    border: 1px solid #d8e4de;
+    background: #fff;
+    color: #2d3142;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.analytics-print-btn:hover {
+    background: #f4faf7;
+    border-color: #2d8659;
+    color: #1e7a4d;
+}
+.analytics-print-summary {
+    display: none;
+}
+@page {
+    margin: 8mm 10mm;
+    size: A4 portrait;
+}
+
+@media print {
+    body.analytics-print-mode .admin-top-header,
+    body.analytics-print-mode .admin-sidebar,
+    body.analytics-print-mode .admin-sidebar-toggle,
+    body.analytics-print-mode .admin-sidebar-overlay,
+    body.analytics-print-mode .footer,
+    body.analytics-print-mode .admin-main-title,
+    body.analytics-print-mode .admin-main-subtitle {
+        display: none !important;
+    }
+    body.analytics-print-mode .admin-layout-wrapper {
+        padding-top: 0 !important;
+        display: block !important;
+    }
+    body.analytics-print-mode .admin-main {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+        background: #fff !important;
+    }
+    body.analytics-print-mode .analytics-page {
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body.analytics-print-mode .analytics-page > .analytics-refresh-bar,
+    body.analytics-print-mode .analytics-page > .analytics-grid {
+        display: none !important;
+    }
+    body.analytics-print-mode .analytics-print-summary {
+        display: block !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body.analytics-print-mode .analytics-print-summary-inner {
+        width: 100% !important;
+        max-width: none !important;
+        box-sizing: border-box;
+        font-size: 12pt;
+        line-height: 1.45;
+        color: #111;
+    }
+    .analytics-print-header {
+        margin-bottom: 14pt;
+        padding-bottom: 10pt;
+        border-bottom: 2px solid #1e7a4d;
+    }
+    .analytics-print-header h1 {
+        font-size: 22pt;
+        font-weight: 700;
+        margin: 0 0 10px;
+        letter-spacing: -0.02em;
+    }
+    .analytics-print-meta {
+        margin: 6px 0;
+        font-size: 12pt;
+    }
+    .analytics-print-service {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .analytics-print-service-badge {
+        display: inline-block;
+        border: 1px solid #1e7a4d;
+        color: #1e7a4d;
+        background: #eef7f2;
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 10pt;
+        font-weight: 700;
+    }
+    .analytics-print-overview {
+        margin-bottom: 12pt;
+    }
+    .analytics-print-kpis {
+        display: flex;
+        gap: 10px;
+        margin-top: 8pt;
+    }
+    .analytics-print-kpi {
+        flex: 1;
+        border: 1px solid #ced9d3;
+        background: #f5faf7;
+        border-radius: 8px;
+        padding: 8pt 10pt;
+    }
+    .analytics-print-kpi-label {
+        font-size: 9pt;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #4d6a5d;
+        margin-bottom: 4px;
+        font-weight: 700;
+    }
+    .analytics-print-kpi-value {
+        font-size: 16pt;
+        font-weight: 800;
+        color: #1d2d29;
+        line-height: 1.15;
+        margin-bottom: 3px;
+    }
+    .analytics-print-kpi-sub {
+        font-size: 9pt;
+        color: #51645c;
+    }
+    .analytics-print-section {
+        border: 1px solid #d9e2de;
+        border-radius: 8px;
+        padding: 8pt 10pt 10pt;
+        background: #fff;
+    }
+    .analytics-print-summary ul {
+        font-size: 12pt;
+        line-height: 1.55;
+        margin: 8px 0 0;
+        padding-left: 1.35em;
+    }
+    .analytics-print-summary ul li {
+        margin-bottom: 6px;
+    }
+    .analytics-print-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        font-size: 11.5pt;
+        table-layout: fixed;
+    }
+    .analytics-print-table th,
+    .analytics-print-table td {
+        border: 1px solid #222;
+        padding: 10px 12px;
+        text-align: left;
+        word-wrap: break-word;
+    }
+    .analytics-print-table thead th {
+        background: #e8f0ec;
+        font-weight: 700;
+        font-size: 11pt;
+    }
+    .analytics-print-summary section {
+        margin-bottom: 18pt;
+        page-break-inside: avoid;
+    }
+    .analytics-print-summary section h2 {
+        font-size: 15pt;
+        font-weight: 700;
+        margin: 16pt 0 10pt;
+        color: #1e4d32;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 4pt;
+    }
 }
 </style>
 {% endblock %}

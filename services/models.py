@@ -110,28 +110,75 @@ class ServiceRequest(models.Model):
         return f"{self.get_service_type_display()} - {self.consumer} ({self.barangay})"
 
     @classmethod
-    def expire_pending_inspection_fees(cls, days: int = 7) -> int:
+    def expire_stale_requests(cls) -> dict:
         """
-        Expire inspection-fee pending requests that haven't been verified/paid yet.
+        Two-phase cleanup for requests with no progress:
+        1. Day 4+: send a warning notification (once) that the request will
+           expire in 3 days if no action is taken.
+        2. Day 7+: set status to EXPIRED and notify the consumer.
 
-        Prevents the admin "Pending" tab from accumulating stale requests.
+        "No progress" = ``updated_at`` hasn't changed (no save on the record).
+        Only affects requests still in an initial/waiting status.
+        Returns ``{"warned": int, "expired": int}``.
         """
-        cutoff = timezone.now() - timedelta(days=days)
-        pending_statuses = [
+        now = timezone.now()
+        warning_cutoff = now - timedelta(days=4)
+        expiry_cutoff = now - timedelta(days=7)
+
+        stale_statuses = [
+            cls.Status.SUBMITTED,
             cls.Status.INSPECTION_FEE_DUE,
             cls.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
         ]
-        expired_qs = cls.objects.filter(
-            inspection_fee_paid=False,
-            status__in=pending_statuses,
-            created_at__lt=cutoff,
-        )
-        expired_ids = list(expired_qs.values_list("id", flat=True))
-        if not expired_ids:
-            return 0
 
-        cls.objects.filter(id__in=expired_ids).update(status=cls.Status.EXPIRED)
-        return len(expired_ids)
+        warned_count = 0
+        to_warn = (
+            cls.objects.filter(
+                status__in=stale_statuses,
+                updated_at__lt=warning_cutoff,
+                updated_at__gte=expiry_cutoff,
+            )
+            .select_related("consumer")
+        )
+        for sr in to_warn:
+            already_warned = Notification.objects.filter(
+                related_request=sr,
+                user=sr.consumer,
+                message__contains="will expire in 3 days",
+            ).exists()
+            if not already_warned:
+                Notification.objects.create(
+                    user=sr.consumer,
+                    message=(
+                        f"Request #{sr.id} will expire in 3 days if no progress "
+                        "is made. Please complete any required actions to keep "
+                        "your request active."
+                    ),
+                    notification_type=Notification.NotificationType.STATUS_CHANGE,
+                    related_request=sr,
+                )
+                warned_count += 1
+
+        to_expire = cls.objects.filter(
+            status__in=stale_statuses,
+            updated_at__lt=expiry_cutoff,
+        )
+        expired_ids = list(to_expire.values_list("id", flat=True))
+        if expired_ids:
+            cls.objects.filter(id__in=expired_ids).update(status=cls.Status.EXPIRED)
+            for sr in cls.objects.filter(id__in=expired_ids).select_related("consumer"):
+                Notification.objects.create(
+                    user=sr.consumer,
+                    message=(
+                        f"Request #{sr.id} has expired due to no activity for "
+                        "7 days. Please submit a new request if you still need "
+                        "this service."
+                    ),
+                    notification_type=Notification.NotificationType.STATUS_CHANGE,
+                    related_request=sr,
+                )
+
+        return {"warned": warned_count, "expired": len(expired_ids)}
 
     @property
     def is_within_bayawan(self) -> bool:

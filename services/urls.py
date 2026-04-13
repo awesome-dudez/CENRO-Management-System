@@ -7,6 +7,7 @@ app_name = "services"
 urlpatterns = [
     path("request/create/", views.create_request, name="create_request"),
     path("request/grasscutting-application/", views.grasscutting_application, name="grasscutting_application"),
+    path("api/offline/create-request/", views.offline_create_request, name="offline_create_request"),
     path("api/reverse-geocode/", views.reverse_geocode, name="reverse_geocode"),
     path("api/verify-other-consumer/", views.verify_other_consumer, name="verify_other_consumer"),
     path("request/<int:pk>/", views.request_detail, name="request_detail"),

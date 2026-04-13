@@ -26,11 +26,10 @@ def _get_dashboard_context(request):
     today = date.today()
     start_of_month = today.replace(day=1)
 
-    # Keep the admin workflow clean: expire inspection-fee pending requests older than a week.
+    # Keep the admin workflow clean: expire stale requests and send 4-day warnings.
     try:
-        ServiceRequest.expire_pending_inspection_fees(days=7)
+        ServiceRequest.expire_stale_requests()
     except Exception:
-        # Never block page rendering if cleanup fails.
         pass
 
     total_requests = ServiceRequest.objects.count()
@@ -464,7 +463,7 @@ def admin_requests(request):
     """Admin requests view with sub-tabs"""
     # Cleanup before we build the Pending tab list.
     try:
-        ServiceRequest.expire_pending_inspection_fees(days=7)
+        ServiceRequest.expire_stale_requests()
     except Exception:
         pass
 
@@ -581,10 +580,32 @@ def confirm_payment(request, pk):
             from dashboard.models import ServiceComputation
 
             if computation.payment_status != ServiceComputation.PaymentStatus.FREE:
-                # Avoid triggering recalculation logic; direct update is enough.
                 ServiceComputation.objects.filter(pk=computation.pk).update(
                     payment_status=ServiceComputation.PaymentStatus.PAID
                 )
+
+        Notification.objects.create(
+            user=service_request.consumer,
+            message=(
+                f"Payment for request #{service_request.id} has been confirmed. "
+                "Your request is now marked as Paid and desludging will be scheduled soon."
+            ),
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+        if (
+            service_request.requested_by
+            and service_request.requested_by != service_request.consumer
+        ):
+            Notification.objects.create(
+                user=service_request.requested_by,
+                message=(
+                    f"Payment for request #{service_request.id} "
+                    f"({service_request.client_name}) has been confirmed."
+                ),
+                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                related_request=service_request,
+            )
 
         messages.success(request, "Payment confirmed. Request marked as Paid.")
         return redirect("services:request_detail", pk=pk)
@@ -619,6 +640,67 @@ def confirm_inspection_fee(request, pk):
         return redirect("services:request_detail", pk=pk)
 
     return redirect("services:request_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
+@require_POST
+def reject_inspection_fee(request, pk):
+    """Decline the uploaded inspection fee receipt; customer must upload a new one."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.status != ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION:
+        messages.error(request, "This request is not awaiting inspection fee verification.")
+        return redirect("services:request_detail", pk=pk)
+    if not service_request.inspection_fee_receipt:
+        messages.error(request, "There is no inspection fee receipt to reject.")
+        return redirect("services:request_detail", pk=pk)
+
+    reason = (request.POST.get("reason") or "").strip()[:500]
+
+    with transaction.atomic():
+        if service_request.inspection_fee_receipt:
+            service_request.inspection_fee_receipt.delete(save=False)
+        service_request.inspection_fee_receipt = None
+        service_request.inspection_fee_paid = False
+        service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
+        new_notes = (service_request.notes or "").strip()
+        if reason:
+            new_notes = (new_notes + "\n[INSPECTION_FEE_REJECTED] " + reason).strip()
+        service_request.notes = new_notes
+        service_request.save(
+            update_fields=["inspection_fee_receipt", "inspection_fee_paid", "status", "notes"]
+        )
+
+    msg = (
+        f"The inspection fee receipt for request #{service_request.id} was not accepted. "
+        "Please upload a clear photo or PDF of your official Treasurer receipt."
+    )
+    if reason:
+        msg += f" Note from office: {reason}"
+
+    Notification.objects.create(
+        user=service_request.consumer,
+        message=msg[:500],
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
+    )
+    if (
+        service_request.requested_by_id
+        and service_request.requested_by_id != service_request.consumer_id
+    ):
+        Notification.objects.create(
+            user=service_request.requested_by,
+            message=(
+                f"Inspection fee receipt for request #{service_request.id} "
+                f"({service_request.client_name}) was rejected; the account owner must re-upload."
+            )[:500],
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+
+    messages.success(request, "Inspection fee receipt rejected. The customer can upload a new receipt.")
+    return redirect("services:request_detail", pk=pk)
+
 
 @login_required
 @role_required("ADMIN")
@@ -794,6 +876,16 @@ def waive_inspection(request, pk):
         computation = getattr(service_request, "computation", None)
         if computation:
             computation.save()
+
+        Notification.objects.create(
+            user=service_request.consumer,
+            message=(
+                f"The physical inspection for request #{service_request.id} has been "
+                "waived by the admin. Any inspection fee has been removed."
+            ),
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
 
         messages.success(
             request,
@@ -1045,15 +1137,76 @@ def admin_membership(request):
 
         if request.method == "POST" and previous_form.is_valid():
             cd = previous_form.cleaned_data
-            duplicate = User.objects.filter(
+            fname = (cd["first_name"] or "").strip()
+            lname = (cd["last_name"] or "").strip()
+            brgy = (cd["barangay"] or "").strip()
+            street = (cd["street_address"] or "").strip()
+            prior_vol = cd.get("prior_desludging_m3_4y") or Decimal("0")
+
+            existing_real = (
+                User.objects.filter(
+                    role=User.Role.CONSUMER,
+                    is_legacy_record=False,
+                    first_name__iexact=fname,
+                    last_name__iexact=lname,
+                    consumer_profile__barangay__iexact=brgy,
+                    consumer_profile__street_address__iexact=street,
+                )
+                .select_related("consumer_profile")
+                .first()
+            )
+
+            if existing_real:
+                with transaction.atomic():
+                    prof = existing_real.consumer_profile
+                    prof.prior_desludging_m3_4y = prior_vol
+                    if cd.get("mobile_number"):
+                        prof.mobile_number = cd["mobile_number"]
+                    prof.save()
+
+                    waived_ids = []
+                    if prior_vol > 0:
+                        pending_fee_reqs = ServiceRequest.objects.filter(
+                            consumer=existing_real,
+                            status__in=[
+                                ServiceRequest.Status.INSPECTION_FEE_DUE,
+                                ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+                            ],
+                        )
+                        for sr in pending_fee_reqs:
+                            sr.inspection_fee_paid = True
+                            sr.status = ServiceRequest.Status.UNDER_REVIEW
+                            sr.notes = (
+                                ((sr.notes or "") + "\n") if sr.notes else ""
+                            ) + "[NO_INSPECTION_FEE] Inspection fee waived — prior desludging record confirmed by admin."
+                            sr.save(update_fields=["inspection_fee_paid", "status", "notes"])
+                            waived_ids.append(str(sr.id))
+                            Notification.objects.create(
+                                user=existing_real,
+                                message=(
+                                    f"Request #{sr.id}: Inspection fee has been waived because "
+                                    "your prior desludging history was confirmed. "
+                                    "Your request is now under review."
+                                ),
+                                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                                related_request=sr,
+                            )
+
+                msg = f"Account for {existing_real.get_full_name()} updated with prior desludging record."
+                if waived_ids:
+                    msg += f" Inspection fee waived on request(s) #{', #'.join(waived_ids)}."
+                messages.success(request, msg)
+                return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
+
+            duplicate_legacy = User.objects.filter(
                 role=User.Role.CONSUMER,
                 is_legacy_record=True,
-                first_name__iexact=(cd["first_name"] or "").strip(),
-                last_name__iexact=(cd["last_name"] or "").strip(),
-                consumer_profile__barangay__iexact=(cd["barangay"] or "").strip(),
-                consumer_profile__street_address__iexact=(cd["street_address"] or "").strip(),
+                first_name__iexact=fname,
+                last_name__iexact=lname,
+                consumer_profile__barangay__iexact=brgy,
+                consumer_profile__street_address__iexact=street,
             ).exists()
-            if duplicate:
+            if duplicate_legacy:
                 previous_form.add_error(
                     None,
                     "A previous registration with the same name and address already exists.",
@@ -1069,8 +1222,8 @@ def admin_membership(request):
                 with transaction.atomic():
                     legacy_user = User(
                         username=username,
-                        first_name=(cd["first_name"] or "").strip(),
-                        last_name=(cd["last_name"] or "").strip(),
+                        first_name=fname,
+                        last_name=lname,
                         email="",
                         role=User.Role.CONSUMER,
                         is_active=True,
@@ -1082,16 +1235,17 @@ def admin_membership(request):
                     ConsumerProfile.objects.create(
                         user=legacy_user,
                         mobile_number=cd.get("mobile_number") or "",
-                        street_address=(cd.get("street_address") or "").strip(),
-                        barangay=(cd.get("barangay") or "").strip(),
+                        street_address=street,
+                        barangay=brgy,
                         municipality=(cd.get("municipality") or "").strip() or "Bayawan City",
                         province=(cd.get("province") or "").strip() or "Negros Oriental",
-                        prior_desludging_m3_4y=cd.get("prior_desludging_m3_4y") or Decimal("0"),
+                        prior_desludging_m3_4y=prior_vol,
                     )
 
                 messages.success(
                     request,
-                    "Previous customer registration saved. This record can now be matched during request verification.",
+                    "Previous customer registration saved. When a consumer registers with "
+                    "matching information they will be notified and their data will be synced.",
                 )
                 return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
     else:
@@ -1107,14 +1261,82 @@ def admin_membership(request):
                 | Q(consumer_profile__mobile_number__icontains=search)
             )
 
+    existing_accounts = User.objects.none()
+    if tab == "previous_account_registration":
+        existing_accounts = (
+            User.objects.filter(
+                role=User.Role.CONSUMER,
+                is_legacy_record=False,
+                consumer_profile__isnull=False,
+            )
+            .select_related("consumer_profile")
+            .order_by("last_name", "first_name")
+        )
+
     context = {
         "consumers": consumers,
         "active_tab": tab,
         "search_query": search,
         "previous_form": previous_form,
         "previous_records": previous_records,
+        "existing_accounts": existing_accounts,
     }
     return render(request, "dashboard/admin_membership.html", context)
+
+
+@login_required
+@role_required("ADMIN")
+@require_POST
+def admin_update_prior_volume(request, user_id):
+    """Quick-update a consumer's prior desludging volume and waive pending inspection fees."""
+    consumer = get_object_or_404(
+        User, pk=user_id, role=User.Role.CONSUMER, is_legacy_record=False
+    )
+    raw = request.POST.get("prior_desludging_m3_4y", "0")
+    try:
+        volume = Decimal(raw)
+    except Exception:
+        volume = Decimal("0")
+
+    with transaction.atomic():
+        prof, _ = ConsumerProfile.objects.get_or_create(user=consumer)
+        prof.prior_desludging_m3_4y = volume
+        prof.save(update_fields=["prior_desludging_m3_4y"])
+
+        waived_ids = []
+        if volume > 0:
+            pending_fee_reqs = ServiceRequest.objects.filter(
+                consumer=consumer,
+                status__in=[
+                    ServiceRequest.Status.INSPECTION_FEE_DUE,
+                    ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+                ],
+            )
+            for sr in pending_fee_reqs:
+                sr.inspection_fee_paid = True
+                sr.status = ServiceRequest.Status.UNDER_REVIEW
+                sr.notes = (
+                    ((sr.notes or "") + "\n") if sr.notes else ""
+                ) + "[NO_INSPECTION_FEE] Inspection fee waived — prior desludging record confirmed by admin."
+                sr.save(update_fields=["inspection_fee_paid", "status", "notes"])
+                waived_ids.append(str(sr.id))
+                Notification.objects.create(
+                    user=consumer,
+                    message=(
+                        f"Request #{sr.id}: Inspection fee has been waived because "
+                        "your prior desludging history was confirmed. "
+                        "Your request is now under review."
+                    ),
+                    notification_type=Notification.NotificationType.STATUS_CHANGE,
+                    related_request=sr,
+                )
+
+    display = consumer.get_full_name() or consumer.username
+    msg = f"Prior desludging volume for {display} updated to {volume} m³."
+    if waived_ids:
+        msg += f" Inspection fee waived on request(s) #{', #'.join(waived_ids)}."
+    messages.success(request, msg)
+    return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
 
 
 @login_required

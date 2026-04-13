@@ -17,12 +17,16 @@
 </style>
 <div class="form-container">
     <div class="form-card">
-        <h2>Upload Inspection Fee Receipt</h2>
+        <h2>{% if is_reupload %}Replace Inspection Fee Receipt{% else %}Upload Inspection Fee Receipt{% endif %}</h2>
         <p class="help-text">
+            {% if is_reupload %}
+            Upload a new clear photo or PDF of your official Treasurer receipt to replace the previous submission.
+            {% else %}
             Please upload a clear photo or scanned copy of the official receipt issued by the Treasurer's Office
             for the <strong>₱150.00 inspection fee</strong>.
+            {% endif %}
         </p>
-        <form method="post" enctype="multipart/form-data">
+        <form method="post" enctype="multipart/form-data" data-offline-sync="true" data-offline-label="Inspection fee receipt queued for sync">
             {% csrf_token %}
             <div class="form-group">
                 <label>Inspection Fee Receipt <span style="color:red">*</span></label>

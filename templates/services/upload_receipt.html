@@ -24,7 +24,7 @@
     <div class="upload-card">
         <h2>Upload Payment Receipt</h2>
         <p>{{ sr.get_service_type_display }}<br>Total: &#8369;{% if sr.fee_amount %}{{ sr.fee_amount }}{% else %}See computation{% endif %}</p>
-        <form method="post" enctype="multipart/form-data">
+        <form method="post" enctype="multipart/form-data" data-offline-sync="true" data-offline-label="Payment receipt queued for sync">
             {% csrf_token %}
             {# Clicks on the native file control bubble here; avoid calling .click() again or the picker opens twice. #}
             <div class="upload-area" onclick="if (!event.target.closest('input[type=file]')) { document.getElementById('id_treasurer_receipt').click(); }">

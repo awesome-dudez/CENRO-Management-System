@@ -115,9 +115,9 @@ class ServiceRequestStep2Form(forms.Form):
         label="Contact Number",
     )
     connected_to_bawad = forms.ChoiceField(
-        choices=[("NO", "No"), ("YES", "Yes")],
+        choices=[("YES", "BAWAD Connected"), ("NO", "Other Source")],
         widget=forms.RadioSelect(attrs={"class": "bawad-radio"}),
-        label="Connected to BAWAD?",
+        label="Water Source Connection:",
         initial="NO",
         required=False,
     )
@@ -127,9 +127,9 @@ class ServiceRequestStep2Form(forms.Form):
         label="Proof of BAWAD Affiliation",
     )
     public_private = forms.ChoiceField(
-        choices=[("PRIVATE", "Private"), ("PUBLIC", "Public")],
+        choices=[("PUBLIC", "Public"), ("PRIVATE", "Private")],
         widget=forms.RadioSelect(attrs={"class": "pub-priv-radio"}),
-        label="Public / Private",
+        label="Property type:",
         initial="PRIVATE",
     )
     client_signature = forms.FileField(

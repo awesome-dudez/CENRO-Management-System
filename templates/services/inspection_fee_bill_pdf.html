@@ -84,22 +84,25 @@
             <table width="100%">
                 <tr>
                     <td style="vertical-align:top;">
-                        {% if bayawan_logo_url or cenro_logo_url %}
                         <div style="margin-bottom:6px;">
                             {% if bayawan_logo_url %}
                             <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:120px; vertical-align:middle;">
                             {% endif %}
-                            {% if cenro_logo_url %}
-                            <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:60px; vertical-align:middle; margin-left:10px;">
+                            {% if bagong_pilipinas_logo_url %}
+                            <img src="{{ bagong_pilipinas_logo_url }}" alt="Bagong Pilipinas" style="height:60px; vertical-align:middle; margin-left:10px;">
                             {% endif %}
                         </div>
-                        {% endif %}
                         <div class="bill-title">Inspection Fee Bill</div>
                         <div class="bill-subtitle">
                             {{ sr.get_service_type_display }}
                         </div>
                     </td>
-                    <td class="bill-date" style="vertical-align:top; padding-top:93px;">
+                    <td class="bill-date" style="vertical-align:top; text-align:right; padding-top:16px;">
+                        {% if cenro_logo_url %}
+                        <div style="margin-bottom:6px;">
+                            <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:60px;">
+                        </div>
+                        {% endif %}
                         Date: {{ sr.request_date|date:"M d, Y" }}
                     </td>
                 </tr>

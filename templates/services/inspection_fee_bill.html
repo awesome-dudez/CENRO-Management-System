@@ -18,9 +18,9 @@
     .btn-primary { background:#1abc9c; color:white; }
     .btn-primary:hover { background:#16a085; }
     .btn-secondary { background:#e0e0e0; color:#2d3142; }
-    .logo-row { display:flex; align-items:center; gap:16px; }
+    .logo-row { display:flex; align-items:center; gap:16px; flex:1; }
     .title-block { margin-top:8px; }
-    .date-right { margin-top:140px; }
+    .date-right { text-align:right; white-space:nowrap; }
 
     /* Print-only adjustments: only print the bill card, hide rest of layout */
     @media print {
@@ -49,19 +49,18 @@
 <div class="bill-container">
     <div class="bill-card">
         <div class="bill-header">
-            <div style="flex:1;">
-                <div class="logo-row">
-                    <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:128px;">
-                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:64px;">
-                </div>
-                <div class="title-block">
-                    <div class="bill-title">Inspection Fee Bill</div>
-                    <div class="bill-meta">{{ sr.get_service_type_display }}</div>
-                </div>
+            <div class="logo-row">
+                <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:128px;">
+                <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:64px;">
             </div>
-            <div class="bill-meta date-right" style="text-align:right; white-space:nowrap;">
-                Date: {{ sr.request_date|date:"M d, Y" }}
+            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; justify-content:flex-start; margin-top:18px;">
+                <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:64px; margin-bottom:8px;">
+                <div class="bill-meta date-right">Date: {{ sr.request_date|date:"M d, Y" }}</div>
             </div>
+        </div>
+        <div class="title-block">
+            <div class="bill-title">Inspection Fee Bill</div>
+            <div class="bill-meta">{{ sr.get_service_type_display }}</div>
         </div>
 
         <div class="bill-section">

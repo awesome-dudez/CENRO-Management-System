@@ -112,16 +112,16 @@ class QuickComputationForm(forms.Form):
         widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
     )
     connected_to_bawad = forms.ChoiceField(
-        choices=[("NO", "No"), ("YES", "Yes")],
+        choices=[("YES", "BAWAD Connected"), ("NO", "Other Source")],
         initial="NO",
         widget=forms.Select(attrs={'class': 'form-control'}),
-        label="BAWAD member",
+        label="Water Source Connection:",
     )
     public_private = forms.ChoiceField(
-        choices=ServiceRequest.PublicPrivate.choices,
+        choices=[("PUBLIC", "Public"), ("PRIVATE", "Private")],
         initial=ServiceRequest.PublicPrivate.PRIVATE,
         widget=forms.Select(attrs={'class': 'form-control'}),
-        label="Public / Private",
+        label="Property type:",
     )
     bawad_prior_used_m3 = forms.DecimalField(
         required=False,

@@ -443,6 +443,23 @@
         background: #1abc9c;
         color: white;
     }
+    .offline-status-banner {
+        display: none;
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.45;
+        border: 1px solid #f0d5a2;
+        background: #fff8e8;
+        color: #7a5a20;
+    }
+    .offline-status-banner.visible {
+        display: block;
+    }
+    .offline-status-banner strong {
+        font-weight: 700;
+    }
     .req-toggle-btn:hover:not(.active) {
         background: #f0fdf4;
     }
@@ -569,7 +586,7 @@
         {% if step == 1 %}
         <!-- ==================== STEP 1: Service Type ==================== -->
         <h2>Select Service Type</h2>
-        <form method="post" class="wizard-form" novalidate>
+        <form method="post" class="wizard-form" novalidate id="offlineWizardStep1Form">
             {% csrf_token %}
             <div class="form-group">
                 <label for="id_service_type">Service Type <span style="color:red">*</span></label>
@@ -588,7 +605,8 @@
         {% elif step == 2 %}
         <!-- ==================== STEP 2: Customer Request Form ==================== -->
         <h2>Customer Request Form</h2>
-        <form method="post" enctype="multipart/form-data" class="wizard-form" novalidate>
+        <div class="offline-status-banner" id="offlineWizardBannerStep2" role="status" aria-live="polite"></div>
+        <form method="post" enctype="multipart/form-data" class="wizard-form" novalidate id="offlineWizardStep2Form" data-offline-create-url="{% url 'services:offline_create_request' %}">
             {% csrf_token %}
 
             <!-- Requester toggle -->
@@ -716,7 +734,7 @@
             </div>
 
             <div class="form-group" id="bawadFormGroup">
-                <label>Connected to BAWAD? <span style="color:red">*</span></label>
+                <label>{{ form.connected_to_bawad.label }} <span style="color:red">*</span></label>
                 <div class="radio-group" id="bawadRadioGroup">
                     {% for choice in form.connected_to_bawad %}
                     <label>{{ choice.tag }} {{ choice.choice_label }}</label>
@@ -738,7 +756,7 @@
             </div>
 
             <div class="form-group">
-                <label>Public / Private <span style="color:red">*</span></label>
+                <label>{{ form.public_private.label }} <span style="color:red">*</span></label>
                 <div class="radio-group">
                     {% for choice in form.public_private %}
                     <label>{{ choice.tag }} {{ choice.choice_label }}</label>
@@ -755,7 +773,8 @@
         {% elif step == 3 %}
         <!-- ==================== STEP 3: Review & Submit ==================== -->
         <h2>Review &amp; Submit</h2>
-        <form method="post" class="wizard-form" novalidate>
+        <div class="offline-status-banner" id="offlineWizardBannerStep3" role="status" aria-live="polite"></div>
+        <form method="post" class="wizard-form" novalidate id="offlineWizardStep3Form">
             {% csrf_token %}
 
             <div style="background:#f0fdf4;padding:24px;border-radius:8px;margin-bottom:30px;">
@@ -769,9 +788,9 @@
                     <tr><td>Address</td><td>{{ form_data.address|default:"N/A" }}</td></tr>
                     <tr><td>Contact Number</td><td>{{ form_data.contact_number }}</td></tr>
                     {% if form_data.service_type != 'GRASS_CUTTING' %}
-                    <tr><td>Connected to BAWAD</td><td>{{ form_data.connected_to_bawad }}</td></tr>
+                    <tr><td>Water Source Connection</td><td>{% if form_data.connected_to_bawad == 'YES' %}BAWAD Connected{% else %}Other Source{% endif %}</td></tr>
                     {% endif %}
-                    <tr><td>Public / Private</td><td>{{ form_data.public_private }}</td></tr>
+                    <tr><td>Property type</td><td>{% if form_data.public_private == 'PUBLIC' %}Public{% else %}Private{% endif %}</td></tr>
                 </table>
             </div>
 
@@ -1720,5 +1739,219 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 </script>
 {% endif %}
+
+<script>
+(function() {
+    var DRAFT_KEY = 'cenro_wizard_step2_draft';
+    var SERVICE_KEY = 'cenro_wizard_service_type';
+    var QUEUED_AT_KEY = 'cenro_wizard_queued_at';
+
+    function setWizardBanner(msg, tone) {
+        var ids = ['offlineWizardBannerStep2', 'offlineWizardBannerStep3'];
+        ids.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (!msg) {
+                el.classList.remove('visible');
+                el.textContent = '';
+                return;
+            }
+            el.innerHTML = msg;
+            el.classList.add('visible');
+            if (tone === 'success') {
+                el.style.background = '#eef9f1';
+                el.style.borderColor = '#b7dfc4';
+                el.style.color = '#1f6b36';
+            } else if (tone === 'warning') {
+                el.style.background = '#fff8e8';
+                el.style.borderColor = '#f0d5a2';
+                el.style.color = '#7a5a20';
+            } else {
+                el.style.background = '#edf5ff';
+                el.style.borderColor = '#c8defa';
+                el.style.color = '#1e4e85';
+            }
+        });
+    }
+
+    function refreshWizardOfflineState() {
+        var queuedAt = localStorage.getItem(QUEUED_AT_KEY);
+        if (queuedAt) {
+            var when = new Date(parseInt(queuedAt, 10) || Date.now()).toLocaleString();
+            setWizardBanner(
+                '<strong>Offline Draft Saved.</strong> Your request is queued since ' + when + '. Please go online to fully submit. It will sync automatically.',
+                'warning'
+            );
+            return;
+        }
+        if (!navigator.onLine) {
+            setWizardBanner(
+                '<strong>You are offline.</strong> You can continue filling this form. Submissions will be queued and will only be completely submitted once internet is back.',
+                'warning'
+            );
+            return;
+        }
+        setWizardBanner(
+            '<strong>Online.</strong> Your request will be submitted immediately to the server.',
+            'info'
+        );
+    }
+
+    function mergeDraftPayload() {
+        var form = document.getElementById('offlineWizardStep2Form');
+        var step3Form = document.getElementById('offlineWizardStep3Form');
+        if (!form && !step3Form) return null;
+        if (!form && step3Form) {
+            // Step 3 offline fallback: reconstruct from saved Step 2 draft.
+            var rawDraft = localStorage.getItem(DRAFT_KEY);
+            if (!rawDraft) return null;
+            var parsed = {};
+            try { parsed = JSON.parse(rawDraft) || {}; } catch (e) { parsed = {}; }
+            var fd3 = new FormData();
+            Object.keys(parsed).forEach(function(k) {
+                if (parsed[k] !== undefined && parsed[k] !== null) fd3.set(k, parsed[k]);
+            });
+            var fromService3 = localStorage.getItem(SERVICE_KEY) || '';
+            if (fromService3) fd3.set('service_type', fromService3);
+            return fd3;
+        }
+        var fd = new FormData(form);
+        var serviceTypeSelect = document.getElementById('id_service_type');
+        if (serviceTypeSelect && serviceTypeSelect.value) {
+            fd.set('service_type', serviceTypeSelect.value);
+            try { localStorage.setItem(SERVICE_KEY, serviceTypeSelect.value); } catch (e) {}
+        } else {
+            var fromSessionSummary = "{{ form_data.service_type|default:''|escapejs }}";
+            var fromLocal = localStorage.getItem(SERVICE_KEY) || '';
+            if (fromSessionSummary) fd.set('service_type', fromSessionSummary);
+            else if (fromLocal) fd.set('service_type', fromLocal);
+        }
+        return fd;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var step1Form = document.getElementById('offlineWizardStep1Form');
+        var form = document.getElementById('offlineWizardStep2Form');
+        var step3Form = document.getElementById('offlineWizardStep3Form');
+
+        if (step1Form) {
+            step1Form.addEventListener('submit', function(evt) {
+                if (navigator.onLine) return;
+                var serviceSel = document.getElementById('id_service_type');
+                if (serviceSel && serviceSel.value) {
+                    try { localStorage.setItem(SERVICE_KEY, serviceSel.value); } catch (e) {}
+                }
+                evt.preventDefault();
+                alert('You are offline. Service type was saved locally. Open Step 2 once online cache is available, then submit to queue the request.');
+            });
+        }
+
+        if (!form && !step3Form) return;
+
+        // Restore draft fields saved locally.
+        if (form) {
+            try {
+                var raw = localStorage.getItem(DRAFT_KEY);
+                if (raw) {
+                    var draft = JSON.parse(raw);
+                    Object.keys(draft).forEach(function(name) {
+                        var field = form.querySelector('[name="' + name + '"]');
+                        if (!field || field.type === 'file') return;
+                        if (field.type === 'radio') {
+                            var radio = form.querySelector('[name="' + name + '"][value="' + draft[name] + '"]');
+                            if (radio) radio.checked = true;
+                        } else if (field.type === 'checkbox') {
+                            field.checked = !!draft[name];
+                        } else if (!field.value) {
+                            field.value = draft[name];
+                        }
+                    });
+                }
+            } catch (e) {}
+        }
+
+        // Save draft while user types (non-file fields only).
+        if (form) {
+            form.addEventListener('input', function() {
+                var out = {};
+                var els = form.querySelectorAll('input, select, textarea');
+                els.forEach(function(el) {
+                    if (!el.name || el.type === 'file') return;
+                    if (el.type === 'radio') {
+                        if (el.checked) out[el.name] = el.value;
+                        return;
+                    }
+                    if (el.type === 'checkbox') {
+                        out[el.name] = !!el.checked;
+                        return;
+                    }
+                    out[el.name] = el.value;
+                });
+                try { localStorage.setItem(DRAFT_KEY, JSON.stringify(out)); } catch (e) {}
+                if (!navigator.onLine) {
+                    setWizardBanner(
+                        '<strong>Offline Draft Saved.</strong> Keep filling the form. Go online later so the system can fully submit your request.',
+                        'warning'
+                    );
+                }
+            });
+        }
+
+        // True offline replay path: queue one-shot payload to offline create endpoint.
+        function queueOfflineWizardSubmit(evt, endpoint) {
+            if (navigator.onLine) return;
+            if (!window.CenroOffline || typeof window.CenroOffline.enqueueFormData !== 'function') return;
+            evt.preventDefault();
+            var fd = mergeDraftPayload();
+            if (!fd) {
+                alert('No draft data found to queue. Please complete Step 2 first.');
+                return;
+            }
+            window.CenroOffline.enqueueFormData(
+                endpoint,
+                'POST',
+                'Service request queued for sync',
+                fd
+            ).then(function() {
+                try { localStorage.setItem(QUEUED_AT_KEY, String(Date.now())); } catch (e) {}
+                setWizardBanner(
+                    '<strong>Offline Draft Saved.</strong> Your request is queued. Please go online to completely submit. Sync runs automatically once connected.',
+                    'success'
+                );
+                alert('You are offline. Your request is queued. Please reconnect to fully submit it to the server.');
+            }).catch(function() {
+                alert('Unable to queue offline request. Please try again.');
+            });
+        }
+
+        if (form) {
+            form.addEventListener('submit', function(evt) {
+                var endpoint = form.getAttribute('data-offline-create-url') || form.action || window.location.href;
+                queueOfflineWizardSubmit(evt, endpoint);
+            });
+        }
+
+        if (step3Form) {
+            step3Form.addEventListener('submit', function(evt) {
+                var step2 = document.getElementById('offlineWizardStep2Form');
+                var endpoint = (step2 && step2.getAttribute('data-offline-create-url')) || "{% url 'services:offline_create_request' %}";
+                queueOfflineWizardSubmit(evt, endpoint);
+            });
+        }
+
+        refreshWizardOfflineState();
+        window.addEventListener('online', function() {
+            refreshWizardOfflineState();
+            // Clear local queued marker optimistically once online; server queue handles real sync.
+            try { localStorage.removeItem(QUEUED_AT_KEY); } catch (e) {}
+            setWizardBanner(
+                '<strong>Back online.</strong> If you queued a request offline, it will now be synchronized automatically.',
+                'success'
+            );
+        });
+        window.addEventListener('offline', refreshWizardOfflineState);
+    });
+})();
+</script>
 
 {% endblock %}

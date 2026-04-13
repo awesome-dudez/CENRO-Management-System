@@ -50,6 +50,54 @@ def _init_registration_captcha(request):
     return a, b
 
 
+def _sync_legacy_record(user):
+    """
+    After a new consumer registers, check for a matching legacy (pre-system)
+    record.  If found, merge prior desludging volume into the new profile,
+    re-assign any service requests linked to the legacy account, create a
+    notification for the user, and delete the legacy account.
+    """
+    try:
+        profile = user.consumer_profile
+    except ConsumerProfile.DoesNotExist:
+        return
+
+    legacy = (
+        User.objects.filter(
+            role=User.Role.CONSUMER,
+            is_legacy_record=True,
+            first_name__iexact=user.first_name.strip(),
+            last_name__iexact=user.last_name.strip(),
+            consumer_profile__barangay__iexact=(profile.barangay or "").strip(),
+        )
+        .exclude(pk=user.pk)
+        .select_related("consumer_profile")
+        .first()
+    )
+    if not legacy:
+        return
+
+    legacy_profile = legacy.consumer_profile
+    if legacy_profile.prior_desludging_m3_4y and legacy_profile.prior_desludging_m3_4y > 0:
+        profile.prior_desludging_m3_4y = legacy_profile.prior_desludging_m3_4y
+        profile.save(update_fields=["prior_desludging_m3_4y"])
+
+    from services.models import ServiceRequest, Notification
+
+    ServiceRequest.objects.filter(consumer=legacy).update(consumer=user)
+
+    Notification.objects.create(
+        user=user,
+        message=(
+            "Welcome! We found an existing record matching your information. "
+            "Your previous desludging history has been synced with your new account."
+        ),
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+    )
+
+    legacy.delete()
+
+
 def login_view(request):
     # Only check authenticated; never access .role before verifying authenticated
     if getattr(request.user, "is_authenticated", False):
@@ -187,8 +235,8 @@ def consumer_register(request):
     try:
         with transaction.atomic():
             user = form.save()
+            _sync_legacy_record(user)
         login(request, user)
-        # Clear captcha once successfully used
         request.session.pop("registration_captcha", None)
         messages.success(request, "Registration successful! Welcome to the CENRO Management System.")
         role = getattr(user, "role", None)

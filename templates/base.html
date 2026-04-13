@@ -20,6 +20,8 @@
         }
     })();
     </script>
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
+    <meta name="theme-color" content="#1e7a4d">
     <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260413-notif-fix2">
     <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260413-notif-fix2">
     <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260413-notif-fix2">
@@ -384,6 +386,16 @@
     })();
     </script>
     {% endif %}
+
+    <script src="{% static 'js/offline-sync.js' %}"></script>
+    <script>
+    (function() {
+        if (!("serviceWorker" in navigator)) return;
+        window.addEventListener("load", function() {
+            navigator.serviceWorker.register("/sw.js").catch(function() {});
+        });
+    })();
+    </script>
 
     <script>
     (function() {

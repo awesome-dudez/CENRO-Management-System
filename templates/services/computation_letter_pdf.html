@@ -1,37 +1,142 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
     <title>Computation Letter - ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</title>
     <style type="text/css">
-        /* xhtml2pdf uses ReportLab registered fonts — see download_computation_pdf */
-        body { font-family: {{ pdf_body_font_stack }}; font-size: 12px; color: #2d3142; padding: 20px; }
+        /* Match computation_letter.html; avoid extra rules xhtml2pdf draws as lines */
+        @page {
+            margin: 28pt 44pt 36pt 44pt;
+        }
+        body {
+            font-family: {{ pdf_body_font_stack }};
+            font-size: 14px;
+            color: #2d3142;
+            padding: 0;
+            margin: 0;
+        }
         .currency { font-family: inherit; }
-        .letter-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; }
-        .letter-header h2 { font-size: 18px; margin: 0 0 4px; }
-        .letter-header p { font-size: 12px; color: #666; margin: 0; }
-        .letter-addressee { margin-bottom: 20px; }
-        .letter-addressee p { margin: 2px 0; font-size: 13px; }
-        .letter-section { margin-bottom: 18px; }
-        .letter-section h4 { color: #1abc9c; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
-        .breakdown-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .breakdown-table td { padding: 6px 10px; border-bottom: 1px solid #eee; }
+        .letter-header {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #2d3142;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+        .letter-header-logos {
+            width: 100%;
+            border-collapse: collapse;
+            border: none;
+            margin: 0 0 20px 0;
+        }
+        .letter-header-logos td {
+            border: none;
+            padding: 0;
+            vertical-align: middle;
+        }
+        .letter-header-titles {
+            text-align: center;
+        }
+        .letter-header h2 {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2d3142;
+            margin: 0 0 4px 0;
+            padding: 0;
+            border: none;
+        }
+        .letter-header p {
+            font-size: 13px;
+            color: #666;
+            margin: 0;
+            padding: 0;
+            border: none;
+        }
+        .letter-addressee { margin-bottom: 24px; }
+        .letter-addressee p {
+            margin: 2px 0;
+            font-size: 14px;
+            color: #2d3142;
+            border: none;
+        }
+        .letter-section { margin-bottom: 20px; }
+        .letter-section h4 {
+            color: #1abc9c;
+            font-size: 15px;
+            margin: 0 0 8px 0;
+            padding: 0 0 6px 0;
+            border: none;
+            border-bottom: 1px solid #eeeeee;
+        }
+        .breakdown-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            border: none;
+        }
+        .breakdown-table td {
+            padding: 8px 12px;
+            border: none;
+            border-bottom: 1px solid #eeeeee;
+        }
         .breakdown-table td:last-child { text-align: right; font-weight: 500; }
-        .breakdown-table tr.total td { border-top: 2px solid #2d3142; font-weight: 700; font-size: 14px; color: #1abc9c; }
+        .breakdown-table tr.total td {
+            border-top: 2px solid #2d3142;
+            border-bottom: none;
+            font-weight: 700;
+            font-size: 16px;
+            color: #1abc9c;
+        }
         .breakdown-table tr.subtotal td { font-weight: 600; color: #555; }
         .breakdown-table tr.free td { color: #27ae60; font-weight: 700; }
-        .breakdown-table tr.used-for-computation td { background: #e8f8f5; }
+        .breakdown-table tr.used-for-computation td {
+            background-color: #e8f8f5;
+            border-bottom-color: #c7efe6;
+        }
         .breakdown-table tr.used-for-computation td:first-child { font-weight: 700; }
         .breakdown-table tr.used-for-computation td:last-child { font-weight: 700; color: #1abc9c; }
-        .prepared { margin-top: 8px; font-size: 12px; color: #666; line-height: 1.2; }
+        .prepared {
+            margin-top: 30px;
+            font-size: 13px;
+            color: #666;
+            line-height: 1.3;
+        }
+        /* xhtml2pdf ignores max-height on img — use explicit height */
+        .prepared-sig-wrap { margin-bottom: 4px; }
+        .prepared-sig-wrap img {
+            height: 68px !important;
+            width: auto !important;
+            display: block;
+        }
+        .prepared table { border: none; border-collapse: collapse; }
+        .prepared td { border: none; padding: 0; vertical-align: top; }
     </style>
 </head>
 <body>
     <div class="letter-header">
-        <h2>COMPUTATION LETTER</h2>
-        <p>City Environment and Natural Resources Office (CENRO)</p>
-        <p>City of Bayawan, Negros Oriental</p>
+        <table class="letter-header-logos" width="100%" cellspacing="0" cellpadding="0">
+            <tr>
+                <td>
+                    {% if bayawan_logo_url %}
+                    <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:96px; width:auto; vertical-align:middle;">
+                    {% endif %}
+                    {% if bagong_pilipinas_logo_url %}
+                    <img src="{{ bagong_pilipinas_logo_url }}" alt="Bagong Pilipinas" style="height:52px; width:auto; vertical-align:middle; margin-left:16px;">
+                    {% endif %}
+                </td>
+                <td style="text-align:right;">
+                    {% if cenro_logo_url %}
+                    <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:56px; width:auto;">
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+        <div class="letter-header-titles">
+            <h2>COMPUTATION LETTER</h2>
+            <p>City Environment and Natural Resources Office (CENRO)</p>
+            <p>City of Bayawan, Negros Oriental</p>
+        </div>
     </div>
 
     <div class="letter-addressee">
@@ -47,7 +152,7 @@
             <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
             <tr><td>Client</td><td>{{ sr.client_name }}</td></tr>
             <tr><td>Address</td><td>{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</td></tr>
-            <tr><td>BAWAD Member</td><td>{% if sr.connected_to_bawad %}Yes{% else %}No{% endif %}</td></tr>
+            <tr><td>Water Source Connection</td><td>{% if sr.connected_to_bawad %}BAWAD Connected{% else %}Other Source{% endif %}</td></tr>
             <tr><td>Volume</td><td>{{ comp.cubic_meters|floatformat:0 }} cubic meters</td></tr>
             {% if comp.distance_km %}<tr><td>Distance from CENRO Office</td><td>{{ comp.distance_km|floatformat:0 }} km</td></tr>{% endif %}
             <tr><td>Trips</td><td>{{ comp.trips }}</td></tr>
@@ -75,20 +180,14 @@
     </div>
 
     <div class="prepared">
-        <table style="border-collapse:collapse;">
-            <tr>
-                <td style="padding:0;">
-                    {% if prepared_by_signature_path %}
-                    <img src="{{ prepared_by_signature_path }}" alt="Prepared by signature" height="36" style="height:18px; display:block; margin-left:60px;">
-                    {% else %}
-                    <img src="{% static 'signatures/signature.png' %}" alt="Prepared by signature" height="36" style="height:18px; display:block; margin-left:60px;">
-                    {% endif %}
-                </td>
-            </tr>
-            <tr>
-                <td style="padding:0; line-height:1.0;">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</td>
-            </tr>
-        </table>
+        <div class="prepared-sig-wrap">
+            {% if prepared_by_signature_path %}
+            <img src="{{ prepared_by_signature_path }}" alt="" height="68" style="height:68px;width:auto;display:block;">
+            {% else %}
+            <img src="{{ default_signature_url }}" alt="" height="68" style="height:68px;width:auto;display:block;">
+            {% endif %}
+        </div>
+        <p style="margin:0; font-size:13px; color:#666;">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>
     </div>
 </body>
 </html>

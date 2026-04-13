@@ -50,8 +50,8 @@
                 <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
                 <tr><td>Complete Address</td><td>{{ sr.address }}, {{ sr.barangay }}</td></tr>
                 <tr><td>Contact Number</td><td>{{ sr.contact_number }}</td></tr>
-                <tr><td>Connected to BAWAD</td><td>{% if sr.connected_to_bawad %}YES{% else %}NO{% endif %}</td></tr>
-                <tr><td>Public / Private</td><td>{{ sr.get_public_private_display }}</td></tr>
+                <tr><td>Water Source Connection</td><td>{% if sr.connected_to_bawad %}BAWAD Connected{% else %}Other Source{% endif %}</td></tr>
+                <tr><td>Property type</td><td>{{ sr.get_public_private_display }}</td></tr>
             </table>
         </div>
 

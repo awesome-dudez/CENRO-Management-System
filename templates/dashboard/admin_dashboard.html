@@ -11,9 +11,6 @@
         <p class="welcome-text">Welcome back, <strong>{{ user.get_full_name|default:user.username|title }}</strong>. Here’s what’s happening across your services.</p>
     </div>
     <div class="dashboard-actions">
-        <button class="btn btn-sm" onclick="window.print()">
-            <span>🖨️</span> Print Report
-        </button>
         <a href="{% url 'scheduling:schedule_list' %}" class="btn btn-primary btn-sm">
             <span>🗓️</span> View Schedule
         </a>

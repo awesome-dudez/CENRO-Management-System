@@ -17,6 +17,7 @@ urlpatterns = [
     path("admin/requests/<int:pk>/schedule-desludging/", admin_views.schedule_desludging, name="schedule_desludging"),
     path("admin/requests/<int:pk>/confirm-payment/", admin_views.confirm_payment, name="confirm_payment"),
     path("admin/requests/<int:pk>/confirm-inspection-fee/", admin_views.confirm_inspection_fee, name="confirm_inspection_fee"),
+    path("admin/requests/<int:pk>/reject-inspection-fee/", admin_views.reject_inspection_fee, name="reject_inspection_fee"),
     path("admin/requests/schedule/", admin_views.admin_schedule_by_barangay, name="admin_schedule"),
     path("admin/membership/", admin_views.admin_membership, name="admin_membership"),
     path(
@@ -24,6 +25,7 @@ urlpatterns = [
         admin_views.admin_reset_consumer_password,
         name="admin_reset_consumer_password",
     ),
+    path("admin/membership/update-volume/<int:user_id>/", admin_views.admin_update_prior_volume, name="admin_update_prior_volume"),
     path("admin/membership/history/<int:user_id>/", admin_views.member_service_history, name="member_service_history"),
     path("admin/computation/", admin_views.admin_computation, name="admin_computation"),
     path("admin/computation/generate-receipt/", admin_views.generate_receipt, name="generate_receipt"),

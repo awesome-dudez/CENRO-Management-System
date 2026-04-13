@@ -76,8 +76,8 @@
             <div class="info-item"><label>Contact Number</label><span>{{ sr.contact_number }}</span></div>
             <div class="info-item"><label>Request Date</label><span>{{ sr.request_date|date:"M d, Y" }}</span></div>
             <div class="info-item"><label>Service Type</label><span>{{ sr.get_service_type_display }}</span></div>
-            <div class="info-item"><label>Public / Private</label><span>{{ sr.get_public_private_display }}</span></div>
-            <div class="info-item"><label>Connected to BAWAD</label><span>{% if sr.connected_to_bawad %}Yes{% else %}No{% endif %}</span></div>
+            <div class="info-item"><label>Property type</label><span>{{ sr.get_public_private_display }}</span></div>
+            <div class="info-item"><label>Water Source Connection</label><span>{% if sr.connected_to_bawad %}BAWAD Connected{% else %}Other Source{% endif %}</span></div>
             {% if sr.bawad_proof %}
             <div class="info-item"><label>BAWAD Proof</label><span><a href="{{ sr.bawad_proof.url }}" target="_blank">View Document</a></span></div>
             {% endif %}
@@ -317,6 +317,11 @@
                 {% csrf_token %}
                 <button type="submit" class="btn btn-green">Confirm Inspection Fee</button>
             </form>
+            <form method="post" action="{% url 'dashboard:reject_inspection_fee' sr.pk %}" class="inline-form" style="margin-left:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%;" onsubmit="return confirm('Reject this receipt? The customer will be asked to upload a new one.');">
+                {% csrf_token %}
+                <input type="text" name="reason" maxlength="500" placeholder="Reason (optional)" aria-label="Rejection reason" class="form-control" style="max-width:260px;padding:8px 10px;font-size:14px;">
+                <button type="submit" class="btn btn-warning">Reject Receipt</button>
+            </form>
             {% endif %}
         {% endif %}
 
@@ -331,6 +336,8 @@
             <a href="{% url 'services:inspection_fee_bill' sr.pk %}" class="btn btn-orange">View Inspection Fee Bill</a>
             {% if sr.status == "INSPECTION_FEE_DUE" %}
             <a href="{% url 'services:upload_inspection_fee' sr.pk %}" class="btn btn-green">Upload Inspection Fee Receipt</a>
+            {% elif sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
+            <a href="{% url 'services:upload_inspection_fee' sr.pk %}" class="btn btn-green">Re-upload Inspection Fee Receipt</a>
             {% endif %}
             {% endif %}
 

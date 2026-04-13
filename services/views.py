@@ -5,6 +5,7 @@ import base64
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -223,6 +224,41 @@ def _can_act_on_request(user, service_request):
     return False
 
 
+def _admin_notification_recipients():
+    """
+    Active accounts that should receive operational alerts (new requests, receipt uploads, etc.).
+    Includes portal ADMIN and STAFF roles, plus Django superuser / is_staff for edge cases.
+    """
+    return (
+        User.objects.filter(is_active=True)
+        .filter(
+            Q(role__in=(User.Role.ADMIN, User.Role.STAFF))
+            | Q(is_superuser=True)
+            | Q(is_staff=True)
+        )
+        .distinct()
+    )
+
+
+def _notify_admin_users(message, notification_type, related_request=None):
+    """Create one in-app Notification for each admin/staff recipient."""
+    users = list(_admin_notification_recipients())
+    if not users:
+        return
+    msg = (message or "")[:500]
+    Notification.objects.bulk_create(
+        [
+            Notification(
+                user=u,
+                message=msg,
+                notification_type=notification_type,
+                related_request=related_request,
+            )
+            for u in users
+        ]
+    )
+
+
 # ---------------------------------------------------------------------------
 # Multi-step service request wizard (3 steps)
 # ---------------------------------------------------------------------------
@@ -291,6 +327,178 @@ def verify_other_consumer(request):
         "message": messages_map.get(err or "none", messages_map["none"]),
         "register_url": register_url,
     })
+
+
+@login_required
+@role_required("CONSUMER")
+@require_POST
+def offline_create_request(request):
+    """
+    One-shot request creation endpoint for offline replay of the multi-step wizard.
+    Server remains authoritative for validation and conflict behavior.
+    """
+    service_type = (request.POST.get("service_type") or "").strip()
+    if service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
+        return JsonResponse(
+            {
+                "ok": False,
+                "message": "Grass Cutting uses a different application flow. Please submit it from the Grass Cutting form.",
+            },
+            status=400,
+        )
+
+    request_for = (request.POST.get("request_for") or ServiceRequestStep2Form.REQUEST_FOR_OWNER).strip()
+
+    form = ServiceRequestStep2Form(
+        request.POST,
+        request.FILES,
+        service_type=service_type or ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+    )
+    if not form.is_valid():
+        return JsonResponse({"ok": False, "errors": form.errors, "message": "Validation failed."}, status=400)
+
+    cd = form.cleaned_data
+    target_consumer = request.user
+    requested_by_user = None
+    if request_for == ServiceRequestStep2Form.REQUEST_FOR_OTHER:
+        user_obj, err2 = find_consumer_by_registered_profile(
+            cd.get("client_name"),
+            cd.get("barangay"),
+            cd.get("address"),
+        )
+        if err2 or not user_obj:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": "Offline sync rejected: client account verification no longer matches server records.",
+                    "code": err2 or "none",
+                },
+                status=409,
+            )
+        target_consumer = user_obj
+        requested_by_user = request.user
+
+    try:
+        ServiceRequest.expire_stale_requests()
+    except Exception:
+        pass
+
+    existing_open = ServiceRequest.objects.filter(
+        consumer=target_consumer,
+        service_type=service_type or ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        status__in=[
+            ServiceRequest.Status.SUBMITTED,
+            ServiceRequest.Status.INSPECTION_FEE_DUE,
+            ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+            ServiceRequest.Status.UNDER_REVIEW,
+            ServiceRequest.Status.INSPECTION_SCHEDULED,
+            ServiceRequest.Status.INSPECTED,
+            ServiceRequest.Status.COMPUTATION_SENT,
+            ServiceRequest.Status.AWAITING_PAYMENT,
+            ServiceRequest.Status.DESLUDGING_SCHEDULED,
+        ],
+    ).exists()
+    if existing_open:
+        return JsonResponse(
+            {"ok": False, "message": "An ongoing request already exists for this owner and service type."},
+            status=409,
+        )
+
+    service_request = ServiceRequest.objects.create(
+        consumer=target_consumer,
+        requested_by=requested_by_user,
+        client_name=cd.get("client_name") or request.user.get_full_name(),
+        request_date=cd.get("request_date") or timezone.now().date(),
+        contact_number=cd.get("contact_number") or "",
+        location_mode=cd.get("location_mode") or ServiceRequest.LocationMode.PIN,
+        barangay=cd.get("barangay") or "",
+        address=cd.get("address") or "",
+        gps_latitude=cd.get("gps_latitude"),
+        gps_longitude=cd.get("gps_longitude"),
+        service_type=service_type or ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        connected_to_bawad=(cd.get("connected_to_bawad") == "YES"),
+        public_private=cd.get("public_private") or ServiceRequest.PublicPrivate.PRIVATE,
+        status=ServiceRequest.Status.SUBMITTED,
+    )
+
+    if cd.get("bawad_proof"):
+        service_request.bawad_proof = cd["bawad_proof"]
+    if cd.get("client_signature"):
+        service_request.client_signature = cd["client_signature"]
+    elif cd.get("client_signature_data"):
+        try:
+            raw = str(cd.get("client_signature_data") or "")
+            if "," in raw:
+                _, raw = raw.split(",", 1)
+            sig_bytes = base64.b64decode(raw)
+            service_request.client_signature.save(
+                f"offline_signature_{uuid4().hex}.png",
+                ContentFile(sig_bytes),
+                save=False,
+            )
+        except Exception:
+            pass
+    if cd.get("location_photo_1"):
+        service_request.location_photo_1 = cd["location_photo_1"]
+    if cd.get("location_photo_2"):
+        service_request.location_photo_2 = cd["location_photo_2"]
+    service_request.save()
+
+    is_desludging = service_request.service_type in [
+        ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+    ]
+    if is_desludging:
+        prior_desludging = ServiceRequest.objects.filter(
+            consumer=target_consumer,
+            service_type__in=[
+                ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+                ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+            ],
+            status__in=[
+                ServiceRequest.Status.INSPECTED,
+                ServiceRequest.Status.COMPLETED,
+            ],
+        ).exclude(pk=service_request.pk).exists()
+        if not prior_desludging:
+            legacy_vol = getattr(
+                getattr(target_consumer, "consumer_profile", None),
+                "prior_desludging_m3_4y", 0,
+            ) or 0
+            if legacy_vol <= 0:
+                service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
+                service_request.save(update_fields=["status"])
+                Notification.objects.create(
+                    user=service_request.consumer,
+                    message=(
+                        f"Request #{service_request.id} received. "
+                        "Please pay the ₱150 inspection fee at the Treasurer's Office "
+                        "and upload the receipt to continue."
+                    ),
+                    notification_type=Notification.NotificationType.STATUS_CHANGE,
+                    related_request=service_request,
+                )
+
+    _notify_admin_users(
+        f"New {service_request.get_service_type_display()} request from {service_request.client_name}.",
+        Notification.NotificationType.REQUEST_SUBMITTED,
+        service_request,
+    )
+    Notification.objects.create(
+        user=request.user,
+        message=f"Your {service_request.get_service_type_display()} request has been submitted.",
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "request_id": service_request.id,
+            "status": service_request.status,
+            "message": "Offline request synced successfully.",
+        }
+    )
 
 
 @login_required
@@ -480,9 +688,8 @@ def create_request(request):
                         return redirect(reverse("services:create_request") + "?step=2")
 
                 # Prevent duplicate active requests of the same type for the same owner.
-                # Also expire stale inspection-fee pending requests so they don't block resubmission.
                 try:
-                    ServiceRequest.expire_pending_inspection_fees(days=7)
+                    ServiceRequest.expire_stale_requests()
                 except Exception:
                     pass
                 existing_open = ServiceRequest.objects.filter(
@@ -558,18 +765,23 @@ def create_request(request):
                         ],
                     ).exclude(pk=service_request.pk).exists()
                     if not prior_desludging:
-                        service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
-                        service_request.save(update_fields=["status"])
-                        Notification.objects.create(
-                            user=service_request.consumer,
-                            message=(
-                                f"Request #{service_request.id} received. "
-                                "Please pay the ₱150 inspection fee at the Treasurer's Office "
-                                "and upload the receipt to continue."
-                            ),
-                            notification_type=Notification.NotificationType.STATUS_CHANGE,
-                            related_request=service_request,
-                        )
+                        legacy_vol = getattr(
+                            getattr(target_consumer, "consumer_profile", None),
+                            "prior_desludging_m3_4y", 0,
+                        ) or 0
+                        if legacy_vol <= 0:
+                            service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
+                            service_request.save(update_fields=["status"])
+                            Notification.objects.create(
+                                user=service_request.consumer,
+                                message=(
+                                    f"Request #{service_request.id} received. "
+                                    "Please pay the ₱150 inspection fee at the Treasurer's Office "
+                                    "and upload the receipt to continue."
+                                ),
+                                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                                related_request=service_request,
+                            )
 
                 # Attach client signature image, if any was captured in step 2.
                 sig_path = form_data.get("_client_signature_path")
@@ -585,17 +797,11 @@ def create_request(request):
                     except Exception:
                         pass
 
-                # Notify all admins (role ADMIN, Django staff, or superusers)
-                admin_users = User.objects.filter(
-                    Q(role=User.Role.ADMIN) | Q(is_superuser=True) | Q(is_staff=True)
+                _notify_admin_users(
+                    f"New {service_request.get_service_type_display()} request from {service_request.client_name}.",
+                    Notification.NotificationType.REQUEST_SUBMITTED,
+                    service_request,
                 )
-                for admin in admin_users:
-                    Notification.objects.create(
-                        user=admin,
-                        message=f"New {service_request.get_service_type_display()} request from {service_request.client_name}.",
-                        notification_type=Notification.NotificationType.REQUEST_SUBMITTED,
-                        related_request=service_request,
-                    )
 
                 # Notify consumer
                 Notification.objects.create(
@@ -795,9 +1001,8 @@ def grasscutting_application(request):
                     return redirect(reverse("services:create_request") + "?step=2")
                 requested_by_user = request.user
 
-            # Also expire stale inspection-fee pending requests so they don't block resubmission.
             try:
-                ServiceRequest.expire_pending_inspection_fees(days=7)
+                ServiceRequest.expire_stale_requests()
             except Exception:
                 pass
 
@@ -875,16 +1080,11 @@ def grasscutting_application(request):
             except Exception:
                 pass
 
-            admin_users = User.objects.filter(
-                Q(role=User.Role.ADMIN) | Q(is_superuser=True) | Q(is_staff=True)
+            _notify_admin_users(
+                f"New Grass Cutting request from {service_request.client_name}.",
+                Notification.NotificationType.REQUEST_SUBMITTED,
+                service_request,
             )
-            for admin in admin_users:
-                Notification.objects.create(
-                    user=admin,
-                    message=f"New Grass Cutting request from {service_request.client_name}.",
-                    notification_type=Notification.NotificationType.REQUEST_SUBMITTED,
-                    related_request=service_request,
-                )
             Notification.objects.create(
                 user=request.user,
                 message="Your Grass Cutting request has been submitted.",
@@ -1294,9 +1494,8 @@ def reverse_geocode(request):
 
 @login_required
 def request_list(request):
-    # Cleanup before listing requests (keeps the workflow from accumulating stale pending items).
     try:
-        ServiceRequest.expire_pending_inspection_fees(days=7)
+        ServiceRequest.expire_stale_requests()
     except Exception:
         pass
 
@@ -1330,9 +1529,8 @@ def request_list(request):
 
 @login_required
 def request_detail(request, pk):
-    # Cleanup so customers/admins see the latest status (e.g., inspection-fee expired).
     try:
-        ServiceRequest.expire_pending_inspection_fees(days=7)
+        ServiceRequest.expire_stale_requests()
     except Exception:
         pass
 
@@ -1912,13 +2110,22 @@ def download_computation_pdf(request, pk):
         else "Helvetica, Arial, sans-serif"
     )
 
+    bayawan_logo_url = request.build_absolute_uri(static("img/bayawan_logo.png"))
+    cenro_logo_url = request.build_absolute_uri(static("img/cenro_logo.png"))
+    bagong_pilipinas_logo_url = request.build_absolute_uri(static("img/bagong_pilipinas_logo.png"))
+    default_signature_url = request.build_absolute_uri(static("signatures/signature.png"))
+
     template = get_template("services/computation_letter_pdf.html")
     html = template.render({
         "sr": service_request,
         "comp": computation,
         "address_display": address_display,
         "prepared_by_signature_path": prepared_by_signature_path,
+        "default_signature_url": default_signature_url,
         "pdf_body_font_stack": pdf_body_font_stack,
+        "bayawan_logo_url": bayawan_logo_url,
+        "cenro_logo_url": cenro_logo_url,
+        "bagong_pilipinas_logo_url": bagong_pilipinas_logo_url,
     })
     result = io.BytesIO()
     pdf = pisa.pisaDocument(
@@ -2004,10 +2211,15 @@ def edit_computation(request, pk):
             computation.save()
             return redirect("services:view_computation", pk=pk)
 
+    prepared_by_signature_url = None
+    if computation.prepared_by_signature:
+        prepared_by_signature_url = request.build_absolute_uri(computation.prepared_by_signature.url)
+
     return render(request, "services/computation_edit.html", {
         "form": form,
         "sr": service_request,
         "comp": computation,
+        "prepared_by_signature_url": prepared_by_signature_url,
     })
 
 
@@ -2025,29 +2237,22 @@ def upload_receipt(request, pk):
     if request.method == "POST":
         receipt = request.FILES.get("treasurer_receipt")
         if receipt:
-            # Only attach the receipt and move to Awaiting Payment.
-            # Actual payment approval will be done by an admin.
-            service_request.treasurer_receipt = receipt
-            service_request.status = ServiceRequest.Status.AWAITING_PAYMENT
-            service_request.save(update_fields=["treasurer_receipt", "status"])
+            with transaction.atomic():
+                service_request.treasurer_receipt = receipt
+                service_request.status = ServiceRequest.Status.AWAITING_PAYMENT
+                service_request.save(update_fields=["treasurer_receipt", "status"])
 
-            # Update computation payment status to Awaiting Verification (admin will set PAID on confirm)
-            computation = getattr(service_request, "computation", None)
-            if computation:
-                from dashboard.models import ServiceComputation
-                if computation.payment_status != ServiceComputation.PaymentStatus.FREE:
-                    computation.payment_status = ServiceComputation.PaymentStatus.AWAITING_VERIFICATION
-                    computation.save(update_fields=["payment_status"])
+                computation = getattr(service_request, "computation", None)
+                if computation:
+                    from dashboard.models import ServiceComputation
+                    if computation.payment_status != ServiceComputation.PaymentStatus.FREE:
+                        computation.payment_status = ServiceComputation.PaymentStatus.AWAITING_VERIFICATION
+                        computation.save(update_fields=["payment_status"])
 
-            admin_users = User.objects.filter(
-                Q(role=User.Role.ADMIN) | Q(is_superuser=True) | Q(is_staff=True)
-            )
-            for admin in admin_users:
-                Notification.objects.create(
-                    user=admin,
-                    message=f"Payment receipt uploaded by {service_request.client_name} for request #{service_request.id}.",
-                    notification_type=Notification.NotificationType.PAYMENT_UPLOADED,
-                    related_request=service_request,
+                _notify_admin_users(
+                    f"Payment receipt uploaded by {service_request.client_name} for request #{service_request.id}.",
+                    Notification.NotificationType.PAYMENT_UPLOADED,
+                    service_request,
                 )
             messages.success(request, "Receipt uploaded successfully. Waiting for admin verification.")
         else:
@@ -2102,12 +2307,14 @@ def download_inspection_fee_bill_pdf(request, pk):
     template = get_template("services/inspection_fee_bill_pdf.html")
     bayawan_logo_url = request.build_absolute_uri(static("img/bayawan_logo.png"))
     cenro_logo_url = request.build_absolute_uri(static("img/cenro_logo.png"))
+    bagong_pilipinas_logo_url = request.build_absolute_uri(static("img/bagong_pilipinas_logo.png"))
     html = template.render(
         {
             "sr": service_request,
             "amount": 150,
             "bayawan_logo_url": bayawan_logo_url,
             "cenro_logo_url": cenro_logo_url,
+            "bagong_pilipinas_logo_url": bagong_pilipinas_logo_url,
         }
     )
     result = io.BytesIO()
@@ -2133,32 +2340,47 @@ def upload_inspection_fee_receipt(request, pk):
         messages.error(request, "Permission denied.")
         return redirect("services:request_list")
 
+    allowed_upload_statuses = (
+        ServiceRequest.Status.INSPECTION_FEE_DUE,
+        ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+    )
+    if service_request.status not in allowed_upload_statuses:
+        messages.error(
+            request,
+            "Inspection fee receipts can only be uploaded when payment is due or a new receipt is needed.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
     if request.method == "POST":
         receipt = request.FILES.get("inspection_fee_receipt")
         if receipt:
-            service_request.inspection_fee_receipt = receipt
-            service_request.status = ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION
-            service_request.save(update_fields=["inspection_fee_receipt", "status"])
+            with transaction.atomic():
+                old_receipt = service_request.inspection_fee_receipt
+                if old_receipt:
+                    old_receipt.delete(save=False)
+                service_request.inspection_fee_receipt = receipt
+                service_request.status = ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION
+                service_request.save(update_fields=["inspection_fee_receipt", "status"])
 
-            admin_users = User.objects.filter(
-                Q(role=User.Role.ADMIN) | Q(is_superuser=True) | Q(is_staff=True)
-            )
-            for admin in admin_users:
-                Notification.objects.create(
-                    user=admin,
-                    message=(
+                _notify_admin_users(
+                    (
                         f"Inspection fee receipt uploaded by {service_request.client_name} "
                         f"for request #{service_request.id}."
                     ),
-                    notification_type=Notification.NotificationType.STATUS_CHANGE,
-                    related_request=service_request,
+                    Notification.NotificationType.PAYMENT_UPLOADED,
+                    service_request,
                 )
             messages.success(request, "Inspection fee receipt uploaded. Waiting for admin verification.")
         else:
             messages.error(request, "Please select a file to upload.")
         return redirect("services:request_detail", pk=pk)
 
-    return render(request, "services/upload_inspection_fee.html", {"sr": service_request})
+    is_reupload = service_request.status == ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION
+    return render(
+        request,
+        "services/upload_inspection_fee.html",
+        {"sr": service_request, "is_reupload": is_reupload},
+    )
 
 
 @login_required
