@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CENRO Management System{% endblock %}</title>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260407-layers">
-    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260407-layers">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260413-enhanced">
+    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260413-enhanced">
+    <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260413-enhanced">
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
     <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260407-layers">
     {% endif %}{% endif %}

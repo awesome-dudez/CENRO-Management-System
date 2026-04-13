@@ -2,29 +2,46 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="container">
-    <h1>Welcome, {{ user.get_full_name|default:user.username|title }}</h1>
 
-    <div class="summary-cards">
-        <div class="summary-card card-pending">
-            <h3>Pending</h3>
-            <p class="count">{{ pending_count }}</p>
+    <!-- Welcome Banner -->
+    <div class="ce-welcome-banner">
+        <h1>Welcome, {{ user.get_full_name|default:user.username|title }} 👋</h1>
+        <p>Manage your service requests and track their progress</p>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="ce-stat-cards">
+        <div class="ce-stat-card stat-pending">
+            <div class="ce-stat-icon">⏳</div>
+            <div class="ce-stat-info">
+                <h3>Pending</h3>
+                <p class="ce-count">{{ pending_count }}</p>
+            </div>
         </div>
-        <div class="summary-card card-completed">
-            <h3>Completed</h3>
-            <p class="count">{{ completed_count }}</p>
+        <div class="ce-stat-card stat-completed">
+            <div class="ce-stat-icon">✅</div>
+            <div class="ce-stat-info">
+                <h3>Completed</h3>
+                <p class="ce-count">{{ completed_count }}</p>
+            </div>
         </div>
-        <div class="summary-card card-grass">
-            <h3>Total Requests</h3>
-            <p class="count">{{ total_count }}</p>
+        <div class="ce-stat-card stat-total">
+            <div class="ce-stat-icon">📋</div>
+            <div class="ce-stat-info">
+                <h3>Total Requests</h3>
+                <p class="ce-count">{{ total_count }}</p>
+            </div>
         </div>
     </div>
 
     {% if upcoming_schedules %}
-    <div class="calendar-section" style="margin-top: 30px;">
-        <h2>Upcoming Schedules</h2>
-        <div class="table-card">
-            <div class="table-responsive">
-            <table class="data-table">
+    <!-- Upcoming Schedules -->
+    <div class="ce-section-card">
+        <div class="ce-section-header">
+            <h2>📅 Upcoming Schedules</h2>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="ce-table">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -37,23 +54,27 @@
                 <tbody>
                     {% for schedule in upcoming_schedules %}
                     <tr>
-                        <td>{{ schedule.service_date }}</td>
-                        <td>{{ schedule.service_time }}</td>
-                        <td>{{ schedule.service_request.get_service_type_display }}</td>
-                        <td>{{ schedule.barangay }}</td>
-                        <td>{{ schedule.assigned_staff.get_full_name|default:"Unassigned" }}</td>
+                        <td data-label="Date">{{ schedule.service_date }}</td>
+                        <td data-label="Time">{{ schedule.service_time }}</td>
+                        <td data-label="Service">{{ schedule.service_request.get_service_type_display }}</td>
+                        <td data-label="Barangay">{{ schedule.barangay }}</td>
+                        <td data-label="Staff">{{ schedule.assigned_staff.get_full_name|default:"Unassigned" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
-            </div>
         </div>
     </div>
     {% endif %}
 
-    <div class="calendar-section" style="margin-top: 30px;">
-        <h2>My Service Requests</h2>
-        <!-- Mobile: card list (consumer-responsive.css toggles visibility by breakpoint) -->
+    <!-- My Service Requests -->
+    <div class="ce-section-card">
+        <div class="ce-section-header">
+            <h2>My Service Requests</h2>
+            <a href="{% url 'services:create_request' %}" class="ce-btn-view">+ New Request</a>
+        </div>
+
+        <!-- Mobile cards -->
         <div class="request-cards">
             {% for req in requests %}
             <div class="request-card-item">
@@ -63,55 +84,57 @@
                     <span>{{ req.barangay }}</span>
                     <span>{{ req.request_date|date:"M d, Y" }}</span>
                 </div>
-                <span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span>
-                <div class="req-actions">
-                    <a href="{% url 'services:request_detail' req.pk %}" class="btn btn-sm">View</a>
+                <span class="ce-badge badge-{{ req.status|lower }}">{{ req.get_status_display }}</span>
+                <div class="req-actions" style="margin-top:10px;">
+                    <a href="{% url 'services:request_detail' req.pk %}" class="ce-btn-view">View</a>
                 </div>
             </div>
             {% empty %}
-            <div class="request-card-item">
-                <div class="req-type">No requests yet</div>
-                <div class="req-actions">
-                    <a href="{% url 'services:create_request' %}" class="btn btn-primary">Create your first request</a>
+            <div class="request-card-item" style="text-align:center;padding:32px 16px;">
+                <div class="req-type" style="font-size:15px;color:#6b7280;">No requests yet</div>
+                <div class="req-actions" style="margin-top:14px;">
+                    <a href="{% url 'services:create_request' %}" class="ce-btn-next">Create your first request</a>
                 </div>
             </div>
             {% endfor %}
         </div>
-        <!-- Desktop: table -->
-        <div class="table-card request-cards-table">
-            <div class="table-responsive">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Service Type</th>
-                            <th>Barangay</th>
-                            <th>Request Date</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for req in requests %}
-                        <tr>
-                            <td>{{ req.id }}</td>
-                            <td>{{ req.get_service_type_display }}</td>
-                            <td>{{ req.barangay }}</td>
-                            <td>{{ req.request_date|date:"M d, Y" }}</td>
-                            <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
-                            <td>
-                                <a href="{% url 'services:request_detail' req.pk %}" class="btn btn-sm">View</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6">No requests yet. <a href="{% url 'services:create_request' %}">Create your first request</a>.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+
+        <!-- Desktop table -->
+        <div class="request-cards-table" style="overflow-x:auto;">
+            <table class="ce-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Service Type</th>
+                        <th>Barangay</th>
+                        <th>Request Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td data-label="ID">{{ req.id }}</td>
+                        <td data-label="Service Type">{{ req.get_service_type_display }}</td>
+                        <td data-label="Barangay">{{ req.barangay }}</td>
+                        <td data-label="Request Date">{{ req.request_date|date:"M d, Y" }}</td>
+                        <td data-label="Status"><span class="ce-badge badge-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
+                        <td data-label="Actions">
+                            <a href="{% url 'services:request_detail' req.pk %}" class="ce-btn-view">View</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align:center;padding:40px;color:#9ca3af;">
+                            No requests yet. <a href="{% url 'services:create_request' %}" style="color:#1e7a4d;font-weight:700;">Create your first request</a>.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
+
 </div>
 {% endblock %}

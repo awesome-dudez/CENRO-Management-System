@@ -1,44 +1,150 @@
 {% extends "base.html" %}
 {% block title %}Service History{% endblock %}
 {% block content %}
-<style>
-    .container { max-width: 1000px; margin: 30px auto; padding: 20px; }
-    .container h1 { color: #2d3142; margin-bottom: 20px; }
-    .data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-    .data-table th { background: #2d3142; color: white; padding: 12px; text-align: left; font-size: 13px; }
-    .data-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-    .data-table tr:hover { background: #f8f9fa; }
-    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: white; background: #6c757d; }
-    .status-submitted { background: #f39c12; }
-    .status-completed { background: #2ecc71; }
-    .status-paid { background: #27ae60; }
-    .btn-sm { padding: 6px 14px; background: #3498db; color: white; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600; }
-</style>
 <div class="container">
-    <h1>Service History</h1>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Service Type</th>
-                <th>Barangay</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for req in requests %}
-            <tr>
-                <td>{{ req.request_date|date:"M d, Y" }}</td>
-                <td>{{ req.get_service_type_display }}</td>
-                <td>{{ req.barangay }}</td>
-                <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
-                <td><a href="{% url 'services:request_detail' req.pk %}" class="btn-sm">View</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="5" style="text-align:center;padding:30px;color:#999;">No history found.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+    <!-- Page Header -->
+    <div class="ce-page-header">
+        <h1>Service History</h1>
+        <p>View and track all your past service requests</p>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="ce-filter-bar">
+        <input type="text" class="ce-search-input" id="historySearch"
+               placeholder="Search by service type or barangay..."
+               value="">
+        <select class="ce-filter-select" id="historyStatus">
+            <option value="">All Status</option>
+            <option value="submitted">Submitted</option>
+            <option value="under_review">Under Review</option>
+            <option value="inspection_fee_pending">Inspection Fee Pending</option>
+            <option value="inspection_fee_paid">Inspection Fee Paid</option>
+            <option value="computation_pending">Computation Pending</option>
+            <option value="desludging_scheduled">Desludging Scheduled</option>
+            <option value="completed">Completed</option>
+            <option value="expired">Expired</option>
+            <option value="rejected">Rejected</option>
+            <option value="cancelled">Cancelled</option>
+        </select>
+    </div>
+
+    <!-- Table Card -->
+    <div class="ce-section-card">
+        <div style="overflow-x:auto;">
+            <table class="ce-table" id="historyTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Service Type</th>
+                        <th>Barangay</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTbody">
+                    {% for req in requests %}
+                    <tr data-service="{{ req.get_service_type_display|lower }}"
+                        data-barangay="{{ req.barangay|lower }}"
+                        data-status="{{ req.status|lower }}">
+                        <td data-label="Date">{{ req.request_date|date:"M d, Y" }}</td>
+                        <td data-label="Service Type">{{ req.get_service_type_display }}</td>
+                        <td data-label="Barangay">{{ req.barangay }}</td>
+                        <td data-label="Status">
+                            <span class="ce-badge badge-{{ req.status|lower }}">{{ req.get_status_display }}</span>
+                        </td>
+                        <td data-label="Actions">
+                            <a href="{% url 'services:request_detail' req.pk %}" class="ce-btn-view">View</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr id="emptyRow">
+                        <td colspan="5" style="text-align:center;padding:48px;color:#9ca3af;">
+                            <div style="font-size:32px;margin-bottom:10px;">📋</div>
+                            No history found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination info -->
+        <div class="ce-pagination" id="historyPagination">
+            <span id="historyCount">Showing <strong id="historyShowing">{{ requests|length }}</strong> of <strong>{{ requests|length }}</strong> results</span>
+            <div class="ce-pagination-nav" id="historyNav"></div>
+        </div>
+    </div>
+
 </div>
+
+<script>
+(function() {
+    var PAGE_SIZE = 10;
+    var allRows = Array.from(document.querySelectorAll('#historyTbody tr:not(#emptyRow)'));
+    var searchInput = document.getElementById('historySearch');
+    var statusFilter = document.getElementById('historyStatus');
+    var countEl = document.getElementById('historyShowing');
+    var navEl = document.getElementById('historyNav');
+    var currentPage = 1;
+
+    function getFiltered() {
+        var q = (searchInput.value || '').toLowerCase().trim();
+        var st = (statusFilter.value || '').toLowerCase().trim();
+        return allRows.filter(function(row) {
+            var matchQ = !q || row.dataset.service.includes(q) || row.dataset.barangay.includes(q);
+            var matchSt = !st || row.dataset.status === st;
+            return matchQ && matchSt;
+        });
+    }
+
+    function render() {
+        var filtered = getFiltered();
+        var total = filtered.length;
+        var start = (currentPage - 1) * PAGE_SIZE;
+        var end = Math.min(start + PAGE_SIZE, total);
+
+        allRows.forEach(function(r) { r.style.display = 'none'; });
+        filtered.slice(start, end).forEach(function(r) { r.style.display = ''; });
+
+        var empty = document.getElementById('emptyRow');
+        if (empty) empty.style.display = total === 0 ? '' : 'none';
+
+        if (countEl) countEl.textContent = total === 0 ? '0' : (start + 1) + '–' + end;
+
+        // Render page info
+        var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        var paginationParent = navEl.parentElement;
+        if (total <= PAGE_SIZE) {
+            paginationParent.style.display = total === 0 ? 'none' : 'flex';
+            navEl.innerHTML = '';
+            // Just show count
+            var countContainer = document.getElementById('historyCount');
+            if (countContainer) countContainer.innerHTML = 'Showing <strong>' + total + '</strong> result' + (total !== 1 ? 's' : '');
+            return;
+        }
+
+        // Show pagination
+        navEl.innerHTML =
+            '<a class="ce-pagination-btn" id="pgPrev" href="#">&#8249;</a>' +
+            '<span class="ce-pagination-current">Page ' + currentPage + ' of ' + totalPages + '</span>' +
+            '<a class="ce-pagination-btn" id="pgNext" href="#">&#8250;</a>';
+
+        document.getElementById('pgPrev').addEventListener('click', function(e) {
+            e.preventDefault(); if (currentPage > 1) { currentPage--; render(); }
+        });
+        document.getElementById('pgNext').addEventListener('click', function(e) {
+            e.preventDefault(); if (currentPage < totalPages) { currentPage++; render(); }
+        });
+
+        var countContainer = document.getElementById('historyCount');
+        if (countContainer) countContainer.innerHTML = 'Showing <strong>' + (start+1) + '–' + end + '</strong> of <strong>' + total + '</strong> results';
+    }
+
+    if (searchInput) searchInput.addEventListener('input', function() { currentPage = 1; render(); });
+    if (statusFilter) statusFilter.addEventListener('change', function() { currentPage = 1; render(); });
+
+    render();
+})();
+</script>
 {% endblock %}
