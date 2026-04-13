@@ -552,6 +552,18 @@ body.consumer-view .notif-badge {
     box-shadow: 0 2px 8px rgba(56,189,248,0.38);
 }
 
+.ce-badge.badge-grass_pending_payment {
+    background: linear-gradient(135deg, #fb923c, #ea580c);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234,88,12,0.35);
+}
+
+.ce-badge.badge-grass_payment_awaiting_verification {
+    background: linear-gradient(135deg, #a855f7, #7c3aed);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.35);
+}
+
 /* ============================================================
    VIEW BUTTON
    ============================================================ */

@@ -80,10 +80,8 @@
         margin-top: 4px;
     }
     .grasscutting-form-page .btn-submit {
-        display: block;
-        width: 100%;
-        max-width: 280px;
-        margin: 28px auto 0;
+        display: inline-block;
+        min-width: 200px;
         padding: 14px 24px;
         background: #1abc9c;
         color: #fff;
@@ -94,6 +92,71 @@
         cursor: pointer;
     }
     .grasscutting-form-page .btn-submit:hover { background: #16a085; }
+    .grasscutting-form-page .btn-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+    .gc-admin-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        align-items: center;
+        margin-top: 28px;
+    }
+    .grasscutting-form-page .btn-confirm {
+        display: inline-block;
+        min-width: 200px;
+        padding: 14px 24px;
+        background: #27ae60;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .grasscutting-form-page .btn-confirm:hover:not(:disabled) { background: #219a52; }
+    .grasscutting-form-page .btn-confirm:disabled {
+        background: #95a5a6;
+        cursor: not-allowed;
+        opacity: 0.85;
+    }
+    .gc-confirm-hint {
+        width: 100%;
+        text-align: center;
+        font-size: 13px;
+        color: #666;
+        margin-top: 8px;
+    }
+    .gc-treasurer-receipt-block { border-top: 1px solid #e8e8e8; padding-top: 20px; margin-top: 8px; }
+    .gc-receipt-preview {
+        margin-top: 8px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fafafa;
+        max-width: 560px;
+    }
+    .gc-receipt-preview-img {
+        max-width: 100%;
+        max-height: 420px;
+        object-fit: contain;
+        display: block;
+    }
+    .gc-receipt-nonimage {
+        padding: 14px 16px;
+        background: #f4f4f4;
+        border-radius: 8px;
+        border: 1px dashed #ccc;
+        max-width: 560px;
+    }
+    .gc-receipt-open-link { font-weight: 600; color: #1abc9c; text-decoration: none; }
+    .gc-receipt-open-link:hover { text-decoration: underline; }
+    .gc-receipt-missing {
+        background: #fff8e6;
+        border: 1px solid #f0d78c;
+        border-radius: 8px;
+        padding: 14px 16px;
+        max-width: 640px;
+    }
     .grasscutting-form-page .remarks-help { font-size: 12px; color: #666; margin-top: 4px; }
 
     .changelog-card { margin-top: 20px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
@@ -105,7 +168,7 @@
     .changelog-remarks { margin-top: 6px; color: #2d3142; }
 
     @media print {
-        .gc-admin-header, .gc-edit-controls, .changelog-card { display: none !important; }
+        .gc-admin-header, .gc-edit-controls, .gc-admin-actions, .gc-confirm-hint, .changelog-card { display: none !important; }
         .grasscutting-form-page { box-shadow: none; border: 1px solid #ccc; }
     }
 </style>
@@ -113,8 +176,16 @@
 <div class="grasscutting-detail-page">
     <div class="gc-admin-header">
         <a href="{% url 'services:request_detail' sr.pk %}" class="back-link">← Back to Service Request</a>
+        {% if not admin_edit_blocked %}
         <button type="button" class="edit-toggle-btn" id="gcEditToggle">Edit</button>
+        {% endif %}
     </div>
+
+    {% if admin_edit_blocked %}
+    <div style="max-width:900px;margin:0 auto 16px;padding:14px 16px;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;font-size:14px;color:#5c4a00;">
+        This application is read-only: payment has been submitted for verification, or the request is already completed or cancelled.
+    </div>
+    {% endif %}
 
     <div class="grasscutting-form-page">
         <h1 class="form-title">Grasscutting Services Application Form</h1>
@@ -209,14 +280,86 @@
                 <div class="form-error" id="totalAmountError" style="display:none; margin-top:6px;"></div>
             </div>
 
-            <!-- Remarks + Save -->
-            <div class="form-section gc-edit-controls">
+            <!-- Treasurer payment receipt (uploaded by applicant after paying at Treasurer's Office) -->
+            <div class="form-section gc-treasurer-receipt-block">
+                <strong style="display:block; margin-bottom:10px; color:#2d3142;">Treasurer payment receipt</strong>
+                {% if sr.treasurer_receipt %}
+                    <p style="font-size:13px;color:#555;margin:0 0 12px;line-height:1.5;">
+                        Official proof of payment from the City Treasurer's Office, uploaded by the applicant.
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener" style="font-weight:600;color:#1abc9c;">Open full receipt (new tab)</a>
+                    </p>
+                    {% with n=sr.treasurer_receipt.name|lower %}
+                    {% if ".jpg" in n or ".jpeg" in n or ".png" in n or ".webp" in n or ".gif" in n %}
+                    <div class="gc-receipt-preview">
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener">
+                            <img src="{% url 'services:view_treasurer_receipt' sr.pk %}"
+                                 alt="Treasurer payment receipt"
+                                 class="gc-receipt-preview-img">
+                        </a>
+                    </div>
+                    <p style="font-size:12px;color:#666;margin-top:8px;">Click the image to enlarge in a new tab.</p>
+                    {% else %}
+                    <div class="gc-receipt-nonimage">
+                        <p style="margin:0 0 8px;font-size:14px;color:#2d3142;">Preview is not available for this file type (for example PDF).</p>
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener" class="gc-receipt-open-link">View or download receipt</a>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                {% else %}
+                    <div class="gc-receipt-missing">
+                        <p style="margin:0;font-size:14px;color:#5c4a00;line-height:1.5;">
+                            <strong>No Treasurer receipt uploaded yet.</strong>
+                            The applicant must pay at the Treasurer's Office and upload the receipt on the main service request page before you can verify payment here.
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Remarks (save + confirm actions are below) -->
+            <div class="form-section gc-edit-controls" {% if admin_edit_blocked %}style="display:none"{% endif %}>
                 <label for="id_remarks">Remarks (reason for change) <span style="color:red">*</span></label>
                 {{ form.remarks }}
                 <div class="remarks-help">Remarks are required when saving. These will be sent to the consumer.</div>
                 {% if form.remarks.errors %}<div class="form-error">{{ form.remarks.errors.0 }}</div>{% endif %}
-                <button type="submit" class="btn-submit" id="gcSaveBtn">Save changes</button>
             </div>
+
+            <div class="gc-admin-actions">
+                {% if not admin_edit_blocked %}
+                <button type="submit" class="btn-submit" id="gcSaveBtn">Save changes</button>
+                {% endif %}
+                {% if user.is_admin %}
+                    {% if sr.treasurer_receipt and sr.status == "GRASS_PAYMENT_AWAITING_VERIFICATION" %}
+                    <button type="submit"
+                            class="btn-confirm"
+                            id="gcConfirmBtn"
+                            formaction="{% url 'dashboard:confirm_grass_request' sr.pk %}"
+                            formmethod="post">
+                        Confirm request
+                    </button>
+                    {% else %}
+                    <button type="button" class="btn-confirm" id="gcConfirmBtn" disabled title="The client must upload a Treasurer payment receipt before you can confirm.">
+                        Confirm request
+                    </button>
+                    {% endif %}
+                {% endif %}
+            </div>
+            {% if user.is_admin %}
+                {% if not sr.treasurer_receipt or sr.status != "GRASS_PAYMENT_AWAITING_VERIFICATION" %}
+                    {% if sr.status != "COMPLETED" and sr.status != "CANCELLED" %}
+                    <p class="gc-confirm-hint">
+                        Confirmation is available only after the client uploads their official <strong>Treasurer payment receipt</strong>
+                        on the service request page.
+                        {% if sr.treasurer_receipt %}
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener">View uploaded receipt</a>
+                        {% endif %}
+                    </p>
+                    {% endif %}
+                {% elif sr.treasurer_receipt %}
+                    <p class="gc-confirm-hint">
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener">View Treasurer payment receipt</a> before confirming.
+                    </p>
+                {% endif %}
+            {% endif %}
         </form>
     </div>
 
@@ -240,6 +383,7 @@
 
 <script>
 (function() {
+    var adminEditBlocked = {{ admin_edit_blocked|yesno:"true,false" }};
     // Real-time total calculation (same as consumer page)
     var ratePerHour = {{ rate_per_hour }};
     var personnelEl = document.getElementById('id_number_of_personnel');
@@ -302,7 +446,7 @@
         if (editToggle) editToggle.textContent = isEditing ? 'Cancel edit' : 'Edit';
     }
 
-    if (editToggle) {
+    if (editToggle && !adminEditBlocked) {
         editToggle.addEventListener('click', function() {
             isEditing = !isEditing;
             applyMode();
@@ -310,6 +454,7 @@
     }
 
     applyMode();
+    if (adminEditBlocked && saveBtn) saveBtn.style.display = 'none';
 })();
 </script>
 {% endblock %}

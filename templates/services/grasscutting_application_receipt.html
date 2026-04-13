@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Grass Cutting — Application Receipt{% endblock %}
+{% block content %}
+<style>
+    .gc-receipt-wrap { max-width: 720px; margin: 28px auto; padding: 16px; }
+    .gc-receipt {
+        background: #fff;
+        border: 2px solid #1abc9c;
+        border-radius: 12px;
+        box-shadow: 0 6px 28px rgba(0,0,0,0.08);
+        padding: 28px 32px 32px;
+    }
+    .gc-receipt h1 {
+        text-align: center;
+        font-size: 20px;
+        font-weight: 800;
+        color: #2d3142;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 6px;
+    }
+    .gc-receipt .gc-sub {
+        text-align: center;
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 22px;
+    }
+    .gc-ref {
+        text-align: center;
+        background: #f0fdf4;
+        border: 1px solid #c6f6d5;
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin-bottom: 22px;
+    }
+    .gc-ref .lbl { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; }
+    .gc-ref .val { font-size: 22px; font-weight: 800; font-family: ui-monospace, "Courier New", monospace; color: #1e7a4d; margin-top: 6px; }
+    .gc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+    @media (max-width: 640px) { .gc-grid { grid-template-columns: 1fr; } }
+    .gc-item label { display: block; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .gc-item span { font-size: 15px; color: #2d3142; font-weight: 600; }
+    .gc-item.full { grid-column: 1 / -1; }
+    .gc-total {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 2px dashed #e5e7eb;
+        text-align: center;
+        font-size: 20px;
+        font-weight: 800;
+        color: #1abc9c;
+    }
+    .gc-note {
+        margin-top: 18px;
+        font-size: 13px;
+        color: #555;
+        line-height: 1.55;
+        background: #f9fafb;
+        border-radius: 8px;
+        padding: 14px 16px;
+    }
+    .gc-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 24px; }
+    .gc-actions .btn { padding: 11px 22px; border-radius: 8px; font-weight: 700; text-decoration: none; border: none; cursor: pointer; font-size: 14px; display: inline-block; }
+    .gc-actions .btn-primary { background: #1abc9c; color: #fff; }
+    .gc-actions .btn-primary:hover { background: #16a085; color: #fff; }
+    .gc-actions .btn-secondary { background: #e5e7eb; color: #2d3142; }
+    .gc-actions .btn-secondary:hover { background: #d1d5db; color: #2d3142; }
+    .gc-sig { margin-top: 16px; text-align: center; }
+    .gc-sig img { max-width: min(100%, 360px); max-height: 160px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; background: #fafafa; }
+    @media print {
+        .gc-actions, nav, header, footer { display: none !important; }
+        .gc-receipt { box-shadow: none; border: 1px solid #ccc; }
+    }
+</style>
+
+<div class="gc-receipt-wrap">
+    <div class="gc-receipt">
+        <h1>Grass Cutting Services</h1>
+        <div class="gc-sub">Application Form Receipt — for Treasurer payment &amp; office records</div>
+
+        <div class="gc-ref">
+            <div class="lbl">Reference</div>
+            <div class="val">{{ reference_number }}</div>
+            <div style="margin-top:10px;font-size:13px;color:#555;">Request ID #{{ sr.id }} · Status: <strong>{{ sr.get_status_display }}</strong></div>
+        </div>
+
+        <div class="gc-grid">
+            <div class="gc-item full">
+                <label>Client / printed name</label>
+                <span>{{ sr.client_name }}</span>
+            </div>
+            <div class="gc-item">
+                <label>Signature (printed name on form)</label>
+                <span>{{ signature_name }}</span>
+            </div>
+            <div class="gc-item">
+                <label>Contact number</label>
+                <span>{{ sr.contact_number }}</span>
+            </div>
+            <div class="gc-item full">
+                <label>Address</label>
+                <span>{{ sr.address|default:"—" }}</span>
+            </div>
+            <div class="gc-item">
+                <label>Barangay</label>
+                <span>{{ sr.barangay }}</span>
+            </div>
+            <div class="gc-item">
+                <label>Request date</label>
+                <span>{{ sr.request_date|date:"M d, Y" }}</span>
+            </div>
+            <div class="gc-item">
+                <label>Date of grass cutting</label>
+                <span>{% if grasscutting_date %}{{ grasscutting_date|date:"M d, Y" }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="gc-item">
+                <label>Designated time</label>
+                <span>{{ designated_time|default:"—" }}</span>
+            </div>
+            <div class="gc-item full">
+                <label>Place of grass cutting</label>
+                <span>{{ place_of_grass_cutting|default:sr.barangay }}</span>
+            </div>
+            <div class="gc-item">
+                <label>Number of personnel</label>
+                <span>{% if grasscutting_personnel is not None %}{{ grasscutting_personnel }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="gc-item">
+                <label>Number of hours</label>
+                <span>{% if grasscutting_hours is not None %}{{ grasscutting_hours|floatformat:1 }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="gc-item full">
+                <label>Rate</label>
+                <span>&#8369;{{ rate_per_hour }} per personnel per hour</span>
+            </div>
+        </div>
+
+        <div class="gc-total">
+            Total amount due: {% if total_amount is not None %}&#8369;{{ total_amount }}{% else %}—{% endif %}
+        </div>
+
+        {% if sr.client_signature %}
+        <div class="gc-sig">
+            <label class="lbl" style="display:block;text-align:center;margin-bottom:8px;">Submitted signature</label>
+            <a href="{{ sr.client_signature.url }}" target="_blank" rel="noopener">
+                <img src="{{ sr.client_signature.url }}" alt="Applicant signature">
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="gc-note">
+            <strong>Next steps:</strong> Pay this amount at the <strong>City Treasurer's Office</strong>. After payment,
+            return to your request and <strong>upload the Treasurer's official receipt</strong>. Grass cutting service will not proceed until payment is verified by CENRO.
+        </div>
+
+        <div class="gc-actions">
+            {% if sr.consumer == user or sr.requested_by == user %}
+                {% if sr.status == "GRASS_PENDING_PAYMENT" %}
+                <a class="btn btn-primary" href="{% url 'services:upload_receipt' sr.pk %}">Upload payment receipt</a>
+                {% endif %}
+            {% endif %}
+            <a class="btn btn-secondary" href="{% url 'services:request_detail' sr.pk %}">Back to request</a>
+            <a class="btn btn-secondary" href="{% url 'dashboard:home' %}">Dashboard</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

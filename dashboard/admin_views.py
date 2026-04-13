@@ -34,7 +34,12 @@ def _get_dashboard_context(request):
 
     total_requests = ServiceRequest.objects.count()
     pending_count = ServiceRequest.objects.filter(
-        status__in=[ServiceRequest.Status.SUBMITTED, ServiceRequest.Status.UNDER_REVIEW]
+        status__in=[
+            ServiceRequest.Status.SUBMITTED,
+            ServiceRequest.Status.UNDER_REVIEW,
+            ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+            ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
+        ]
     ).count()
     completed_this_month = ServiceRequest.objects.filter(
         status=ServiceRequest.Status.COMPLETED,
@@ -505,6 +510,8 @@ def admin_requests(request):
                 ServiceRequest.Status.UNDER_REVIEW,
                 ServiceRequest.Status.INSPECTION_FEE_DUE,
                 ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+                ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+                ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
             ]
         )
     elif tab == "inspection":
@@ -530,7 +537,10 @@ def admin_requests(request):
         )
     elif tab == "completed":
         requests_qs = base_qs.filter(
-            status=ServiceRequest.Status.COMPLETED,
+            status__in=[
+                ServiceRequest.Status.COMPLETED,
+                ServiceRequest.Status.CANCELLED,
+            ],
         )
     else:
         requests_qs = base_qs
@@ -564,6 +574,12 @@ def admin_requests(request):
 def confirm_payment(request, pk):
     """Admin approves a customer's payment after verifying the uploaded receipt."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.error(
+            request,
+            "Grass Cutting uses a separate verification step. Open the request and use Confirm Grass Cutting Request.",
+        )
+        return redirect("services:request_detail", pk=pk)
 
     if request.method == "POST":
         if not service_request.treasurer_receipt:
@@ -610,6 +626,91 @@ def confirm_payment(request, pk):
         messages.success(request, "Payment confirmed. Request marked as Paid.")
         return redirect("services:request_detail", pk=pk)
 
+    return redirect("services:request_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
+@require_POST
+def confirm_grass_request(request, pk):
+    """After treasurer payment receipt is uploaded, admin confirms grass cutting (marks completed)."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.error(request, "This action applies only to Grass Cutting requests.")
+        return redirect("services:request_detail", pk=pk)
+    if service_request.status != ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION:
+        messages.error(request, "This request is not awaiting payment verification.")
+        return redirect("services:request_detail", pk=pk)
+    if not service_request.treasurer_receipt:
+        messages.error(request, "No payment receipt uploaded for this request.")
+        return redirect("services:request_detail", pk=pk)
+
+    service_request.status = ServiceRequest.Status.COMPLETED
+    service_request.payment_confirmed_at = timezone.now()
+    service_request.save(update_fields=["status", "payment_confirmed_at", "updated_at"])
+
+    Notification.objects.create(
+        user=service_request.consumer,
+        message=(
+            f"Your Grass Cutting request #{service_request.id} has been verified. "
+            "Payment is confirmed and your service may proceed per the agreed schedule."
+        ),
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
+    )
+    if service_request.requested_by_id and service_request.requested_by_id != service_request.consumer_id:
+        Notification.objects.create(
+            user_id=service_request.requested_by_id,
+            message=(
+                f"Grass Cutting request #{service_request.id} that you submitted for "
+                f"{service_request.client_name} has been verified and confirmed."
+            ),
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+    messages.success(request, "Grass Cutting request confirmed and marked as completed.")
+    return redirect("services:request_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
+@require_POST
+def cancel_grass_request(request, pk):
+    """Admin cancels a grass cutting request (before or after payment upload)."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.error(request, "This action applies only to Grass Cutting requests.")
+        return redirect("services:request_detail", pk=pk)
+    if service_request.status not in (
+        ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+        ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
+    ):
+        messages.error(request, "This Grass Cutting request cannot be cancelled from its current status.")
+        return redirect("services:request_detail", pk=pk)
+
+    service_request.status = ServiceRequest.Status.CANCELLED
+    service_request.save(update_fields=["status", "updated_at"])
+
+    Notification.objects.create(
+        user=service_request.consumer,
+        message=(
+            f"Your Grass Cutting request #{service_request.id} has been cancelled by the office. "
+            "If you have questions, please contact CENRO."
+        ),
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
+    )
+    if service_request.requested_by_id and service_request.requested_by_id != service_request.consumer_id:
+        Notification.objects.create(
+            user_id=service_request.requested_by_id,
+            message=(
+                f"Grass Cutting request #{service_request.id} for {service_request.client_name} "
+                "has been cancelled by the office."
+            ),
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+    messages.success(request, "Grass Cutting request has been cancelled.")
     return redirect("services:request_detail", pk=pk)
 
 

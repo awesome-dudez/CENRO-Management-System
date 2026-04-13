@@ -15,6 +15,9 @@
     .status-pill.paid { background: #27ae60; }
     .status-pill.desludging_scheduled { background: #2980b9; }
     .status-pill.completed { background: #2ecc71; }
+    .status-pill.grass_pending_payment { background: #e67e22; }
+    .status-pill.grass_payment_awaiting_verification { background: #8e44ad; }
+    .status-pill.cancelled { background: #95a5a6; }
     .status-pill.expired { background: #6c757d; }
     .section-card { background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
     .section-card h3 { margin-top: 0; color: #2d3142; font-size: 18px; border-bottom: 2px solid #1abc9c; padding-bottom: 10px; }
@@ -39,6 +42,8 @@
     .info-item span { font-size: 14px; color: #2d3142; font-weight: 500; }
     .action-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
     .action-bar .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; color: white; display: inline-block; }
+    .grass-consumer-actions .btn { padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; text-decoration: none; display: inline-block; box-sizing: border-box; }
+    .grass-consumer-actions .btn-green, .grass-consumer-actions .btn-blue { color: #fff; border: none; cursor: pointer; }
     .btn-teal { background: #1abc9c; }
     .btn-teal:hover { background: #16a085; }
     .btn-blue { background: #3498db; }
@@ -225,7 +230,7 @@
     <!-- Payment -->
     {% if sr.treasurer_receipt %}
     <div class="section-card">
-        <h3>Payment Receipt</h3>
+        <h3>{% if sr.service_type == "GRASS_CUTTING" %}Treasurer payment receipt (uploaded){% else %}Payment Receipt{% endif %}</h3>
         <div class="info-item"><label>Receipt</label><span><a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank">View Receipt</a></span></div>
         {% if sr.payment_confirmed_at %}
         <div class="info-item" style="margin-top:8px;"><label>Confirmed At</label><span>{{ sr.payment_confirmed_at|date:"M d, Y H:i" }}</span></div>
@@ -251,6 +256,38 @@
     </div>
     {% endif %}
 
+    {% if sr.service_type == "GRASS_CUTTING" %}
+    <div class="section-card">
+        <h3>Grass Cutting — application &amp; payment</h3>
+        <p style="font-size:14px;color:#555;line-height:1.55;margin:0 0 12px;">
+            Keep a copy of your <strong>application form receipt</strong> for your records. Pay the required fee at the
+            <strong>City Treasurer's Office</strong>, then upload your official payment receipt here so staff can verify it before service proceeds.
+        </p>
+        <div class="info-grid">
+            <div class="info-item">
+                <label>Application form receipt</label>
+                <span><a href="{% url 'services:grasscutting_application_receipt' sr.pk %}">View official receipt</a></span>
+            </div>
+            <div class="info-item">
+                <label>Current step</label>
+                <span>
+                    {% if sr.status == "GRASS_PENDING_PAYMENT" or sr.status == "SUBMITTED" or sr.status == "UNDER_REVIEW" %}
+                        Pay at the Treasurer's Office, then upload your official payment receipt using the button below.
+                    {% elif sr.status == "GRASS_PAYMENT_AWAITING_VERIFICATION" %}
+                        Payment receipt uploaded — waiting for administrator verification.
+                    {% elif sr.status == "COMPLETED" %}
+                        Verified — service may proceed as scheduled.
+                    {% elif sr.status == "CANCELLED" %}
+                        This request was cancelled.
+                    {% else %}
+                        {{ sr.get_status_display }}
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ACTION BAR -->
     <div class="action-bar">
         {% if user.is_admin %}
@@ -262,8 +299,8 @@
             {% endif %}
 
             {% if sr.service_type == "GRASS_CUTTING" %}
-                {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" %}
-                <a href="{% url 'services:grasscutting_request_detail' sr.pk %}" class="btn btn-teal">View Request Detail</a>
+                {% if sr.status == "UNDER_REVIEW" or sr.status == "SUBMITTED" or sr.status == "GRASS_PENDING_PAYMENT" or sr.status == "GRASS_PAYMENT_AWAITING_VERIFICATION" %}
+                <a href="{% url 'services:grasscutting_request_detail' sr.pk %}" class="btn btn-teal">Grass application (admin)</a>
                 {% endif %}
             {% else %}
                 {% if can_assign_inspector %}
@@ -323,6 +360,21 @@
                 <button type="submit" class="btn btn-warning">Reject Receipt</button>
             </form>
             {% endif %}
+
+            {% if sr.service_type == "GRASS_CUTTING" %}
+                {% if sr.status == "GRASS_PAYMENT_AWAITING_VERIFICATION" and sr.treasurer_receipt %}
+                <form method="post" action="{% url 'dashboard:confirm_grass_request' sr.pk %}" class="inline-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-green">Confirm Grass Cutting Request</button>
+                </form>
+                {% endif %}
+                {% if sr.status == "GRASS_PENDING_PAYMENT" or sr.status == "GRASS_PAYMENT_AWAITING_VERIFICATION" %}
+                <form method="post" action="{% url 'dashboard:cancel_grass_request' sr.pk %}" class="inline-form" onsubmit="return confirm('Cancel this Grass Cutting request?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-orange">Cancel Grass Cutting Request</button>
+                </form>
+                {% endif %}
+            {% endif %}
         {% endif %}
 
         {% if user.is_staff_member %}
@@ -345,15 +397,32 @@
             <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-orange">View Computation</a>
             <a href="{% url 'services:upload_receipt' sr.pk %}" class="btn btn-green">Upload Payment Receipt</a>
             {% endif %}
+
         {% endif %}
     </div>
 
     {% if sr.consumer == user or sr.requested_by == user %}
         {% if sr.service_type == "GRASS_CUTTING" %}
-        <div style="margin-top: 18px; text-align: center;">
+        <div class="grass-consumer-actions" style="margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px;">
+            {% if not sr.treasurer_receipt %}
+                {% if sr.status == "GRASS_PENDING_PAYMENT" or sr.status == "SUBMITTED" or sr.status == "UNDER_REVIEW" %}
+                <a href="{% url 'services:upload_receipt' sr.pk %}"
+                   class="btn btn-green"
+                   style="min-width: 260px; text-align: center;">
+                    Upload Treasurer Receipt
+                </a>
+                {% endif %}
+            {% elif sr.treasurer_receipt %}
+                <a href="{% url 'services:view_treasurer_receipt' sr.pk %}"
+                   class="btn btn-blue"
+                   target="_blank" rel="noopener"
+                   style="min-width: 260px; text-align: center;">
+                    View uploaded Treasurer receipt
+                </a>
+            {% endif %}
             <a href="{% url 'services:grasscutting_request_view' sr.pk %}"
                class="btn btn-outline"
-               style="min-width: 260px;">
+               style="min-width: 260px; text-align: center;">
                 View Grasscutting Application Form
             </a>
         </div>

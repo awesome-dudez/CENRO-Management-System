@@ -28,6 +28,13 @@ class ServiceRequest(models.Model):
         PAID = "PAID", "Paid"
         DESLUDGING_SCHEDULED = "DESLUDGING_SCHEDULED", "Desludging Scheduled"
         COMPLETED = "COMPLETED", "Completed"
+        # Grass cutting: pay at Treasurer, upload receipt, then admin confirms or cancels
+        GRASS_PENDING_PAYMENT = "GRASS_PENDING_PAYMENT", "Pending Payment"
+        GRASS_PAYMENT_AWAITING_VERIFICATION = (
+            "GRASS_PAYMENT_AWAITING_VERIFICATION",
+            "Payment Receipt Awaiting Verification",
+        )
+        CANCELLED = "CANCELLED", "Cancelled"
 
     class PublicPrivate(models.TextChoices):
         PUBLIC = "PUBLIC", "Public"

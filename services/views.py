@@ -259,6 +259,15 @@ def _notify_admin_users(message, notification_type, related_request=None):
     )
 
 
+def _can_view_grass_application_receipt(user, service_request):
+    """Consumers/requesters, admins, and staff may view the grass application form receipt."""
+    if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+        return False
+    if user.is_admin() or user.is_staff_member():
+        return True
+    return _can_act_on_request(user, service_request)
+
+
 # ---------------------------------------------------------------------------
 # Multi-step service request wizard (3 steps)
 # ---------------------------------------------------------------------------
@@ -1010,6 +1019,8 @@ def grasscutting_application(request):
                 consumer=target_consumer,
                 service_type=ServiceRequest.ServiceType.GRASS_CUTTING,
                 status__in=[
+                    ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+                    ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
                     ServiceRequest.Status.SUBMITTED,
                     ServiceRequest.Status.INSPECTION_FEE_DUE,
                     ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
@@ -1043,7 +1054,7 @@ def grasscutting_application(request):
                 service_type=ServiceRequest.ServiceType.GRASS_CUTTING,
                 connected_to_bawad=False,
                 public_private=form_data.get("public_private", "PRIVATE"),
-                status=ServiceRequest.Status.SUBMITTED,
+                status=ServiceRequest.Status.GRASS_PENDING_PAYMENT,
                 notes=notes,
                 fee_amount=Decimal(str(round(total_amount, 2))),
                 grasscutting_date=cd["date_of_grass_cutting"],
@@ -1081,13 +1092,13 @@ def grasscutting_application(request):
                 pass
 
             _notify_admin_users(
-                f"New Grass Cutting request from {service_request.client_name}.",
+                f"New Grass Cutting request from {service_request.client_name} (pending payment at Treasurer).",
                 Notification.NotificationType.REQUEST_SUBMITTED,
                 service_request,
             )
             Notification.objects.create(
                 user=request.user,
-                message="Your Grass Cutting request has been submitted.",
+                message="Your Grass Cutting application was received. Pay at the Treasurer's Office, then upload your payment receipt.",
                 notification_type=Notification.NotificationType.STATUS_CHANGE,
                 related_request=service_request,
             )
@@ -1098,11 +1109,11 @@ def grasscutting_application(request):
             request.session.pop("_location_photos", None)
             request.session.pop(OTHER_VERIFIED_SESSION_KEY, None)
 
-            messages.success(request, "Grasscutting application submitted successfully!")
-            return render(request, "services/request_success.html", {
-                "reference_number": f"ECO-{timezone.now().year}-{service_request.id % 1000:03d}",
-                "service_request": service_request,
-            })
+            messages.success(
+                request,
+                "Application received. Review your official receipt, pay at the Treasurer's Office, then upload your payment proof.",
+            )
+            return redirect("services:grasscutting_application_receipt", pk=service_request.pk)
     else:
         form = GrasscuttingApplicationForm(initial=initial)
 
@@ -1111,6 +1122,55 @@ def grasscutting_application(request):
         "form_data": form_data,
         "rate_per_hour": GRASSCUTTING_RATE_PER_HOUR,
     })
+
+
+@login_required
+def grasscutting_application_receipt(request, pk):
+    """Official application-form receipt (reference copy for consumer and admin)."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if not _can_view_grass_application_receipt(request.user, service_request):
+        messages.error(request, "You do not have permission to view this receipt.")
+        return redirect("services:request_list")
+
+    g_date = service_request.grasscutting_date
+    g_personnel = service_request.grasscutting_personnel
+    g_hours = service_request.grasscutting_hours
+    if g_date is None or g_personnel is None or g_hours is None:
+        parsed_date, parsed_personnel, parsed_hours = _parse_grasscutting_notes(service_request.notes)
+        if g_date is None:
+            g_date = parsed_date
+        if g_personnel is None:
+            g_personnel = parsed_personnel
+        if g_hours is None:
+            g_hours = parsed_hours
+
+    notes = service_request.notes or ""
+    designated_time = _extract_grasscutting_field(notes, "Designated Time:")
+    place_of_grass_cutting = _extract_grasscutting_field(notes, "Place of Grass Cutting:")
+    signature_name = _extract_grasscutting_field(notes, "Signature over printed name:")
+    reference_number = f"ECO-{timezone.now().year}-{service_request.id % 1000:03d}"
+    total_amount = service_request.fee_amount
+    if total_amount is None and g_personnel and g_hours:
+        total_amount = Decimal(
+            str(round(float(g_personnel) * float(g_hours) * float(GRASSCUTTING_RATE_PER_HOUR), 2))
+        )
+
+    return render(
+        request,
+        "services/grasscutting_application_receipt.html",
+        {
+            "sr": service_request,
+            "reference_number": reference_number,
+            "grasscutting_date": g_date,
+            "grasscutting_personnel": g_personnel,
+            "grasscutting_hours": g_hours,
+            "designated_time": designated_time,
+            "place_of_grass_cutting": place_of_grass_cutting,
+            "signature_name": signature_name or service_request.client_name,
+            "rate_per_hour": GRASSCUTTING_RATE_PER_HOUR,
+            "total_amount": total_amount,
+        },
+    )
 
 
 def _parse_grasscutting_notes(notes_str):
@@ -1189,6 +1249,21 @@ def grasscutting_request_detail(request, pk):
         "number_of_hours": g_hours or Decimal("1"),
         "remarks": "",
     }
+
+    admin_edit_blocked = service_request.status in (
+        ServiceRequest.Status.COMPLETED,
+        ServiceRequest.Status.CANCELLED,
+    ) or (
+        service_request.status == ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION
+        and service_request.treasurer_receipt
+    )
+
+    if admin_edit_blocked and request.method == "POST":
+        messages.error(
+            request,
+            "This application can no longer be edited at its current status.",
+        )
+        return redirect("services:grasscutting_request_detail", pk=pk)
 
     if request.method == "POST":
         form = GrasscuttingAdminEditForm(request.POST, initial=initial)
@@ -1270,6 +1345,7 @@ def grasscutting_request_detail(request, pk):
         "rate_per_hour": rate_per_hour,
         "total_amount": service_request.fee_amount,
         "change_logs": service_request.change_logs.all()[:20],
+        "admin_edit_blocked": admin_edit_blocked,
     })
 
 
@@ -1281,10 +1357,11 @@ def grasscutting_request_view(request, pk):
         messages.error(request, "This page is only for Grass Cutting requests.")
         return redirect("services:request_detail", pk=pk)
 
-    # Permission: owner (consumer) or admin/staff
-    is_owner = service_request.consumer == request.user
-    is_admin_like = hasattr(request.user, "is_admin") and request.user.is_admin() or hasattr(request.user, "is_staff_member") and request.user.is_staff_member()
-    if not (is_owner or is_admin_like):
+    if not (
+        _can_act_on_request(request.user, service_request)
+        or request.user.is_admin()
+        or request.user.is_staff_member()
+    ):
         messages.error(request, "You do not have permission to view this grasscutting form.")
         return redirect("services:request_list")
 
@@ -1521,6 +1598,8 @@ def request_list(request):
                     ServiceRequest.Status.AWAITING_PAYMENT,
                     ServiceRequest.Status.PAID,
                     ServiceRequest.Status.DESLUDGING_SCHEDULED,
+                    ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+                    ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
                 ],
             )
         ).order_by("-created_at")
@@ -1545,13 +1624,20 @@ def request_detail(request, pk):
         messages.error(request, "You do not have permission to view this request.")
         return redirect("services:request_list")
 
-    # Staff: can only view requests assigned to them.
-    if is_staff and service_request.assigned_inspector_id != request.user.id:
-        messages.error(request, "You can only view requests assigned to you.")
-        return redirect("services:request_list")
+    # Staff: can only view requests assigned to them (grass cutting is not inspector-assigned).
+    if is_staff:
+        if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+            if service_request.assigned_inspector_id != request.user.id:
+                messages.error(request, "You can only view requests assigned to you.")
+                return redirect("services:request_list")
 
     # When an admin/staff opens a newly submitted request, automatically move it to "Under Review".
-    if is_admin_like and service_request.status == ServiceRequest.Status.SUBMITTED:
+    # Grass Cutting uses its own payment-first statuses; do not auto-advance those rows.
+    if (
+        is_admin_like
+        and service_request.status == ServiceRequest.Status.SUBMITTED
+        and service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING
+    ):
         service_request.status = ServiceRequest.Status.UNDER_REVIEW
         service_request.save(update_fields=["status", "updated_at"])
         try:
@@ -2234,27 +2320,61 @@ def upload_receipt(request, pk):
         messages.error(request, "Permission denied.")
         return redirect("services:request_list")
 
+    if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
+        if service_request.treasurer_receipt:
+            messages.info(request, "A Treasurer payment receipt is already uploaded for this request.")
+            return redirect("services:request_detail", pk=pk)
+        # New workflow: Pending Payment. Legacy rows may still be Submitted / Under Review until upload.
+        if service_request.status not in (
+            ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+            ServiceRequest.Status.SUBMITTED,
+            ServiceRequest.Status.UNDER_REVIEW,
+        ):
+            messages.error(
+                request,
+                "You cannot upload a Treasurer payment receipt for this request at its current status.",
+            )
+            return redirect("services:request_detail", pk=pk)
+
     if request.method == "POST":
         receipt = request.FILES.get("treasurer_receipt")
         if receipt:
-            with transaction.atomic():
-                service_request.treasurer_receipt = receipt
-                service_request.status = ServiceRequest.Status.AWAITING_PAYMENT
-                service_request.save(update_fields=["treasurer_receipt", "status"])
-
-                computation = getattr(service_request, "computation", None)
-                if computation:
-                    from dashboard.models import ServiceComputation
-                    if computation.payment_status != ServiceComputation.PaymentStatus.FREE:
-                        computation.payment_status = ServiceComputation.PaymentStatus.AWAITING_VERIFICATION
-                        computation.save(update_fields=["payment_status"])
-
-                _notify_admin_users(
-                    f"Payment receipt uploaded by {service_request.client_name} for request #{service_request.id}.",
-                    Notification.NotificationType.PAYMENT_UPLOADED,
-                    service_request,
+            if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
+                with transaction.atomic():
+                    service_request.treasurer_receipt = receipt
+                    service_request.status = ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION
+                    service_request.save(update_fields=["treasurer_receipt", "status", "updated_at"])
+                    _notify_admin_users(
+                        (
+                            f"Grass Cutting: payment receipt uploaded by {service_request.client_name} "
+                            f"for request #{service_request.id}. Please verify and confirm or cancel."
+                        ),
+                        Notification.NotificationType.PAYMENT_UPLOADED,
+                        service_request,
+                    )
+                messages.success(
+                    request,
+                    "Payment receipt uploaded. An administrator will verify it before your service can proceed.",
                 )
-            messages.success(request, "Receipt uploaded successfully. Waiting for admin verification.")
+            else:
+                with transaction.atomic():
+                    service_request.treasurer_receipt = receipt
+                    service_request.status = ServiceRequest.Status.AWAITING_PAYMENT
+                    service_request.save(update_fields=["treasurer_receipt", "status"])
+
+                    computation = getattr(service_request, "computation", None)
+                    if computation:
+                        from dashboard.models import ServiceComputation
+                        if computation.payment_status != ServiceComputation.PaymentStatus.FREE:
+                            computation.payment_status = ServiceComputation.PaymentStatus.AWAITING_VERIFICATION
+                            computation.save(update_fields=["payment_status"])
+
+                    _notify_admin_users(
+                        f"Payment receipt uploaded by {service_request.client_name} for request #{service_request.id}.",
+                        Notification.NotificationType.PAYMENT_UPLOADED,
+                        service_request,
+                    )
+                messages.success(request, "Receipt uploaded successfully. Waiting for admin verification.")
         else:
             messages.error(request, "Please select a file to upload.")
         return redirect("services:request_detail", pk=pk)
@@ -2409,6 +2529,11 @@ def _can_view_request_uploaded_files(user, service_request):
         return True
     if user.is_staff_member() and service_request.assigned_inspector_id == user.id:
         return True
+    # Grass cutting is not inspector-assigned; office admins/staff still need to review payment proof.
+    if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING and (
+        user.is_admin() or user.is_staff_member()
+    ):
+        return True
     return False
 
 
@@ -2456,6 +2581,12 @@ def print_application(request, pk):
 @role_required("ADMIN", "STAFF")
 def complete_request(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
+        messages.error(
+            request,
+            "Grass Cutting requests are marked completed only after payment verification by an administrator.",
+        )
+        return redirect("services:request_detail", pk=pk)
     service_request.status = ServiceRequest.Status.COMPLETED
     service_request.save()
     Notification.objects.create(

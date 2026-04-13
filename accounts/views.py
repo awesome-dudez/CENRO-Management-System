@@ -11,6 +11,7 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.db.utils import IntegrityError, OperationalError, ProgrammingError
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .forms import (
@@ -404,18 +405,25 @@ def forgot_password_view(request):
                 form.add_error("username", "No account found with this username.")
                 return render(request, "accounts/forgot_password.html", {"form": form})
 
+            account_email = (user_by_username.email or "").strip().lower()
+            if not account_email:
+                form.add_error(
+                    "email",
+                    "This account has no email address on file. Please contact the administrator for help.",
+                )
+                return render(request, "accounts/forgot_password.html", {"form": form})
+
             # Check email matches that account
-            if user_by_username.email.lower() != email:
+            if account_email != email:
                 form.add_error("email", "This email does not match the account for that username.")
                 return render(request, "accounts/forgot_password.html", {"form": form})
 
             user = user_by_username
 
-            if user is not None:
+            try:
                 # Cooldown: one token per 60 seconds per user to prevent spam
                 latest = (
-                    PasswordResetToken.objects
-                    .filter(user=user, is_used=False)
+                    PasswordResetToken.objects.filter(user=user, is_used=False)
                     .order_by("-created_at")
                     .first()
                 )
@@ -428,9 +436,9 @@ def forgot_password_view(request):
 
                 reset_token = PasswordResetToken.create_for_user(user, minutes=15)
                 reset_url = request.build_absolute_uri(
-                    f"/accounts/reset-password/{reset_token.token}/"
+                    reverse("accounts:reset_password", kwargs={"token": reset_token.token})
                 )
-                verify_url = request.build_absolute_uri("/accounts/verify-code/")
+                verify_url = request.build_absolute_uri(reverse("accounts:verify_code"))
 
                 try:
                     send_mail(
@@ -449,24 +457,32 @@ def forgot_password_view(request):
                             f"— CENRO Management System, Bayawan City"
                         ),
                         from_email=django_settings.DEFAULT_FROM_EMAIL,
-                        recipient_list=[user.email],
+                        recipient_list=[account_email],
                         fail_silently=False,
                     )
                 except Exception as e:
                     logger.exception("Failed to send password reset email: %s", e)
                     messages.error(
                         request,
-                        "Could not send the email. Please check the server email configuration or contact the administrator.",
+                        "Could not send the email. The server mail settings may be incomplete on this deployment. "
+                        "If you are the site administrator, set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (Gmail app password) "
+                        "or EMAIL_BACKEND in Render environment variables.",
                     )
                     return render(request, "accounts/forgot_password.html", {"form": form})
 
-            # Always show the same message — do NOT reveal if email exists
-            messages.success(
-                request,
-                "If that email address is registered, a password reset email has been sent. "
-                "Check your inbox (and spam folder), then enter the code below.",
-            )
-            return redirect("accounts:verify_code")
+                messages.success(
+                    request,
+                    "If that email address is registered, a password reset email has been sent. "
+                    "Check your inbox (and spam folder), then enter the code below.",
+                )
+                return redirect("accounts:verify_code")
+            except Exception as e:
+                logger.exception("Password reset request failed: %s", e)
+                messages.error(
+                    request,
+                    "Something went wrong while processing your request. Please try again in a few minutes.",
+                )
+                return render(request, "accounts/forgot_password.html", {"form": form})
     else:
         form = ForgotPasswordForm()
 

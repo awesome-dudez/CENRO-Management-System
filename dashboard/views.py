@@ -36,11 +36,18 @@ def home(request):
                 ServiceRequest.Status.AWAITING_PAYMENT,
                 ServiceRequest.Status.PAID,
                 ServiceRequest.Status.DESLUDGING_SCHEDULED,
+                ServiceRequest.Status.GRASS_PENDING_PAYMENT,
+                ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
             ],
         )
     ).order_by("-created_at")
 
-    pending_count = user_requests.exclude(status=ServiceRequest.Status.COMPLETED).count()
+    pending_count = user_requests.exclude(
+        status__in=[
+            ServiceRequest.Status.COMPLETED,
+            ServiceRequest.Status.CANCELLED,
+        ]
+    ).count()
     completed_count = user_requests.filter(status=ServiceRequest.Status.COMPLETED).count()
     total_count = user_requests.count()
 

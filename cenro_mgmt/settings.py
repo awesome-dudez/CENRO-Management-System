@@ -256,12 +256,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # -------------------------
 # Email (Gmail SMTP for password reset OTP)
 # -------------------------
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "noreply@cenro.gov.ph"
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_HOST_USER = (config("EMAIL_HOST_USER", default="") or "").strip()
+EMAIL_HOST_PASSWORD = (config("EMAIL_HOST_PASSWORD", default="") or "").strip()
+_default_from_env = (config("DEFAULT_FROM_EMAIL", default="") or "").strip()
+DEFAULT_FROM_EMAIL = _default_from_env or EMAIL_HOST_USER or "noreply@cenro.gov.ph"
 
 _email_configured = (
     EMAIL_HOST_USER
@@ -269,10 +270,14 @@ _email_configured = (
     and EMAIL_HOST_PASSWORD
     and EMAIL_HOST_PASSWORD not in ("your-16-char-app-password", "")
 )
-if _email_configured:
+# On Render, set EMAIL_BACKEND explicitly if you use a provider SDK (e.g. SendGrid API).
+_email_backend_override = (config("EMAIL_BACKEND", default="") or "").strip()
+if _email_backend_override:
+    EMAIL_BACKEND = _email_backend_override
+elif _email_configured:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
-    # No real credentials yet — print OTP to the server console so you can test the flow
+    # No real credentials — log messages to stdout (Render logs). Password reset still works for debugging.
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 

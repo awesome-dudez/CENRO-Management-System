@@ -16,6 +16,16 @@ urlpatterns = [
     path("admin/requests/<int:pk>/proceed-to-computation/", admin_views.proceed_to_computation, name="proceed_to_computation"),
     path("admin/requests/<int:pk>/schedule-desludging/", admin_views.schedule_desludging, name="schedule_desludging"),
     path("admin/requests/<int:pk>/confirm-payment/", admin_views.confirm_payment, name="confirm_payment"),
+    path(
+        "admin/requests/<int:pk>/confirm-grass/",
+        admin_views.confirm_grass_request,
+        name="confirm_grass_request",
+    ),
+    path(
+        "admin/requests/<int:pk>/cancel-grass/",
+        admin_views.cancel_grass_request,
+        name="cancel_grass_request",
+    ),
     path("admin/requests/<int:pk>/confirm-inspection-fee/", admin_views.confirm_inspection_fee, name="confirm_inspection_fee"),
     path("admin/requests/<int:pk>/reject-inspection-fee/", admin_views.reject_inspection_fee, name="reject_inspection_fee"),
     path("admin/requests/schedule/", admin_views.admin_schedule_by_barangay, name="admin_schedule"),
