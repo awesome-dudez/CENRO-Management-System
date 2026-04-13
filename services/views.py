@@ -739,7 +739,6 @@ def grasscutting_application(request):
                 f"Date: {cd['date']}",
                 f"Date of Grass Cutting: {cd['date_of_grass_cutting']}",
                 f"Designated Time: {designated_time_str}",
-                f"Place of Grass Cutting: {cd['place_of_grass_cutting']}",
                 f"Signature over printed name: {cd['signature_over_printed_name']}",
                 f"Contact Number: {cd['contact_number']}",
                 f"Address: {cd['address']}",
@@ -953,7 +952,6 @@ def grasscutting_request_detail(request, pk):
 
     rate_per_hour = GRASSCUTTING_RATE_PER_HOUR
     designated_time = _extract_grasscutting_field(service_request.notes, "Designated Time:")
-    place_of_grass_cutting = _extract_grasscutting_field(service_request.notes, "Place of Grass Cutting:")
     initial = {
         "date_of_grass_cutting": g_date,
         "number_of_personnel": g_personnel or 1,
@@ -1037,7 +1035,6 @@ def grasscutting_request_detail(request, pk):
         "grasscutting_personnel": g_personnel,
         "grasscutting_hours": g_hours,
         "designated_time": designated_time,
-        "place_of_grass_cutting": place_of_grass_cutting,
         "rate_per_hour": rate_per_hour,
         "total_amount": service_request.fee_amount,
         "change_logs": service_request.change_logs.all()[:20],
@@ -1074,7 +1071,6 @@ def grasscutting_request_view(request, pk):
 
     rate_per_hour = GRASSCUTTING_RATE_PER_HOUR
     designated_time = _extract_grasscutting_field(service_request.notes, "Designated Time:")
-    place_of_grass_cutting = _extract_grasscutting_field(service_request.notes, "Place of Grass Cutting:")
     total_amount = service_request.fee_amount
     if total_amount is None and g_personnel and g_hours:
         total_amount = Decimal(str(round(g_personnel * float(g_hours) * rate_per_hour, 2)))
@@ -1087,7 +1083,6 @@ def grasscutting_request_view(request, pk):
         "grasscutting_personnel": g_personnel,
         "grasscutting_hours": g_hours,
         "designated_time": designated_time,
-        "place_of_grass_cutting": place_of_grass_cutting,
         "rate_per_hour": rate_per_hour,
         "total_amount": total_amount,
         "change_logs": change_logs,

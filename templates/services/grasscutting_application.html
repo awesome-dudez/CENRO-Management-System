@@ -125,11 +125,6 @@
                 <span class="form-help-text" style="font-size:12px; color:#666;">Use the time picker; time is saved as e.g. 03:30 PM.</span>
                 {% if form.designated_time.errors %}<div class="form-error">{{ form.designated_time.errors.0 }}</div>{% endif %}
             </div>
-            <div class="form-group" style="margin-bottom:14px;">
-                <label for="id_place_of_grass_cutting">Place of Grass Cutting <span style="color:red">*</span></label>
-                {{ form.place_of_grass_cutting }}
-                {% if form.place_of_grass_cutting.errors %}<div class="form-error">{{ form.place_of_grass_cutting.errors.0 }}</div>{% endif %}
-            </div>
         </div>
 
         <!-- 3. Requested By -->

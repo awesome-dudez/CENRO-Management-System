@@ -278,11 +278,6 @@ class GrasscuttingApplicationForm(forms.Form):
         label="Designated Time",
         input_formats=["%H:%M", "%I:%M %p", "%I:%M%p", "%H:%M:%S"],
     )
-    place_of_grass_cutting = forms.CharField(
-        max_length=500,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Place of Grass Cutting"}),
-        label="Place of Grass Cutting",
-    )
     signature_over_printed_name = forms.CharField(
         max_length=255,
         widget=forms.TextInput(attrs={"class": "form-control"}),
