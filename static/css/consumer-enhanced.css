@@ -200,12 +200,17 @@ body.consumer-view::after {
     100% { opacity: 0.8; transform: scale(0.98) translateY(10px); }
 }
 
-/* Content sits above orbs */
-body.consumer-view .top-nav,
+/* Content sits above orbs — top-nav keeps its own z-index: 1000 from style.css */
 body.consumer-view .main-content,
 body.consumer-view .footer {
     position: relative;
     z-index: 1;
+}
+
+/* Make sure top-nav stays above everything */
+body.consumer-view .top-nav {
+    position: fixed !important;
+    z-index: 1000 !important;
 }
 
 /* ============================================================
