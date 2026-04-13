@@ -136,6 +136,17 @@
                 <label>Signature over printed name</label>
                 <input type="text" class="form-control" value="{{ sr.client_name }}" disabled>
             </div>
+            {% if sr.client_signature %}
+            <div class="form-group" style="margin-bottom:14px;">
+                <label>Signature (submitted)</label>
+                <div style="margin-top:8px;border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa;max-width:420px;">
+                    <a href="{{ sr.client_signature.url }}" target="_blank" rel="noopener">
+                        <img src="{{ sr.client_signature.url }}" alt="Client signature" style="max-width:100%;max-height:200px;object-fit:contain;display:block;">
+                    </a>
+                </div>
+                <p style="font-size:12px;color:#666;margin-top:6px;"><a href="{{ sr.client_signature.url }}" target="_blank" rel="noopener">Open full size</a></p>
+            </div>
+            {% endif %}
             <div class="form-group" style="margin-bottom:14px;">
                 <label>Contact Number</label>
                 <input type="text" class="form-control" value="{{ sr.contact_number }}" disabled>

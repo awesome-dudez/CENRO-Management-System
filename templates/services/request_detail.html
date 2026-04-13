@@ -81,6 +81,17 @@
             {% if sr.bawad_proof %}
             <div class="info-item"><label>BAWAD Proof</label><span><a href="{{ sr.bawad_proof.url }}" target="_blank">View Document</a></span></div>
             {% endif %}
+            {% if sr.client_signature %}
+            <div class="info-item" style="grid-column: 1 / -1;">
+                <label>Client signature</label>
+                <span>
+                    <a href="{{ sr.client_signature.url }}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;border:1px solid #e0e0e0;border-radius:8px;padding:10px;background:#fafafa;">
+                        <img src="{{ sr.client_signature.url }}" alt="Client signature" style="max-width:min(100%, 320px);max-height:180px;object-fit:contain;vertical-align:middle;display:block;">
+                    </a>
+                </span>
+                <span style="display:block;margin-top:6px;font-size:13px;"><a href="{{ sr.client_signature.url }}" target="_blank" rel="noopener">Open full size</a></span>
+            </div>
+            {% endif %}
         </div>
     </div>
 
