@@ -259,6 +259,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+# Avoid hung workers on Render when SMTP is slow or blocked (Gmail often needs this).
+try:
+    EMAIL_TIMEOUT = int(config("EMAIL_TIMEOUT", default="30"))
+except (TypeError, ValueError):
+    EMAIL_TIMEOUT = 30
 EMAIL_HOST_USER = (config("EMAIL_HOST_USER", default="") or "").strip()
 EMAIL_HOST_PASSWORD = (config("EMAIL_HOST_PASSWORD", default="") or "").strip()
 _default_from_env = (config("DEFAULT_FROM_EMAIL", default="") or "").strip()

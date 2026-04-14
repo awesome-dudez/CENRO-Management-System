@@ -8,7 +8,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.utils import IntegrityError, OperationalError, ProgrammingError
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -389,6 +389,20 @@ def logout_view(request):
 
 def forgot_password_view(request):
     """Step 1 — user enters email; we create a DB token and email a reset link."""
+    try:
+        return _forgot_password_view_inner(request)
+    except Exception as e:
+        # Never return a bare 500 for this flow: log and show a recoverable page (Render / DB / edge cases).
+        logger.exception("forgot_password_view: unhandled error: %s", e)
+        messages.error(
+            request,
+            "Something went wrong on this page. Please try again in a moment. "
+            "If the problem continues, contact the administrator (check database connectivity and migrations on the server).",
+        )
+        return render(request, "accounts/forgot_password.html", {"form": ForgotPasswordForm()})
+
+
+def _forgot_password_view_inner(request):
     if request.method == "POST":
         form = ForgotPasswordForm(request.POST)
         if form.is_valid():
@@ -400,6 +414,14 @@ def forgot_password_view(request):
                 user_by_username = User.objects.get(username__iexact=username)
             except User.DoesNotExist:
                 user_by_username = None
+            except DatabaseError as e:
+                logger.exception("Password reset: database error on username lookup: %s", e)
+                messages.error(
+                    request,
+                    "The server could not verify your account right now (database error). "
+                    "Please try again shortly. Administrators should confirm DATABASE_URL and run migrations.",
+                )
+                return render(request, "accounts/forgot_password.html", {"form": form})
 
             if user_by_username is None:
                 form.add_error("username", "No account found with this username.")
@@ -435,9 +457,11 @@ def forgot_password_view(request):
                     return render(request, "accounts/forgot_password.html", {"form": form})
 
                 reset_token = PasswordResetToken.create_for_user(user, minutes=15)
-                reset_url = request.build_absolute_uri(
-                    reverse("accounts:reset_password", kwargs={"token": reset_token.token})
+                reset_path = reverse(
+                    "accounts:reset_password",
+                    kwargs={"token": reset_token.token},
                 )
+                reset_url = request.build_absolute_uri(reset_path)
                 verify_url = request.build_absolute_uri(reverse("accounts:verify_code"))
 
                 try:
@@ -449,7 +473,7 @@ def forgot_password_view(request):
                             f"Please reset your password by clicking this link:\n"
                             f"  {reset_url}\n\n"
                             f"Or enter this one-time verification code on the site:\n"
-                            f"  {reset_token.code}\n\n"
+                            f"  {reset_token.code}\n\n" 
                             f"To enter the code manually, go to:\n"
                             f"  {verify_url}\n\n"
                             f"This code expires in 15 minutes.\n\n"

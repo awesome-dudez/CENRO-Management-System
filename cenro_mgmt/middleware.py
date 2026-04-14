@@ -51,7 +51,14 @@ class LoginRequiredMiddleware:
 
     def __call__(self, request):
         # Check if path is public
-        is_public = any(request.path.startswith(path) for path in self.public_paths)
+        path = request.path
+        is_public = any(path.startswith(p) for p in self.public_paths)
+        # Exact paths without trailing slash (APPEND_SLASH off or odd proxies)
+        if not is_public and path in (
+            "/accounts/forgot-password",
+            "/accounts/verify-code",
+        ):
+            is_public = True
         # Only access .is_authenticated (safe for AnonymousUser); never .role or .is_approved here
         if not is_public and getattr(request.user, "is_authenticated", False) is False:
             return redirect(f"{reverse('accounts:login')}?next={request.path}")
