@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260413-notif-fix2">
     <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260413-notif-fix2">
     <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260413-notif-fix2">
+    {% block extra_css %}{% endblock %}
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
     <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260407-layers">
     {% endif %}{% endif %}
@@ -36,7 +37,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 {% comment %}Short-circuit: do not access user.role when user is not authenticated.{% endcomment %}
-<body class="{% if not user.is_authenticated %}consumer-view{% elif user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-view{% else %}consumer-view{% endif %}">
+<body class="{% if not user.is_authenticated %}consumer-view{% elif user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-view{% else %}consumer-view{% endif %}{% block body_extra_class %}{% endblock %}">
 {% if not user.is_authenticated or user.is_authenticated and not user.is_admin and not user.is_staff_member %}
     <!-- Top Navigation Bar (consumer / non-admin) -->
     <header class="top-nav">

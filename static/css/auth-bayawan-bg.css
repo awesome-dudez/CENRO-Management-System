@@ -1,0 +1,144 @@
+/**
+ * Full-page Bayawan background for login & registration (body.auth-page-bayawan).
+ * Image: static/img/bayawan-city-bg.png — cover, no stretch; overlay for contrast.
+ */
+
+@keyframes auth-bg-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(1.035);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes auth-card-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+body.auth-page-bayawan {
+    min-height: 100vh;
+}
+
+/* Photo layer — fixed so it fills viewport while scrolling long registration forms */
+body.auth-page-bayawan::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background-color: #0d1f18;
+    background-image: url("../img/bayawan-city-bg.png");
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    animation: auth-bg-fade-in 0.95s ease-out both;
+}
+
+/* Dim gradient + light blur for legibility */
+body.auth-page-bayawan::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(
+        155deg,
+        rgba(8, 32, 24, 0.84) 0%,
+        rgba(10, 26, 34, 0.76) 45%,
+        rgba(5, 14, 18, 0.9) 100%
+    );
+}
+
+@supports ((-webkit-backdrop-filter: blur(2px)) or (backdrop-filter: blur(2px))) {
+    body.auth-page-bayawan::after {
+        -webkit-backdrop-filter: blur(2.5px);
+        backdrop-filter: blur(2.5px);
+        background: linear-gradient(
+            155deg,
+            rgba(8, 32, 24, 0.72) 0%,
+            rgba(10, 26, 34, 0.64) 45%,
+            rgba(5, 14, 18, 0.82) 100%
+        );
+    }
+}
+
+body.auth-page-bayawan .auth-container {
+    background: transparent !important;
+    background-image: none !important;
+    position: relative;
+    z-index: 0;
+    min-height: calc(100vh - 70px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 16px 40px;
+}
+
+body.auth-page-bayawan .auth-card {
+    position: relative;
+    z-index: 1;
+    animation: auth-card-fade-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+    box-shadow:
+        0 24px 64px rgba(0, 0, 0, 0.38),
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    transition: box-shadow 0.35s ease, transform 0.35s ease;
+}
+
+body.auth-page-bayawan .auth-card:hover {
+    box-shadow:
+        0 28px 72px rgba(0, 0, 0, 0.42),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.auth-page-bayawan::before,
+    body.auth-page-bayawan .auth-card {
+        animation: none !important;
+    }
+
+    body.auth-page-bayawan .auth-card {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Staff registration (admin-only): main area is normally off-white — show Bayawan behind it */
+body.auth-page-bayawan.admin-view .admin-main {
+    background: transparent;
+}
+
+body.auth-page-bayawan.admin-view .admin-main-title,
+body.auth-page-bayawan.admin-view .admin-main-subtitle {
+    color: #f4faf7;
+    text-shadow:
+        0 2px 20px rgba(0, 0, 0, 0.55),
+        0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+@media (max-width: 575px) {
+    body.auth-page-bayawan .auth-container {
+        min-height: calc(100vh - 64px);
+        padding: 18px 14px 28px;
+    }
+}
+
+@media (min-width: 768px) {
+    body.auth-page-bayawan .auth-container {
+        padding: 36px 28px 48px;
+    }
+}
+
+@media (min-width: 992px) {
+    body.auth-page-bayawan .auth-container {
+        padding: 40px 32px 56px;
+    }
+}
