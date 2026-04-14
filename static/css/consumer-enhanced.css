@@ -127,6 +127,11 @@ html.dark-mode body.consumer-view .top-nav {
 }
 
 /* Theme toggle button */
+body.consumer-view .notif-bell-btn {
+    min-width: 44px;
+    min-height: 44px;
+}
+
 .theme-toggle-btn {
     background: none;
     border: none;
@@ -192,6 +197,14 @@ body.consumer-view::after {
         radial-gradient(ellipse 500px 400px at 90% 70%, var(--ce-orb-2), transparent 70%),
         radial-gradient(ellipse 400px 350px at 50% 90%, var(--ce-orb-3), transparent 70%);
     animation: orbPulse 12s ease-in-out infinite alternate;
+}
+
+/* Phones: static background decoration saves battery and reduces motion */
+@media (max-width: 767px) {
+    body.consumer-view::after {
+        animation: none;
+        opacity: 0.92;
+    }
 }
 
 @keyframes orbPulse {
@@ -429,6 +442,21 @@ body.consumer-view .notif-badge {
     font-weight: 700;
     color: var(--ce-text-primary);
     margin: 0;
+}
+
+/* Stack section title + actions on narrow screens (mobile consumers) */
+@media (max-width: 640px) {
+    .ce-section-header {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 14px;
+    }
+    .ce-section-header .ce-btn-view {
+        width: 100%;
+        justify-content: center;
+        min-height: 48px;
+        box-sizing: border-box;
+    }
 }
 
 /* ============================================================

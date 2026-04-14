@@ -1,0 +1,21 @@
+{% comment %}Mobile quick nav for consumers — shown only below 768px (consumer-responsive.css){% endcomment %}
+{% with ns=request.resolver_match.namespace|default:'' un=request.resolver_match.url_name|default:'' %}
+<nav class="consumer-bottom-nav" aria-label="Quick navigation">
+    <a href="{% url 'dashboard:home' %}" class="consumer-bottom-nav__link{% if ns == 'dashboard' and un == 'home' %} is-active{% elif ns == 'scheduling' %} is-active{% elif ns == 'services' and un == 'notification_list' %} is-active{% endif %}">
+        <span class="consumer-bottom-nav__icon" aria-hidden="true">&#127968;</span>
+        <span class="consumer-bottom-nav__label">Home</span>
+    </a>
+    <a href="{% url 'services:create_request' %}" class="consumer-bottom-nav__link{% if ns == 'services' and un != 'history' and un != 'notification_list' and un != 'mark_notification_read' and un != 'notifications_api' and un != 'notifications_count_api' and un != 'mark_all_read' %} is-active{% endif %}">
+        <span class="consumer-bottom-nav__icon" aria-hidden="true">&#128221;</span>
+        <span class="consumer-bottom-nav__label">Request</span>
+    </a>
+    <a href="{% url 'services:history' %}" class="consumer-bottom-nav__link{% if ns == 'services' and un == 'history' %} is-active{% endif %}">
+        <span class="consumer-bottom-nav__icon" aria-hidden="true">&#128203;</span>
+        <span class="consumer-bottom-nav__label">History</span>
+    </a>
+    <a href="{% url 'accounts:profile' %}" class="consumer-bottom-nav__link{% if ns == 'accounts' %}{% if un == 'profile' or un == 'force_password_change' %} is-active{% endif %}{% endif %}">
+        <span class="consumer-bottom-nav__icon" aria-hidden="true">&#128100;</span>
+        <span class="consumer-bottom-nav__label">Profile</span>
+    </a>
+</nav>
+{% endwith %}
