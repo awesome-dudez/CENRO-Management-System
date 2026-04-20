@@ -3,6 +3,14 @@
 {% block content %}
 <style>
     .detail-container { max-width: 900px; margin: 30px auto; padding: 20px; }
+    .detail-back-row { margin-bottom: 14px; }
+    .btn-back-requests {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600;
+        text-decoration: none; color: #2d3142; background: #fff; border: 2px solid #1abc9c;
+        transition: background 0.15s, color 0.15s;
+    }
+    .btn-back-requests:hover { background: #1abc9c; color: #fff; }
     .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 12px; }
     .detail-header h1 { font-size: 24px; color: #2d3142; margin: 0; }
     .status-pill { padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600; color: white; background: #6c757d; }
@@ -64,12 +72,47 @@
     #request-detail-map { width: 100%; height: 320px; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; margin-top: 16px; }
     .request-detail-no-map { margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; color: #666; font-size: 14px; }
     @media (max-width: 600px) { #request-detail-map { height: 260px; } }
+
+    /* In-page confirmation (replaces browser confirm — no "127.0.0.1 says") */
+    .cenro-confirm-overlay {
+        position: fixed; inset: 0; z-index: 10050;
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px; box-sizing: border-box;
+        background: rgba(45, 49, 66, 0.45);
+        backdrop-filter: blur(3px);
+        opacity: 0; visibility: hidden; transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .cenro-confirm-overlay.is-open { opacity: 1; visibility: visible; }
+    .cenro-confirm-dialog {
+        background: #fff; border-radius: 12px; max-width: 440px; width: 100%;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.22); border: 1px solid rgba(0,0,0,0.06);
+        padding: 24px 26px 22px; transform: translateY(8px); transition: transform 0.2s ease;
+    }
+    .cenro-confirm-overlay.is-open .cenro-confirm-dialog { transform: translateY(0); }
+    .cenro-confirm-kicker {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: #1abc9c; margin: 0 0 8px;
+    }
+    .cenro-confirm-title { font-size: 1.2rem; font-weight: 700; color: #2d3142; margin: 0 0 12px; line-height: 1.3; }
+    .cenro-confirm-body { font-size: 14px; color: #555; line-height: 1.55; margin: 0 0 22px; }
+    .cenro-confirm-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+    .cenro-confirm-actions .btn { padding: 10px 18px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .cenro-confirm-cancel { background: #eef1f4; color: #2d3142; }
+    .cenro-confirm-cancel:hover { background: #e2e6ea; }
+    .cenro-confirm-primary { color: #fff; }
+    .cenro-confirm-primary.cenro-confirm--teal { background: #1abc9c; }
+    .cenro-confirm-primary.cenro-confirm--teal:hover { background: #16a085; }
+    .cenro-confirm-primary.cenro-confirm--warn { background: #e67e22; }
+    .cenro-confirm-primary.cenro-confirm--warn:hover { background: #d35400; }
 </style>
 
 <div class="detail-container">
+    <div class="detail-back-row">
+        <a href="{{ requests_list_back_url }}" class="btn-back-requests">← Back to requests</a>
+    </div>
     <div class="detail-header">
         <h1>Service Request</h1>
-        <span class="status-pill {{ sr.status|lower }}">{{ sr.get_status_display }}</span>
+        <span class="status-pill {{ sr.status|lower }}">{% if sr.status == "COMPUTATION_SENT" and sr.computation and not sr.computation.is_finalized %}Computation — pending admin finalization{% else %}{{ sr.get_status_display }}{% endif %}</span>
     </div>
 
     <!-- Customer Information -->
@@ -115,13 +158,13 @@
             <label style="font-size:12px;color:#999;text-transform:uppercase;display:block;margin-bottom:8px;">Location photos</label>
             <div style="display:flex;flex-wrap:wrap;gap:12px;">
                 {% if sr.location_photo_1 %}
-                <a href="{{ sr.location_photo_1.url }}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:200px;">
-                    <img src="{{ sr.location_photo_1.url }}" alt="Location photo 1" style="width:200px;height:150px;object-fit:cover;display:block;">
+                <a href="{% url 'services:view_location_photo' sr.pk 1 %}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:200px;">
+                    <img src="{% url 'services:view_location_photo' sr.pk 1 %}" alt="Location photo 1" style="width:200px;height:150px;object-fit:cover;display:block;">
                 </a>
                 {% endif %}
                 {% if sr.location_photo_2 %}
-                <a href="{{ sr.location_photo_2.url }}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:200px;">
-                    <img src="{{ sr.location_photo_2.url }}" alt="Location photo 2" style="width:200px;height:150px;object-fit:cover;display:block;">
+                <a href="{% url 'services:view_location_photo' sr.pk 2 %}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:200px;">
+                    <img src="{% url 'services:view_location_photo' sr.pk 2 %}" alt="Location photo 2" style="width:200px;height:150px;object-fit:cover;display:block;">
                 </a>
                 {% endif %}
             </div>
@@ -202,26 +245,30 @@
             <div class="info-item"><label>Total Charge</label><span style="font-size:18px;color:#1abc9c;font-weight:700;">&#8369;{{ sr.computation.total_charge }}</span></div>
             <div class="info-item"><label>Payment Status</label><span>{% if sr.status == "PAID" %}Paid{% elif sr.treasurer_receipt and sr.status == "AWAITING_PAYMENT" %}Awaiting Verification{% else %}{{ sr.computation.get_payment_status_display }}{% endif %}</span></div>
         </div>
+        {% if user.is_admin or sr.consumer == user or sr.requested_by == user %}
         <div style="margin-top:12px;">
             <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-outline" style="font-size:13px;">View Computation Letter</a>
         </div>
+        {% endif %}
 
         {% if user.is_admin %}
         <div style="margin-top:18px;font-size:13px;color:#666;">
             <p>Prepared by: {{ sr.computation.prepared_by.get_full_name|default:"Admin" }}</p>
         </div>
-        {% if not sr.computation.is_finalized %}
+        {% if not sr.computation.is_finalized and can_finalize_letter %}
         <form method="post" action="{% url 'services:view_computation' sr.pk %}" enctype="multipart/form-data" style="margin-top:8px;">
             {% csrf_token %}
             <div class="form-group">
-                <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature (optional until finalization)</label>
+                <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature <span style="color:#c0392b;">(required to send)</span></label>
                 <input type="file" name="prepared_by_signature" accept="image/*">
-                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a scanned or digital signature that will appear on the computation letter.</p>
+                <p style="font-size:12px;color:#666;margin-top:4px;">Required before finalizing. Crew (waived inspection) or completion info (with inspection) must also be complete.</p>
             </div>
             <div style="margin-top:10px;">
                 <button type="submit" name="action" value="finalize" class="btn btn-teal">Finalize &amp; Send to Customer</button>
             </div>
         </form>
+        {% elif not sr.computation.is_finalized %}
+        <p style="margin-top:10px;font-size:13px;color:#666;">Finalize is available after you open <strong>Edit computation</strong> and click <strong>Save &amp; Recalculate</strong>, then use Finalize on the letter or here.</p>
         {% endif %}
         {% endif %}
     </div>
@@ -315,8 +362,17 @@
                     <button type="submit" class="btn btn-warning">Waive Inspection</button>
                 </form>
                 {% elif inspection_waived %}
-                <span class="form-help-text" style="margin-left:8px;">Inspection was waived for this request.</span>
+                <span class="form-help-text" style="margin-left:8px;">Inspection was waived (no site visit). Assign driver and helpers for crew size, then open computation.</span>
+                {% if sr.computation %}
+                <a href="{% url 'services:edit_computation' sr.pk %}" class="btn btn-teal" style="margin-left:8px;">Edit computation</a>
+                {% if not waived_crew_ready %}
+                <a href="{% url 'dashboard:assign_waived_inspection_crew' sr.pk %}" class="btn btn-purple" style="margin-left:8px;">Assign crew</a>
+                {% endif %}
+                {% elif not waived_crew_ready %}
+                <a href="{% url 'dashboard:assign_waived_inspection_crew' sr.pk %}" class="btn btn-purple" style="margin-left:8px;">Assign crew</a>
+                {% else %}
                 <a href="{% url 'dashboard:proceed_to_computation' sr.pk %}" class="btn btn-teal" style="margin-left:8px;">Proceed to Computation</a>
+                {% endif %}
                 {% endif %}
             {% endif %}
 
@@ -354,11 +410,30 @@
                 {% csrf_token %}
                 <button type="submit" class="btn btn-green">Confirm Inspection Fee</button>
             </form>
-            <form method="post" action="{% url 'dashboard:reject_inspection_fee' sr.pk %}" class="inline-form" style="margin-left:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%;" onsubmit="return confirm('Reject this receipt? The customer will be asked to upload a new one.');">
+            <form method="post" action="{% url 'dashboard:reject_inspection_fee' sr.pk %}" class="inline-form cenro-confirm-form" style="margin-left:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%;"
+                  data-cenro-confirm-kicker="CENRO Sanitary Management System"
+                  data-cenro-confirm-title="Reject this inspection fee receipt?"
+                  data-cenro-confirm-body="The registered customer will be notified and asked to upload a new official Treasurer receipt. If you entered an optional reason, it will be included in the office note."
+                  data-cenro-confirm-primary-label="Reject receipt"
+                  data-cenro-confirm-variant="warn">
                 {% csrf_token %}
                 <input type="text" name="reason" maxlength="500" placeholder="Reason (optional)" aria-label="Rejection reason" class="form-control" style="max-width:260px;padding:8px 10px;font-size:14px;">
                 <button type="submit" class="btn btn-warning">Reject Receipt</button>
             </form>
+            {% endif %}
+
+            {% if sr.qualifies_public_bayawan_no_fees %}
+                {% if sr.status == "INSPECTION_FEE_DUE" or sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
+                <form method="post" action="{% url 'dashboard:waive_public_bayawan_inspection_fee' sr.pk %}" class="inline-form cenro-confirm-form" style="margin-left:8px;"
+                      data-cenro-confirm-kicker="Inspection fee — policy waiver"
+                      data-cenro-confirm-title="Waive the ₱150 inspection fee?"
+                      data-cenro-confirm-body="This request qualifies as public property within Bayawan City. Confirming will mark the inspection fee as satisfied without Treasurer payment, record the waiver on the request, and move the case to Under Review. The computation letter will show no charge (₱0) when prepared, per office policy."
+                      data-cenro-confirm-primary-label="Confirm waiver"
+                      data-cenro-confirm-variant="teal">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-teal">Waive inspection fee (public / Bayawan)</button>
+                </form>
+                {% endif %}
             {% endif %}
 
             {% if sr.service_type == "GRASS_CUTTING" %}
@@ -369,7 +444,12 @@
                 </form>
                 {% endif %}
                 {% if sr.status == "GRASS_PENDING_PAYMENT" or sr.status == "GRASS_PAYMENT_AWAITING_VERIFICATION" %}
-                <form method="post" action="{% url 'dashboard:cancel_grass_request' sr.pk %}" class="inline-form" onsubmit="return confirm('Cancel this Grass Cutting request?');">
+                <form method="post" action="{% url 'dashboard:cancel_grass_request' sr.pk %}" class="inline-form cenro-confirm-form"
+                      data-cenro-confirm-kicker="Grass cutting"
+                      data-cenro-confirm-title="Cancel this grass cutting request?"
+                      data-cenro-confirm-body="The customer (and submitter, if different) will be notified that the office cancelled this request. This action should be used only when the service will not proceed."
+                      data-cenro-confirm-primary-label="Yes, cancel request"
+                      data-cenro-confirm-variant="warn">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-orange">Cancel Grass Cutting Request</button>
                 </form>
@@ -429,6 +509,82 @@
         {% endif %}
     {% endif %}
 </div>
+
+<div id="cenroConfirmOverlay" class="cenro-confirm-overlay" hidden aria-hidden="true">
+    <div class="cenro-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="cenroConfirmTitleEl" aria-describedby="cenroConfirmBodyEl">
+        <p id="cenroConfirmKicker" class="cenro-confirm-kicker"></p>
+        <h2 id="cenroConfirmTitleEl" class="cenro-confirm-title"></h2>
+        <p id="cenroConfirmBodyEl" class="cenro-confirm-body"></p>
+        <div class="cenro-confirm-actions">
+            <button type="button" class="btn cenro-confirm-cancel" id="cenroConfirmDismiss">Go back</button>
+            <button type="button" class="btn cenro-confirm-primary cenro-confirm--teal" id="cenroConfirmProceed"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var overlay = document.getElementById('cenroConfirmOverlay');
+    if (!overlay) return;
+    var kickerEl = document.getElementById('cenroConfirmKicker');
+    var titleEl = document.getElementById('cenroConfirmTitleEl');
+    var bodyEl = document.getElementById('cenroConfirmBodyEl');
+    var dismissBtn = document.getElementById('cenroConfirmDismiss');
+    var proceedBtn = document.getElementById('cenroConfirmProceed');
+    var pendingForm = null;
+
+    function closeModal() {
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('hidden', '');
+        overlay.setAttribute('aria-hidden', 'true');
+        pendingForm = null;
+        document.body.style.overflow = '';
+    }
+
+    function openModal(form) {
+        pendingForm = form;
+        var kicker = form.getAttribute('data-cenro-confirm-kicker') || '';
+        kickerEl.textContent = kicker;
+        kickerEl.style.display = kicker ? 'block' : 'none';
+        titleEl.textContent = form.getAttribute('data-cenro-confirm-title') || 'Please confirm';
+        bodyEl.textContent = form.getAttribute('data-cenro-confirm-body') || '';
+        var primaryLabel = form.getAttribute('data-cenro-confirm-primary-label') || 'Confirm';
+        proceedBtn.textContent = primaryLabel;
+        var variant = form.getAttribute('data-cenro-confirm-variant') || 'teal';
+        proceedBtn.classList.remove('cenro-confirm--teal', 'cenro-confirm--warn');
+        proceedBtn.classList.add(variant === 'warn' ? 'cenro-confirm--warn' : 'cenro-confirm--teal');
+        overlay.removeAttribute('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        overlay.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        proceedBtn.focus();
+    }
+
+    document.querySelectorAll('form.cenro-confirm-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            openModal(form);
+        });
+    });
+
+    dismissBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
+    proceedBtn.addEventListener('click', function() {
+        if (!pendingForm) return;
+        var f = pendingForm;
+        closeModal();
+        f.submit();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && overlay.classList.contains('is-open')) {
+            e.preventDefault();
+            closeModal();
+        }
+    });
+})();
+</script>
 
 {% if sr.gps_latitude and sr.gps_longitude %}
 <script>

@@ -14,6 +14,11 @@ urlpatterns = [
     path("admin/requests/<int:pk>/assign-inspector/", admin_views.assign_inspector, name="assign_inspector"),
     path("admin/requests/<int:pk>/waive-inspection/", admin_views.waive_inspection, name="waive_inspection"),
     path("admin/requests/<int:pk>/proceed-to-computation/", admin_views.proceed_to_computation, name="proceed_to_computation"),
+    path(
+        "admin/requests/<int:pk>/assign-waived-crew/",
+        admin_views.assign_waived_inspection_crew,
+        name="assign_waived_inspection_crew",
+    ),
     path("admin/requests/<int:pk>/schedule-desludging/", admin_views.schedule_desludging, name="schedule_desludging"),
     path("admin/requests/<int:pk>/confirm-payment/", admin_views.confirm_payment, name="confirm_payment"),
     path(
@@ -28,8 +33,14 @@ urlpatterns = [
     ),
     path("admin/requests/<int:pk>/confirm-inspection-fee/", admin_views.confirm_inspection_fee, name="confirm_inspection_fee"),
     path("admin/requests/<int:pk>/reject-inspection-fee/", admin_views.reject_inspection_fee, name="reject_inspection_fee"),
+    path(
+        "admin/requests/<int:pk>/waive-public-bayawan-inspection-fee/",
+        admin_views.waive_public_bayawan_inspection_fee,
+        name="waive_public_bayawan_inspection_fee",
+    ),
     path("admin/requests/schedule/", admin_views.admin_schedule_by_barangay, name="admin_schedule"),
     path("admin/membership/", admin_views.admin_membership, name="admin_membership"),
+    path("admin/equipment/", admin_views.admin_equipment, name="admin_equipment"),
     path(
         "admin/membership/reset-password/<int:user_id>/",
         admin_views.admin_reset_consumer_password,

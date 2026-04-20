@@ -1,4 +1,4 @@
-/* CENRO Management System - Modern eco dashboard */
+/* CENRO Sanitary Management System - Modern eco dashboard */
 
 :root {
     /* Eco-friendly Color Palette */
@@ -1086,18 +1086,10 @@ select.form-control {
 }
 
 .footer-logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    display: block;
     margin-bottom: 14px;
     font-size: 1.25rem;
     font-weight: 700;
-}
-
-.footer-logo .logo-icon {
-    width: 45px;
-    height: 45px;
-    font-size: 1.5rem;
 }
 
 .footer-section:first-child p {
@@ -1112,6 +1104,102 @@ select.form-control {
     text-align: center;
     color: rgba(255, 255, 255, 0.5);
     font-size: 0.85rem;
+}
+
+.footer-legal-trigger {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font: inherit;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: left;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s, padding-left 0.2s;
+    display: inline-block;
+}
+
+.footer-legal-trigger:hover {
+    color: var(--light-green);
+    padding-left: 2px;
+}
+
+.footer-legal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.footer-legal-backdrop.is-open {
+    display: block;
+}
+
+.footer-legal-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+.footer-legal-modal.is-open {
+    display: flex;
+}
+
+.footer-legal-dialog {
+    position: relative;
+    background: var(--white);
+    color: #1a2f38;
+    max-width: 520px;
+    width: 100%;
+    max-height: min(85vh, 640px);
+    overflow-y: auto;
+    border-radius: 12px;
+    padding: 28px 24px 24px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.footer-legal-dialog h3 {
+    margin: 0 36px 16px 0;
+    font-size: 1.25rem;
+    color: #1a2f38;
+}
+
+.footer-legal-body p {
+    margin: 0 0 12px;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: #334;
+}
+
+.footer-legal-body p:last-child {
+    margin-bottom: 0;
+}
+
+.footer-legal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(26, 47, 56, 0.08);
+    border-radius: 8px;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #1a2f38;
+}
+
+.footer-legal-close:hover {
+    background: rgba(26, 47, 56, 0.14);
 }
 
 /* Dashboard Specific Styles */

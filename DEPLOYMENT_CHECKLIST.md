@@ -1,4 +1,4 @@
-# CENRO Management System - Deployment & Implementation Checklist
+# CENRO Sanitary Management System - Deployment & Implementation Checklist
 
 ## ✅ Completed Features
 

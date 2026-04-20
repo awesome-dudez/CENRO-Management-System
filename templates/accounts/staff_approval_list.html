@@ -8,7 +8,7 @@
             <h3 class="card-title">Staff Accounts</h3>
             <p class="card-subtitle">Set each account to <strong>Active</strong> (can sign in) or <strong>Inactive</strong> (cannot sign in), or remove access entirely.</p>
         </div>
-        <a href="{% url 'accounts:staff_register' %}" class="btn btn-primary">Register New Staff</a>
+        <a href="{% url 'accounts:staff_register' %}" class="btn btn-primary">Register New Inspector</a>
     </div>
     <div class="table-responsive">
         <table class="data-table">
@@ -71,6 +71,78 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3 class="card-title">Drivers &amp; Helpers</h3>
+        <p class="card-subtitle">Names listed here appear as dropdown choices when completing desludging jobs. Used to avoid double-booking the same crew at the same schedule (admin can override with confirmation).</p>
+    </div>
+    <div style="padding: 0 1rem 1rem;">
+        <form method="post" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 1.25rem;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_personnel">
+            <div>
+                <label for="personnel_full_name" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Full name</label>
+                <input type="text" name="personnel_full_name" id="personnel_full_name" class="form-control" placeholder="e.g. Juan Dela Cruz" style="min-width:220px;">
+            </div>
+            <div>
+                <label for="personnel_role" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Role</label>
+                <select name="personnel_role" id="personnel_role" class="form-control" style="min-width:140px;">
+                    <option value="DRIVER">Driver</option>
+                    <option value="HELPER">Helper</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in personnel_drivers %}
+                    <tr>
+                        <td>{{ p.full_name }}</td>
+                        <td><span style="color:#2980b9;font-weight:600;">Driver</span></td>
+                        <td>
+                            <form method="post" style="display:inline;" onsubmit="return confirm('Remove {{ p.full_name|escapejs }} from the list?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_personnel">
+                                <input type="hidden" name="personnel_id" value="{{ p.pk }}">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% for p in personnel_helpers %}
+                    <tr>
+                        <td>{{ p.full_name }}</td>
+                        <td><span style="color:#8e44ad;font-weight:600;">Helper</span></td>
+                        <td>
+                            <form method="post" style="display:inline;" onsubmit="return confirm('Remove {{ p.full_name|escapejs }} from the list?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_personnel">
+                                <input type="hidden" name="personnel_id" value="{{ p.pk }}">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not personnel_drivers and not personnel_helpers %}
+                    <tr>
+                        <td colspan="3">No drivers or helpers yet. Add names above.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 

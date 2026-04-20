@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import CompletionInfo, InspectionDetail, Notification, ServiceRequest
+from .models import (
+    CompletionInfo,
+    DesludgingPersonnel,
+    InspectionDetail,
+    Notification,
+    ServiceEquipment,
+    ServiceRequest,
+)
 
 
 @admin.register(ServiceRequest)
@@ -21,6 +28,18 @@ class NotificationAdmin(admin.ModelAdmin):
 @admin.register(InspectionDetail)
 class InspectionDetailAdmin(admin.ModelAdmin):
     list_display = ["service_request", "inspection_date", "inspected_by"]
+
+
+@admin.register(DesludgingPersonnel)
+class DesludgingPersonnelAdmin(admin.ModelAdmin):
+    list_display = ["full_name", "role", "is_active", "created_at"]
+    list_filter = ["role", "is_active"]
+
+
+@admin.register(ServiceEquipment)
+class ServiceEquipmentAdmin(admin.ModelAdmin):
+    list_display = ["unit_number", "notes", "is_active", "created_at"]
+    list_filter = ["is_active"]
 
 
 @admin.register(CompletionInfo)

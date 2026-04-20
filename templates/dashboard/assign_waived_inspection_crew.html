@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Assign crew (waived inspection){% endblock %}
+{% block admin_subtitle %}Requests{% endblock %}
+{% block content %}
+<style>
+    .form-container { max-width: 640px; margin: 40px auto; padding: 20px; }
+    .form-card { background: white; border: 2px solid #9b59b6; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    .form-card h2 { color: #2d3142; border-bottom: 2px solid #9b59b6; padding-bottom: 12px; margin-bottom: 12px; }
+    .form-card .lead { color: #555; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #2d3142; }
+    .form-group select, .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+    .section-label { font-size: 15px; font-weight: 700; color: #1abc9c; margin: 22px 0 10px; }
+    .btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; flex-wrap: wrap; }
+    .btn { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn-primary { background: #9b59b6; color: white; }
+    .btn-primary:hover { background: #8e44ad; }
+    .btn-secondary { background: #e0e0e0; color: #2d3142; }
+    .hint { font-size: 12px; color: #666; margin-top: 6px; }
+</style>
+<div class="form-container">
+    <div class="form-card">
+        <h2>Assign crew</h2>
+        <p class="lead">
+            Site inspection is waived for this request. Record the <strong>driver</strong> and <strong>helpers</strong>
+            so personnel count is correct for the fee computation. You can update this later if the computation was already sent.
+            Manage driver and helper names under <strong>Staff</strong> → Drivers &amp; Helpers.
+        </p>
+        <p style="color:#666;font-size:14px;margin-bottom:20px;">
+            {{ service_request.get_service_type_display }} · {{ service_request.client_name }} · #{{ service_request.pk }}
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="section-label">Driver &amp; helpers</div>
+            <div class="form-group">
+                <label for="id_driver">Driver <span style="color:red">*</span></label>
+                {% if personnel_drivers %}
+                <select name="waived_crew_driver_name" id="id_driver" required>
+                    <option value="">— Select driver —</option>
+                    {% for p in personnel_drivers %}
+                    <option value="{{ p.full_name }}" {% if posted.driver_name == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input type="text" name="waived_crew_driver_name" id="id_driver" required value="{{ posted.driver_name }}" placeholder="Full name">
+                <p class="hint">No drivers on file. Add under Staff, or type a name here.</p>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label>Helper 1</label>
+                {% if personnel_helpers %}
+                <select name="waived_crew_helper1_name">
+                    <option value="">— None —</option>
+                    {% for p in personnel_helpers %}
+                    <option value="{{ p.full_name }}" {% if posted.helper1 == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input type="text" name="waived_crew_helper1_name" value="{{ posted.helper1 }}" placeholder="Optional">
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label>Helper 2</label>
+                {% if personnel_helpers %}
+                <select name="waived_crew_helper2_name">
+                    <option value="">— None —</option>
+                    {% for p in personnel_helpers %}
+                    <option value="{{ p.full_name }}" {% if posted.helper2 == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input type="text" name="waived_crew_helper2_name" value="{{ posted.helper2 }}" placeholder="Optional">
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label>Helper 3</label>
+                {% if personnel_helpers %}
+                <select name="waived_crew_helper3_name">
+                    <option value="">— None —</option>
+                    {% for p in personnel_helpers %}
+                    <option value="{{ p.full_name }}" {% if posted.helper3 == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input type="text" name="waived_crew_helper3_name" value="{{ posted.helper3 }}" placeholder="Optional">
+                {% endif %}
+            </div>
+
+            <div class="btn-row">
+                <a href="{% url 'services:request_detail' service_request.pk %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Save crew</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

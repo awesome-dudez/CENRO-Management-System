@@ -79,9 +79,15 @@ def _sync_legacy_record(user):
         return
 
     legacy_profile = legacy.consumer_profile
+    update_fields = []
     if legacy_profile.prior_desludging_m3_4y and legacy_profile.prior_desludging_m3_4y > 0:
         profile.prior_desludging_m3_4y = legacy_profile.prior_desludging_m3_4y
-        profile.save(update_fields=["prior_desludging_m3_4y"])
+        update_fields.append("prior_desludging_m3_4y")
+    if legacy_profile.last_cycle_request_date:
+        profile.last_cycle_request_date = legacy_profile.last_cycle_request_date
+        update_fields.append("last_cycle_request_date")
+    if update_fields:
+        profile.save(update_fields=update_fields)
 
     from services.models import ServiceRequest, Notification
 
@@ -108,7 +114,10 @@ def login_view(request):
             return redirect("dashboard:home")
         except Exception as e:
             logger.exception("Login view redirect (authenticated user) failed: %s", e)
-            messages.error(request, "An error occurred. Please try again.")
+            messages.error(
+                request,
+                "We could not open your dashboard right after sign-in. Please try logging in again, or contact support if it keeps happening.",
+            )
 
     form = LoginForm(request)
     if request.method != "POST":
@@ -130,26 +139,41 @@ def login_view(request):
         is_valid = form.is_valid()
     except (OperationalError, ProgrammingError, IntegrityError) as e:
         logger.exception("Login DB error during form.is_valid() (authenticate): %s", e)
-        messages.error(request, "A temporary error occurred. Please try again in a moment.")
+        messages.error(
+            request,
+            "Sign-in is temporarily unavailable because the database did not respond. Please wait a minute and try again.",
+        )
         return render(request, "accounts/login.html", {"form": form})
     except Exception as e:
         logger.exception("Login view crashed during form.is_valid(): %s", e)
-        messages.error(request, "An error occurred during sign in. Please try again.")
+        messages.error(
+            request,
+            "Sign-in failed because of an unexpected server error. Please try again, or use Forgot password if you need to reset your password.",
+        )
         return render(request, "accounts/login.html", {"form": form})
 
     if not is_valid:
-        messages.error(request, "Please fix the errors below.")
+        messages.error(
+            request,
+            "Sign-in did not succeed. Correct any highlighted fields — check your username and password, or use Forgot password.",
+        )
         return render(request, "accounts/login.html", {"form": form})
 
     try:
         user = form.get_user()
     except (OperationalError, ProgrammingError, IntegrityError) as e:
         logger.exception("Login DB error during get_user: %s", e)
-        messages.error(request, "A temporary error occurred. Please try again in a moment.")
+        messages.error(
+            request,
+            "Sign-in is temporarily unavailable because the database did not respond. Please wait a minute and try again.",
+        )
         return render(request, "accounts/login.html", {"form": form})
     except Exception as e:
         logger.exception("Login failed during get_user: %s", e)
-        messages.error(request, "An error occurred during sign in. Please try again.")
+        messages.error(
+            request,
+            "Sign-in could not be completed because of a server error. Please try again in a moment.",
+        )
         return render(request, "accounts/login.html", {"form": form})
 
     is_approved = getattr(user, "is_approved", True)
@@ -162,7 +186,10 @@ def login_view(request):
         login(request, user)
     except Exception as e:
         logger.exception("Login session save failed: %s", e)
-        messages.error(request, "An error occurred during sign in. Please try again.")
+        messages.error(
+            request,
+            "Your password was accepted but the session could not be saved (browser or server issue). Try again, or use a different browser.",
+        )
         return render(request, "accounts/login.html", {"form": form})
 
     try:
@@ -192,41 +219,67 @@ def consumer_register(request):
         )
 
     captcha_data = request.session.get("registration_captcha") or {}
-    a = captcha_data.get("a") or 0
-    b = captcha_data.get("b") or 0
 
     form = ConsumerRegistrationForm(request.POST)
     try:
         is_valid = form.is_valid()
     except (OperationalError, ProgrammingError, IntegrityError) as e:
         logger.exception("Register view crashed during form.is_valid(): %s", e)
-        messages.error(request, "A temporary error occurred. Please try again.")
-        return render(request, "accounts/consumer_register.html", {"form": form})
+        messages.error(
+            request,
+            "Registration is temporarily unavailable because the database did not respond. Please wait a minute and try again.",
+        )
+        a, b = _init_registration_captcha(request)
+        return render(
+            request,
+            "accounts/consumer_register.html",
+            {"form": form, "captcha_a": a, "captcha_b": b},
+        )
     except Exception as e:
         logger.exception("Register view crashed: %s", e)
-        messages.error(request, "An error occurred. Please try again.")
-        return render(request, "accounts/consumer_register.html", {"form": form})
+        messages.error(
+            request,
+            "Registration could not continue because of an unexpected server error. Please try again, or contact support.",
+        )
+        a, b = _init_registration_captcha(request)
+        return render(
+            request,
+            "accounts/consumer_register.html",
+            {"form": form, "captcha_a": a, "captcha_b": b},
+        )
 
-        # Additional security checks after built-in validation:
-        # 1) Honeypot (bots that fill hidden field)
-        honeypot_val = (form.cleaned_data.get("website") or "").strip() if hasattr(form, "cleaned_data") else ""
-        if honeypot_val:
-            is_valid = False
-            form.add_error(None, "Registration blocked for security reasons.")
+    # Additional security checks after built-in validation (must run on every POST; was previously dead code).
+    # 1) Honeypot (bots that fill hidden field)
+    honeypot_val = (request.POST.get("website") or "").strip()
+    if honeypot_val:
+        is_valid = False
+        form.add_error(None, "Registration blocked for security reasons.")
 
-        # 2) Simple math captcha to reduce automated sign-ups
-        expected_sum = captcha_data.get("sum")
-        raw_answer = request.POST.get("captcha_answer", "").strip()
-        try:
-            answer = int(raw_answer)
-        except (TypeError, ValueError):
-            answer = None
-        if expected_sum is None or answer is None or answer != expected_sum:
-            is_valid = False
-            form.add_error("captcha_answer", "Incorrect answer. Please try again.")
+    # 2) Math captcha — compare POST answer to the challenge stored in session for this browser.
+    expected_sum = captcha_data.get("sum")
+    a_sess = captcha_data.get("a")
+    b_sess = captcha_data.get("b")
+    raw_answer = request.POST.get("captcha_answer", "").strip()
+    try:
+        answer = int(raw_answer)
+    except (TypeError, ValueError):
+        answer = None
+    if expected_sum is None or a_sess is None or b_sess is None:
+        is_valid = False
+        form.add_error(
+            "captcha_answer",
+            "Security check expired or missing. Please refresh the page and solve the new question.",
+        )
+    elif answer != expected_sum:
+        is_valid = False
+        form.add_error("captcha_answer", "Incorrect answer. Please try again.")
+
     if not is_valid:
         a, b = _init_registration_captcha(request)
-        messages.error(request, "Please fix the errors below and try again.")
+        messages.error(
+            request,
+            "Please review the highlighted fields (username, password rules, email, mobile number, or captcha) and try again.",
+        )
         return render(
             request,
             "accounts/consumer_register.html",
@@ -239,11 +292,15 @@ def consumer_register(request):
             _sync_legacy_record(user)
         login(request, user)
         request.session.pop("registration_captcha", None)
-        messages.success(request, "Registration successful! Welcome to the CENRO Management System.")
+        messages.success(request, "Registration successful! Welcome to the CENRO Sanitary Management System.")
         role = getattr(user, "role", None)
         if role == User.Role.ADMIN:
             return redirect("dashboard:admin_dashboard")
-        return redirect("dashboard:home")
+        # Let other browser tabs (e.g. service request wizard) detect successful signup via bridge page.
+        request.session["_consumer_reg_notify_pending"] = True
+        if getattr(user, "must_change_password", False) and role == User.Role.CONSUMER:
+            return redirect("accounts:force_password_change")
+        return redirect("accounts:consumer_register_complete_notify")
     except IntegrityError as e:
         logger.exception("Registration IntegrityError: %s", e)
         if "username" in str(e).lower() or "unique" in str(e).lower():
@@ -260,7 +317,10 @@ def consumer_register(request):
         )
     except (OperationalError, ProgrammingError) as e:
         logger.exception("Registration DB error: %s", e)
-        messages.error(request, "A temporary error occurred. Please try again in a moment.")
+        messages.error(
+            request,
+            "We could not save your account because the database did not respond. Please wait a minute and try again.",
+        )
         a, b = _init_registration_captcha(request)
         return render(
             request,
@@ -269,7 +329,10 @@ def consumer_register(request):
         )
     except Exception as e:
         logger.exception("Registration failed: %s", e)
-        messages.error(request, "An error occurred during registration. Please try again.")
+        messages.error(
+            request,
+            "Registration could not be completed because of a server error. Please try again, or contact the administrator.",
+        )
         a, b = _init_registration_captcha(request)
         return render(
             request,
@@ -318,11 +381,31 @@ def force_password_change(request):
             messages.success(request, "Your password has been updated.")
             if _safe_is_admin(updated_user):
                 return redirect("dashboard:admin_dashboard")
+            if request.session.get("_consumer_reg_notify_pending"):
+                return redirect("accounts:consumer_register_complete_notify")
             return redirect("dashboard:home")
     else:
         form = PasswordChangeForm(user)
 
     return render(request, "accounts/force_password_change.html", {"form": form})
+
+
+@login_required
+def consumer_register_complete_notify(request):
+    """
+    Minimal page shown once after consumer self-registration.
+    Notifies other tabs (BroadcastChannel / localStorage) then sends the user to the dashboard.
+    """
+    if not request.session.pop("_consumer_reg_notify_pending", False):
+        return redirect("dashboard:home")
+    return render(
+        request,
+        "accounts/consumer_register_complete_notify.html",
+        {
+            "dashboard_url": reverse("dashboard:home"),
+            "service_request_create_url": reverse("services:create_request"),
+        },
+    )
 
 
 @login_required
@@ -466,10 +549,10 @@ def _forgot_password_view_inner(request):
 
                 try:
                     send_mail(
-                        subject="CENRO Management System — Password Reset",
+                        subject="CENRO Sanitary Management System — Password Reset",
                         message=(
                             f"Hello {user.get_full_name() or user.username},\n\n"
-                            f"We received a request to reset your CENRO Management System password.\n\n"
+                            f"We received a request to reset your CENRO Sanitary Management System password.\n\n"
                             f"Please reset your password by clicking this link:\n"
                             f"  {reset_url}\n\n"
                             f"Or enter this one-time verification code on the site:\n"
@@ -478,7 +561,7 @@ def _forgot_password_view_inner(request):
                             f"  {verify_url}\n\n"
                             f"This code expires in 15 minutes.\n\n"
                             f"If you did not request a password reset, you can safely ignore this email.\n\n"
-                            f"— CENRO Management System, Bayawan City"
+                            f"— CENRO Sanitary Management System, Bayawan City"
                         ),
                         from_email=django_settings.DEFAULT_FROM_EMAIL,
                         recipient_list=[account_email],
@@ -504,7 +587,8 @@ def _forgot_password_view_inner(request):
                 logger.exception("Password reset request failed: %s", e)
                 messages.error(
                     request,
-                    "Something went wrong while processing your request. Please try again in a few minutes.",
+                    "We could not create a password reset link right now (server or database issue). "
+                    "Please try again in a few minutes. If it keeps failing, contact the CENRO administrator.",
                 )
                 return render(request, "accounts/forgot_password.html", {"form": form})
     else:
@@ -585,9 +669,36 @@ def staff_approval_list(request):
     if request.user.role != User.Role.ADMIN and not request.user.is_superuser:
         messages.error(request, "Only admins can approve staff accounts.")
         return redirect("dashboard:home")
+    from services.models import DesludgingPersonnel
+
     all_staff = User.objects.filter(role=User.Role.STAFF).order_by("username")
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()
+
+        if action == "add_personnel":
+            full_name = (request.POST.get("personnel_full_name") or "").strip()
+            role = (request.POST.get("personnel_role") or "").strip().upper()
+            if not full_name:
+                messages.error(request, "Enter a name for the driver or helper.")
+            elif role not in (DesludgingPersonnel.Role.DRIVER, DesludgingPersonnel.Role.HELPER):
+                messages.error(request, "Choose Driver or Helper.")
+            else:
+                DesludgingPersonnel.objects.create(full_name=full_name, role=role)
+                messages.success(request, f"Added {full_name} as {role.title().lower()}.")
+            return redirect("accounts:staff_approval_list")
+
+        if action == "delete_personnel":
+            pid = request.POST.get("personnel_id")
+            try:
+                p = DesludgingPersonnel.objects.get(pk=int(pid))
+            except (ValueError, TypeError, DesludgingPersonnel.DoesNotExist):
+                messages.error(request, "Personnel entry not found.")
+            else:
+                label = str(p)
+                p.delete()
+                messages.success(request, f"Removed {label}.")
+            return redirect("accounts:staff_approval_list")
+
         user_id = request.POST.get("user_id")
         if not user_id:
             messages.error(request, "No staff account specified.")
@@ -638,12 +749,25 @@ def staff_approval_list(request):
             messages.success(request, f"Staff account {username} has been deleted.")
             return redirect("accounts:staff_approval_list")
 
-        messages.error(request, "Unknown action.")
+        messages.error(
+            request,
+            "That staff-management action was not recognized. Refresh the page and try again, or use the menu links.",
+        )
         return redirect("accounts:staff_approval_list")
 
+    drivers = DesludgingPersonnel.objects.filter(
+        role=DesludgingPersonnel.Role.DRIVER, is_active=True
+    ).order_by("full_name")
+    helpers = DesludgingPersonnel.objects.filter(
+        role=DesludgingPersonnel.Role.HELPER, is_active=True
+    ).order_by("full_name")
     return render(
         request,
         "accounts/staff_approval_list.html",
-        {"all_staff": all_staff},
+        {
+            "all_staff": all_staff,
+            "personnel_drivers": drivers,
+            "personnel_helpers": helpers,
+        },
     )
 

@@ -7,7 +7,7 @@
 
 ## Overview
 
-The CENRO Management System now has **comprehensive login authentication** implemented. All users must authenticate before accessing any protected content.
+The CENRO Sanitary Management System now has **comprehensive login authentication** implemented. All users must authenticate before accessing any protected content.
 
 ---
 

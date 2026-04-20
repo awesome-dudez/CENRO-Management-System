@@ -1,4 +1,4 @@
-# CENRO Management System - Admin Section Implementation Guide
+# CENRO Sanitary Management System - Admin Section Implementation Guide
 
 ## Overview
 A comprehensive Django-based management system for environmental services with role-based access control, service computation, membership tracking, and declogging applications.

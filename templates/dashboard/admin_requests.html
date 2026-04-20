@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin - Requests{% endblock %}
+{% block title %}Admin - Requests - CENRO Sanitary Management System{% endblock %}
 {% block admin_subtitle %}Requests{% endblock %}
 {% block content %}
 <style>
@@ -112,7 +112,7 @@
                 <td>{{ req.request_date|date:"M d, Y" }}</td>
                 <td><span class="status-badge status-{{ req.status|lower }}">{{ req.get_status_display }}</span></td>
                 <td>
-                    <a href="{% url 'services:request_detail' req.pk %}" class="btn-sm btn-view">View</a>
+                    <a href="{% url 'services:request_detail' req.pk %}?from=dashboard_requests&amp;list_tab={{ active_tab|urlencode }}{% if sort %}&amp;list_sort={{ sort|urlencode }}{% endif %}{% if direction %}&amp;list_dir={{ direction|urlencode }}{% endif %}{% if request_type and request_type != 'all' %}&amp;list_request_type={{ request_type|urlencode }}{% endif %}" class="btn-sm btn-view">View</a>
                 </td>
             </tr>
             {% empty %}

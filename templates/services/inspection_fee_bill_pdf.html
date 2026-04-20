@@ -23,6 +23,37 @@
             padding-bottom: 6px;
             margin-bottom: 8px;
         }
+        /* Match on-screen bill: left = Bayawan + Bagong (centered pair); right = CENRO + date (offset top) */
+        .bill-header-logo-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 6px;
+        }
+        .bill-header-logo-table td {
+            padding: 0;
+        }
+        .bill-header-logo-table .logo-row-cell {
+            vertical-align: middle;
+            text-align: left;
+        }
+        .bill-header-logo-table .logo-right-cell {
+            vertical-align: top;
+            text-align: right;
+            padding-top: 18px;
+        }
+        .bill-header-logo-table .logo-row-cell img {
+            border: 0;
+            vertical-align: middle;
+            width: auto;
+        }
+        .bill-header-logo-table .logo-right-cell img {
+            border: 0;
+            width: auto;
+            height: 64px;
+            margin-bottom: 8px;
+            vertical-align: top;
+        }
+        /* xhtml2pdf often ignores position:relative and img margins — spacing is done via nested table padding below */
         .bill-title {
             font-size: 18px;
             font-weight: 700;
@@ -38,6 +69,9 @@
             color: #6a737d;
             text-align: right;
             margin-top: 4px;
+        }
+        .bill-header-logo-table .logo-right-cell .bill-date {
+            margin-top: 0;
         }
         .section {
             margin-top: 10px;
@@ -81,29 +115,38 @@
 <body>
     <div class="bill-shell">
         <div class="bill-header">
-            <table width="100%">
+            <table class="bill-header-logo-table" cellspacing="0" cellpadding="0">
                 <tr>
-                    <td style="vertical-align:top;">
-                        <div style="margin-bottom:6px;">
-                            {% if bayawan_logo_url %}
-                            <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:120px; vertical-align:middle;">
-                            {% endif %}
-                            {% if bagong_pilipinas_logo_url %}
-                            <img src="{{ bagong_pilipinas_logo_url }}" alt="Bagong Pilipinas" style="height:60px; vertical-align:middle; margin-left:10px;">
-                            {% endif %}
-                        </div>
+                    <td class="logo-row-cell" valign="middle" align="left">
+                        {# Nested table: pisa applies td padding reliably; not position/margin on img #}
+                        <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                            <tr>
+                                <td valign="middle" style="padding:4px 0 0 0; vertical-align:middle;">
+                                    {% if bayawan_logo_url %}
+                                    <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:134px;width:auto;border:0;"/>
+                                    {% endif %}
+                                </td>
+                                <td valign="middle" style="padding:0 0 0 -4px; vertical-align:middle;">
+                                    {% if bagong_pilipinas_logo_url %}
+                                    <img src="{{ bagong_pilipinas_logo_url }}" alt="Bagong Pilipinas" style="height:68px;width:auto;border:0;"/>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                    <td class="logo-right-cell" valign="top" align="right">
+                        {% if cenro_logo_url %}
+                        <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:68px;">
+                        {% endif %}
+                        <div class="bill-date">Date: {{ sr.request_date|date:"M d, Y" }}</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="padding-top:10px;">
                         <div class="bill-title">Inspection Fee Bill</div>
                         <div class="bill-subtitle">
                             {{ sr.get_service_type_display }}
                         </div>
-                    </td>
-                    <td class="bill-date" style="vertical-align:top; text-align:right; padding-top:16px;">
-                        {% if cenro_logo_url %}
-                        <div style="margin-bottom:6px;">
-                            <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:60px;">
-                        </div>
-                        {% endif %}
-                        Date: {{ sr.request_date|date:"M d, Y" }}
                     </td>
                 </tr>
             </table>
@@ -141,7 +184,7 @@
             <div class="section-title">Payment Instructions</div>
             <p class="instructions">
                 Please bring this bill to the Treasurer's Office and pay the inspection fee of
-                PHP {{ amount }}.00. After payment, return to the CENRO Management System and upload a clear photo
+                PHP {{ amount }}.00. After payment, return to the CENRO Sanitary Management System and upload a clear photo
                 or scanned copy of your official receipt on the request detail page.
             </p>
         </div>

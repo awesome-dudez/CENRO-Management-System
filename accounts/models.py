@@ -70,21 +70,25 @@ class ConsumerProfile(models.Model):
     class Gender(models.TextChoices):
         MALE = "MALE", "Male"
         FEMALE = "FEMALE", "Female"
+        NON_BINARY = "NON_BINARY", "Non-binary"
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="consumer_profile")
     profile_picture = models.ImageField(upload_to="profile_pictures/", null=True, blank=True)
-    gender = models.CharField(max_length=10, choices=Gender.choices, default=Gender.MALE)
+    gender = models.CharField(max_length=20, choices=Gender.choices, default=Gender.MALE)
     birthdate = models.DateField(null=True, blank=True)
     mobile_number = models.CharField(max_length=20, blank=True)
     street_address = models.CharField(max_length=500, blank=True)
     barangay = models.CharField(max_length=255, blank=True)
     municipality = models.CharField(max_length=255, blank=True)
     province = models.CharField(max_length=255, blank=True)
-    prior_desludging_m3_4y = models.DecimalField(
-        max_digits=7,
-        decimal_places=2,
+    prior_desludging_m3_4y = models.PositiveIntegerField(
         default=0,
-        help_text="Desludging volume (m³) from manual/pre-system records in the past 4 years.",
+        help_text="Desludging volume in whole cubic meters (m³) from manual/pre-system records in the past 4 years.",
+    )
+    last_cycle_request_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when the account last had a desludging request counted for the current cycle (manual/pre-system).",
     )
     gps_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     gps_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -93,6 +97,16 @@ class ConsumerProfile(models.Model):
     def full_address(self) -> str:
         parts = [self.street_address, self.barangay, self.municipality, self.province]
         return ", ".join(p for p in parts if p)
+
+    @property
+    def is_bayawan_city_municipality(self) -> bool:
+        """True when profile municipality indicates Bayawan City (for resident distance rules)."""
+        m = (self.municipality or "").strip().casefold()
+        if not m:
+            return False
+        if m in ("bayawan city", "city of bayawan", "bayawan"):
+            return True
+        return "bayawan" in m and "city" in m
 
     def __str__(self) -> str:
         return f"{self.user.get_full_name()} - {self.barangay or self.municipality}"

@@ -117,17 +117,18 @@
     <div class="letter-header">
         <table class="letter-header-logos" width="100%" cellspacing="0" cellpadding="0">
             <tr>
-                <td>
+                {# One cell for both left logos: a nested 2-col table expands to full width and pushes Bagong toward the page center in xhtml2pdf. #}
+                <td valign="middle" align="left" style="padding:10px 0 0 0;">
                     {% if bayawan_logo_url %}
-                    <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:96px; width:auto; vertical-align:middle;">
+                    <img src="{{ bayawan_logo_url }}" alt="Bayawan City" style="height:102px; width:auto; border:0; vertical-align:middle;">
                     {% endif %}
                     {% if bagong_pilipinas_logo_url %}
-                    <img src="{{ bagong_pilipinas_logo_url }}" alt="Bagong Pilipinas" style="height:52px; width:auto; vertical-align:middle; margin-left:16px;">
+                    <img src="{{ bagong_pilipinas_logo_url }}" alt="Bagong Pilipinas" style="height:56px; width:auto; border:0; vertical-align:middle; display:inline-block; padding-left:6px;">
                     {% endif %}
                 </td>
-                <td style="text-align:right;">
+                <td valign="middle" style="text-align:right;">
                     {% if cenro_logo_url %}
-                    <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:56px; width:auto;">
+                    <img src="{{ cenro_logo_url }}" alt="CENRO" style="height:60px; width:auto; border:0;">
                     {% endif %}
                 </td>
             </tr>
@@ -171,7 +172,8 @@
             <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td><span class="currency">&#8369;</span> {{ comp.wear_charge }}</td></tr>
             <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td><span class="currency">&#8369;</span> {{ comp.meals_transport_charge }}</td></tr>
             {% if comp.payment_status == "FREE" %}
-            <tr class="free"><td>BAWAD Discount (Free Service)</td><td>- <span class="currency">&#8369;</span> {{ comp.total_charge }}</td></tr>
+            <tr class="subtotal"><td>Total charges</td><td><span class="currency">&#8369;</span> {{ comp.billable_subtotal }}</td></tr>
+            <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Public property waiver (no charge){% else %}BAWAD discount (free service){% endif %}</td><td>- <span class="currency">&#8369;</span> {{ comp.billable_subtotal }}</td></tr>
             <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> 0.00</td></tr>
             {% else %}
             <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> {{ comp.total_charge }}</td></tr>
@@ -184,7 +186,7 @@
             {% if prepared_by_signature_path %}
             <img src="{{ prepared_by_signature_path }}" alt="" height="68" style="height:68px;width:auto;display:block;">
             {% else %}
-            <img src="{{ default_signature_url }}" alt="" height="68" style="height:68px;width:auto;display:block;">
+            <div style="height:68px; max-width:200px; border-bottom:1px solid #999;" aria-hidden="true"></div>
             {% endif %}
         </div>
         <p style="margin:0; font-size:13px; color:#666;">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>

@@ -2,7 +2,7 @@
 
 ## 🔐 Login Requirement
 
-**Important**: You must login to use the CENRO Management System. All protected content requires authentication.
+**Important**: You must login to use the CENRO Sanitary Management System. All protected content requires authentication.
 
 ---
 

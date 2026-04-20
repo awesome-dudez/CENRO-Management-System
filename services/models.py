@@ -8,6 +8,9 @@ from django.utils import timezone
 
 User = settings.AUTH_USER_MODEL
 
+# Admin / audit: public-property requests within Bayawan skip inspection fee and get ₱0 computation (see ServiceComputation.calculate_charges).
+PUBLIC_BAYAWAN_NO_FEES_FLAG = "[PUBLIC_BAYAWAN_NO_FEES]"
+
 
 class ServiceRequest(models.Model):
     class ServiceType(models.TextChoices):
@@ -113,6 +116,12 @@ class ServiceRequest(models.Model):
     payment_confirmed_at = models.DateTimeField(null=True, blank=True)
     cubic_meters = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, default=0)
 
+    # When inspection is waived: driver/helpers before computation (personnel count).
+    waived_crew_driver_name = models.CharField(max_length=255, blank=True)
+    waived_crew_helper1_name = models.CharField(max_length=255, blank=True)
+    waived_crew_helper2_name = models.CharField(max_length=255, blank=True)
+    waived_crew_helper3_name = models.CharField(max_length=255, blank=True)
+
     def __str__(self) -> str:
         return f"{self.get_service_type_display()} - {self.consumer} ({self.barangay})"
 
@@ -206,6 +215,42 @@ class ServiceRequest(models.Model):
         return bool(self.barangay and self.barangay != "Outside Bayawan City")
 
     @property
+    def waived_inspection_crew_ready(self) -> bool:
+        """True when waived desludging request has a driver assigned (helpers optional)."""
+        if "[NO_INSPECTION_FEE]" not in (self.notes or ""):
+            return False
+        if self.service_type not in (
+            self.ServiceType.RESIDENTIAL_DESLUDGING,
+            self.ServiceType.COMMERCIAL_DESLUDGING,
+        ):
+            return True
+        return bool((self.waived_crew_driver_name or "").strip())
+
+    @property
+    def waived_inspection_personnel_count(self) -> int:
+        """Headcount for meals/transport (1 driver + filled helper slots)."""
+        n = 1
+        for h in (
+            self.waived_crew_helper1_name,
+            self.waived_crew_helper2_name,
+            self.waived_crew_helper3_name,
+        ):
+            if (h or "").strip():
+                n += 1
+        return max(1, n)
+
+    @property
+    def consumer_is_bayawan_city_resident(self) -> bool:
+        """
+        True when the registered consumer's profile municipality is Bayawan City.
+        Used with is_within_bayawan for first-N-km distance waivers on computation.
+        """
+        try:
+            return self.consumer.consumer_profile.is_bayawan_city_municipality
+        except Exception:
+            return False
+
+    @property
     def bawad_free_eligible(self) -> bool:
         """BAWAD members get free service if < 5 m3 used within 4-year cycle."""
         if not self.connected_to_bawad:
@@ -230,6 +275,49 @@ class ServiceRequest(models.Model):
         )
         return used < limit
 
+    @property
+    def qualifies_public_bayawan_no_fees(self) -> bool:
+        """Public septage requests with location in Bayawan City: no inspection fee; computation is ₱0."""
+        if self.service_type not in (
+            self.ServiceType.RESIDENTIAL_DESLUDGING,
+            self.ServiceType.COMMERCIAL_DESLUDGING,
+        ):
+            return False
+        if self.public_private != self.PublicPrivate.PUBLIC:
+            return False
+        return self.is_within_bayawan
+
+    def apply_public_bayawan_inspection_fee_waiver(self, *, notify_user=None) -> bool:
+        """
+        Mark first-time inspection fee as satisfied and record policy note. Idempotent.
+        Does not change status (caller may set UNDER_REVIEW, etc.).
+        """
+        if not self.qualifies_public_bayawan_no_fees:
+            return False
+        notes = self.notes or ""
+        if PUBLIC_BAYAWAN_NO_FEES_FLAG in notes:
+            if not self.inspection_fee_paid:
+                self.inspection_fee_paid = True
+                self.save(update_fields=["inspection_fee_paid"])
+            return True
+        self.inspection_fee_paid = True
+        line = (
+            f"{PUBLIC_BAYAWAN_NO_FEES_FLAG} Inspection fee waived — public property within Bayawan City "
+            "(no treasurer inspection fee; computation charges are ₱0 per policy)."
+        )
+        self.notes = (notes + "\n" if notes else "") + line
+        self.save(update_fields=["inspection_fee_paid", "notes"])
+        if notify_user:
+            Notification.objects.create(
+                user=notify_user,
+                message=(
+                    f"Request #{self.id}: No ₱150 inspection fee is required — public property within Bayawan City."
+                ),
+                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                related_request=self,
+            )
+        return True
+
 
 class InspectionDetail(models.Model):
     service_request = models.OneToOneField(
@@ -245,6 +333,42 @@ class InspectionDetail(models.Model):
         return f"Inspection for {self.service_request} on {self.inspection_date}"
 
 
+class DesludgingPersonnel(models.Model):
+    """Named drivers and helpers for dropdowns on completion forms (managed under Staff)."""
+
+    class Role(models.TextChoices):
+        DRIVER = "DRIVER", "Driver"
+        HELPER = "HELPER", "Helper"
+
+    full_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=10, choices=Role.choices)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["role", "full_name"]
+        verbose_name_plural = "Desludging personnel"
+
+    def __str__(self) -> str:
+        return f"{self.get_role_display()}: {self.full_name}"
+
+
+class ServiceEquipment(models.Model):
+    """Decloggers and other units; managed under Admin → Equipment, chosen on completion forms."""
+
+    unit_number = models.CharField(max_length=50, unique=True)
+    notes = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["unit_number"]
+        verbose_name_plural = "Service equipment"
+
+    def __str__(self) -> str:
+        return self.unit_number
+
+
 class CompletionInfo(models.Model):
     service_request = models.OneToOneField(
         ServiceRequest, on_delete=models.CASCADE, related_name="completion_info"
@@ -253,6 +377,13 @@ class CompletionInfo(models.Model):
     time_required = models.CharField(max_length=100, help_text="e.g. 2 hours 30 mins")
     witnessed_by_name = models.CharField(max_length=255, blank=True)
     witnessed_by_signature = models.FileField(upload_to="witness_signatures/", null=True, blank=True)
+    equipment = models.ForeignKey(
+        ServiceEquipment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="completions",
+    )
     declogger_no = models.CharField(max_length=50, blank=True)
     fuel_consumption = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     fuel_unit = models.CharField(max_length=20, default="liters")

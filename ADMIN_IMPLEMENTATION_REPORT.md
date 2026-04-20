@@ -499,4 +499,4 @@ For questions or issues:
 
 ---
 
-Thank you for using the CENRO Management System!
+Thank you for using the CENRO Sanitary Management System!

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>{% block title %}CENRO Management System{% endblock %}</title>
+    <title>{% block title %}CENRO Sanitary Management System{% endblock %}</title>
     {% load static %}
     <!-- Apply saved theme before CSS loads to avoid flash; mirror OS when unset so toggle works on first click -->
     <script>
@@ -22,12 +22,12 @@
     </script>
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <meta name="theme-color" content="#1e7a4d">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260414-mobile">
-    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260414-mobile">
-    <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260414-mobile">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260420-footer-legal">
+    <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260419-no-bottom-nav">
+    <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260419-consumer-mobile">
     {% block extra_css %}{% endblock %}
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
-    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260407-layers">
+    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260419-admin-drawer">
     {% endif %}{% endif %}
     <!-- Leaflet Map Library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -37,7 +37,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 {% comment %}Short-circuit: do not access user.role when user is not authenticated.{% endcomment %}
-<body class="{% if not user.is_authenticated %}consumer-view{% elif user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-view{% else %}consumer-view{% endif %}{% if user.is_authenticated %}{% if not user.is_admin and not user.is_staff_member %} consumer-app-bottom-nav{% endif %}{% endif %}{% block body_extra_class %}{% endblock %}">
+<body class="{% if not user.is_authenticated %}consumer-view{% elif user.is_authenticated and user.is_admin or user.is_authenticated and user.is_staff_member %}admin-view{% else %}consumer-view{% endif %}{% block body_extra_class %}{% endblock %}">
 {% if not user.is_authenticated or user.is_authenticated and not user.is_admin and not user.is_staff_member %}
     <!-- Top Navigation Bar (consumer / non-admin) -->
     <header class="top-nav">
@@ -54,7 +54,7 @@
                     <span class="logo-icon"><img src="{% static 'img/cenro_logo.png' %}" alt="CENRO logo" width="60" height="60"></span>
                     <div>
                         <span class="logo-text">CENRO</span>
-                        <span class="logo-subtitle">Management System</span>
+                        <span class="logo-subtitle">Sanitary Management System</span>
                     </div>
                 </a>
             </div>
@@ -64,7 +64,7 @@
                 <span class="logo-icon"><img src="{% static 'img/cenro_logo.png' %}" alt="CENRO logo" width="60" height="60"></span>
                 <div>
                     <span class="logo-text">CENRO</span>
-                    <span class="logo-subtitle">Management System</span>
+                    <span class="logo-subtitle">Sanitary Management System</span>
                 </div>
             </a>
             {% endif %}
@@ -159,6 +159,8 @@
                             <img src="{{ user.profile_picture_url }}" alt="Profile">
                             {% elif user.gender == 'FEMALE' %}
                             <svg viewBox="0 0 100 100" width="32" height="32"><circle cx="50" cy="50" r="50" fill="#2d8659"/><ellipse cx="50" cy="38" rx="14" ry="16" fill="white"/><path d="M50 22 C32 22 30 40 32 46 Q34 36 42 31 Q46 29 50 29 Q54 29 58 31 Q66 36 68 46 C70 40 68 22 50 22Z" fill="white" opacity="0.5"/><path d="M27 82 Q27 60 50 56 Q73 60 73 82" fill="white"/></svg>
+                            {% elif user.gender == 'NON_BINARY' %}
+                            <svg viewBox="0 0 100 100" width="32" height="32"><circle cx="50" cy="50" r="50" fill="#2d8659"/><circle cx="50" cy="36" r="14" fill="white"/><ellipse cx="50" cy="72" rx="22" ry="18" fill="white"/></svg>
                             {% else %}
                             <svg viewBox="0 0 100 100" width="32" height="32"><circle cx="50" cy="50" r="50" fill="#2d8659"/><circle cx="50" cy="36" r="14" fill="white"/><path d="M27 82 Q27 58 50 54 Q73 58 73 82" fill="white"/></svg>
                             {% endif %}
@@ -171,6 +173,42 @@
             </nav>
         </div>
     </header>
+    <div class="mobile-nav-backdrop" id="mobileNavBackdrop" aria-hidden="true"></div>
+    <div class="mobile-nav-overlay" id="mobileNav" role="dialog" aria-modal="true" aria-labelledby="mobileNavTitle" aria-hidden="true">
+        <div class="mobile-nav-drawer">
+            <div class="mobile-nav-header">
+                <span id="mobileNavTitle" class="mobile-nav-title">Menu</span>
+                <button type="button" class="mobile-nav-close" id="mobileNavClose" aria-label="Close menu">&times;</button>
+            </div>
+            <nav class="mobile-nav-links" aria-label="Main navigation">
+                {% if user.is_authenticated %}
+                <a href="{% url 'dashboard:home' %}" class="mobile-nav-link">🏠 Dashboard</a>
+                <a href="{% url 'services:create_request' %}" class="mobile-nav-link">📝 Service Request</a>
+                <a href="{% url 'services:history' %}" class="mobile-nav-link">📋 Service History</a>
+                <a href="{% url 'services:notification_list' %}" class="mobile-nav-link">🔔 Notifications</a>
+                <a href="{% url 'accounts:profile' %}" class="mobile-nav-link">👤 Profile</a>
+                <button type="button" class="mobile-nav-link mobile-nav-theme" id="mobileNavThemeBtn">🌙 / ☀️ Light &amp; dark mode</button>
+                <a href="{% url 'accounts:logout' %}" class="mobile-nav-link mobile-nav-logout">🚪 Logout</a>
+                {% else %}
+                {% with current_url_name=request.resolver_match.url_name %}
+                    {% if current_url_name != 'login' and current_url_name != 'consumer_register' %}
+                    <a href="{% url 'dashboard:home' %}" class="mobile-nav-link">🏠 Home</a>
+                    {% endif %}
+                    {% if current_url_name == 'login' %}
+                    <span class="mobile-nav-link" style="opacity:0.55;pointer-events:none;">🔑 Login</span>
+                    <a href="{% url 'accounts:consumer_register' %}" class="mobile-nav-link mobile-nav-register">📋 Register</a>
+                    {% elif current_url_name == 'consumer_register' %}
+                    <a href="{% url 'accounts:login' %}" class="mobile-nav-link">🔑 Login</a>
+                    <span class="mobile-nav-link mobile-nav-register" style="opacity:0.65;pointer-events:none;">📋 Register</span>
+                    {% else %}
+                    <a href="{% url 'accounts:login' %}" class="mobile-nav-link">🔑 Login</a>
+                    <a href="{% url 'accounts:consumer_register' %}" class="mobile-nav-link mobile-nav-register">📋 Register</a>
+                    {% endif %}
+                {% endwith %}
+                {% endif %}
+            </nav>
+        </div>
+    </div>
     {% endif %}
 
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
@@ -181,14 +219,11 @@
     {% endif %}{% endif %}
     <main class="{% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}admin-main{% else %}main-content{% endif %}{% else %}main-content{% endif %}">
         {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
-        <h1 class="admin-main-title">CENRO Management System</h1>
+        <h1 class="admin-main-title">CENRO Sanitary Management System</h1>
         <p class="admin-main-subtitle">{% block admin_subtitle %}System Dashboard{% endblock %}</p>
         {% endif %}{% endif %}
         {% block content %}{% endblock %}
     </main>
-    {% if user.is_authenticated %}{% if not user.is_admin and not user.is_staff_member %}
-    {% include "partials/consumer_bottom_nav.html" %}
-    {% endif %}{% endif %}
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
     </div>
     <!-- Mobile sidebar controls (outside flex wrapper so they don't become flex items) -->
@@ -206,18 +241,15 @@
         <div class="footer-content">
             <div class="footer-section">
                 <div class="footer-logo">
-                    <span class="logo-icon"><img src="{% static 'img/cenro_logo.png' %}" alt="CENRO logo" width="45" height="45"></span>
-                    <span class="logo-text">CENRO Management System</span>
+                    <span class="logo-text">CENRO Sanitary Management System</span>
                 </div>
-                <p>A Comprehensive Management System for CENRO in Bayawan City. Streamlining environmental services for a cleaner future.</p>
+                <p>A comprehensive sanitary management system for CENRO, Bayawan City. Streamlining environmental services for a cleaner future.</p>
             </div>
             <div class="footer-section">
                 <h4>Services</h4>
                 <ul>
-                    <li><a href="#">Septage Desludging</a></li>
-                    <li><a href="#">Waste Collection</a></li>
-                    <li><a href="#">Environmental Permits</a></li>
-                    <li><a href="#">Complaint Filing</a></li>
+                    <li><a href="{% url 'services:create_request' %}?prefill=septage">Septage desludging</a></li>
+                    <li><a href="{% url 'services:create_request' %}?prefill=grass">Grass cutting</a></li>
                 </ul>
             </div>
             <div class="footer-section">
@@ -229,9 +261,9 @@
             <div class="footer-section">
                 <h4>Legal</h4>
                 <ul>
-                    <li><a href="#">Privacy Policy</a></li>
-                    <li><a href="#">Terms of Service</a></li>
-                    <li><a href="#">Transparency Seal</a></li>
+                    <li><button type="button" class="footer-legal-trigger" data-footer-legal="privacy">Privacy Policy</button></li>
+                    <li><button type="button" class="footer-legal-trigger" data-footer-legal="terms">Terms of Service</button></li>
+                    <li><button type="button" class="footer-legal-trigger" data-footer-legal="transparency">Transparency Seal</button></li>
                 </ul>
             </div>
         </div>
@@ -239,6 +271,73 @@
             <p>© 2026 CENRO Bayawan City. All rights reserved.</p>
         </div>
     </footer>
+    <div id="footerLegalBackdrop" class="footer-legal-backdrop" aria-hidden="true"></div>
+    <div id="footerLegalModal" class="footer-legal-modal" role="dialog" aria-modal="true" aria-labelledby="footerLegalTitle" aria-hidden="true">
+        <div class="footer-legal-dialog">
+            <button type="button" class="footer-legal-close" id="footerLegalClose" aria-label="Close">&times;</button>
+            <h3 id="footerLegalTitle"></h3>
+            <div id="footerLegalBody" class="footer-legal-body"></div>
+        </div>
+    </div>
+    <div id="footerLegalStore" hidden>
+        <div data-footer-legal-key="privacy">
+            <p>This CENRO Sanitary Management System collects information you provide when you register and when you submit service requests (for example name, address, contact details, and map location for septage desludging or grass cutting).</p>
+            <p>Data is used to process your request, schedule inspections or field work, and meet local environmental requirements. It is stored on office-controlled systems and handled in line with applicable government privacy rules.</p>
+            <p>You may review or update your profile when signed in. For questions about your personal data, contact CENRO Bayawan City using the details in the Contact section.</p>
+        </div>
+        <div data-footer-legal-key="terms">
+            <p>By using this portal you agree to provide accurate information and to follow procedures set by the City Environment and Natural Resources Office (CENRO), Bayawan City.</p>
+            <p>Services depend on eligibility, inspection where required, payment of applicable fees, and staff availability. The office may update workflows or fees in line with local policy; continued reasonable use of the system after changes constitutes acceptance of those updates.</p>
+            <p>The system is provided as a convenience; if you need help with a request, contact CENRO staff directly.</p>
+        </div>
+        <div data-footer-legal-key="transparency">
+            <p>This application supports transparent delivery of environmental services in Bayawan City: request status, fees, and processing steps are recorded in the system for authorized staff and for consumers in connection with their own requests.</p>
+            <p>The Transparency Seal reflects the office’s commitment to accountable service. For questions about procedures, records, or complaints, please contact CENRO Bayawan City.</p>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var backdrop = document.getElementById('footerLegalBackdrop');
+        var modal = document.getElementById('footerLegalModal');
+        var titleEl = document.getElementById('footerLegalTitle');
+        var bodyEl = document.getElementById('footerLegalBody');
+        var store = document.getElementById('footerLegalStore');
+        var closeBtn = document.getElementById('footerLegalClose');
+        if (!modal || !backdrop || !store) return;
+        var titles = { privacy: 'Privacy Policy', terms: 'Terms of Service', transparency: 'Transparency Seal' };
+        function openLegal(key) {
+            var node = store.querySelector('[data-footer-legal-key="' + key + '"]');
+            if (!node) return;
+            titleEl.textContent = titles[key] || '';
+            bodyEl.innerHTML = '';
+            bodyEl.appendChild(node.cloneNode(true));
+            modal.classList.add('is-open');
+            backdrop.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            backdrop.setAttribute('aria-hidden', 'false');
+            document.documentElement.style.overflow = 'hidden';
+            if (closeBtn) closeBtn.focus();
+        }
+        function closeLegal() {
+            modal.classList.remove('is-open');
+            backdrop.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            backdrop.setAttribute('aria-hidden', 'true');
+            document.documentElement.style.overflow = '';
+            bodyEl.innerHTML = '';
+        }
+        document.querySelectorAll('.footer-legal-trigger[data-footer-legal]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                openLegal(btn.getAttribute('data-footer-legal'));
+            });
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeLegal);
+        backdrop.addEventListener('click', closeLegal);
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.classList.contains('is-open')) closeLegal();
+        });
+    })();
+    </script>
     {% endif %}
 
     <!-- Toast Notification Popup -->
@@ -428,14 +527,30 @@
         });
         if (closeBtn) closeBtn.addEventListener('click', closeNav);
         if (backdrop) backdrop.addEventListener('click', closeNav);
+        if (overlay) overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeNav();
+        });
+        var drawer = overlay ? overlay.querySelector('.mobile-nav-drawer') : null;
+        if (drawer) drawer.addEventListener('click', function(e) { e.stopPropagation(); });
         var links = overlay ? overlay.querySelectorAll('.mobile-nav-link') : [];
-        for (var i = 0; i < links.length; i++) links[i].addEventListener('click', closeNav);
+        for (var i = 0; i < links.length; i++) {
+            var el = links[i];
+            if (el.tagName === 'A') el.addEventListener('click', closeNav);
+        }
+        var mTheme = document.getElementById('mobileNavThemeBtn');
+        if (mTheme) {
+            mTheme.addEventListener('click', function() {
+                var t = document.getElementById('themeToggleBtn');
+                if (t) t.click();
+                closeNav();
+            });
+        }
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && document.body.classList.contains('mobile-nav-open')) closeNav();
         });
     })();
     </script>
-    {% if user.is_authenticated and user.is_admin %}
+    {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
     <script>
     (function() {
         var sidebar = document.getElementById('adminSidebar');
@@ -454,7 +569,9 @@
             if (toggle) toggle.setAttribute('aria-expanded', 'false');
             document.documentElement.style.overflow = '';
         }
-        if (toggle) toggle.addEventListener('click', openSidebar);
+        if (toggle) toggle.addEventListener('click', function() {
+            if (sidebar && sidebar.classList.contains('is-open')) closeSidebar(); else openSidebar();
+        });
         if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
         if (overlay) overlay.addEventListener('click', closeSidebar);
         if (sidebar) {
@@ -466,7 +583,7 @@
         });
     })();
     </script>
-    {% endif %}
+    {% endif %}{% endif %}
     {% block extra_js %}{% endblock %}
 
     <!-- Dark / Light Mode Toggle (class sync runs in <head> before paint) -->

@@ -177,6 +177,12 @@
                 {{ previous_form.prior_desludging_m3_4y }}
                 {% if previous_form.prior_desludging_m3_4y.errors %}<div class="form-error">{{ previous_form.prior_desludging_m3_4y.errors.0 }}</div>{% endif %}
             </div>
+            <div style="grid-column: 1 / -1;">
+                <label for="{{ previous_form.last_cycle_request_date.id_for_label }}">{{ previous_form.last_cycle_request_date.label }}</label>
+                {{ previous_form.last_cycle_request_date }}
+                <p class="card-subtitle" style="margin: 4px 0 0; font-size: 0.85rem;">Required when past 4-year volume is greater than zero. Date of the last desludging request counted for the 4-year cycle.</p>
+                {% if previous_form.last_cycle_request_date.errors %}<div class="form-error">{{ previous_form.last_cycle_request_date.errors.0 }}</div>{% endif %}
+            </div>
         </div>
         <button type="submit" class="btn btn-primary">Save Previous Account</button>
     </form>
@@ -184,7 +190,7 @@
     <!-- Quick Update: existing accounts -->
     <div style="margin-top: 2rem; margin-bottom: 1.5rem;">
         <h4 style="margin-bottom: 0.25rem;">Update Existing Account</h4>
-        <p class="card-subtitle" style="margin-top:0;">Click an account to update its past 4-year desludging volume directly. If the account has a pending inspection fee it will be waived.</p>
+        <p class="card-subtitle" style="margin-top:0;">Update past 4-year volume and <strong>last request for cycle</strong> date. If volume is above zero, the date of last service is <strong>required</strong>. If the account has a pending inspection fee it will be waived when volume is set above zero.</p>
         <input type="text" id="existingAccountSearch" class="form-control" placeholder="Search by name or barangay..." style="max-width: 400px; margin-bottom: 10px;">
         <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
             <table class="data-table" id="existingAccountsTable">
@@ -194,7 +200,8 @@
                         <th>Barangay</th>
                         <th>Address</th>
                         <th>Current m³</th>
-                        <th>Update Volume (m³)</th>
+                        <th>Last cycle request</th>
+                        <th>Update</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -203,18 +210,20 @@
                         <td>{{ acc.get_full_name|default:acc.username }}</td>
                         <td>{{ acc.consumer_profile.barangay|default:"-" }}</td>
                         <td>{{ acc.consumer_profile.street_address|default:"-" }}</td>
-                        <td>{{ acc.consumer_profile.prior_desludging_m3_4y|floatformat:2 }}</td>
+                        <td>{{ acc.consumer_profile.prior_desludging_m3_4y|default:0 }}</td>
+                        <td>{% if acc.consumer_profile.last_cycle_request_date %}{{ acc.consumer_profile.last_cycle_request_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
                         <td style="white-space: nowrap;">
-                            <form method="post" action="{% url 'dashboard:admin_update_prior_volume' acc.pk %}" style="display:flex; gap:6px; align-items:center;">
+                            <form method="post" action="{% url 'dashboard:admin_update_prior_volume' acc.pk %}" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                                 {% csrf_token %}
-                                <input type="number" name="prior_desludging_m3_4y" step="0.01" min="0" value="{{ acc.consumer_profile.prior_desludging_m3_4y|floatformat:2 }}" class="form-control" style="width:100px; padding:4px 6px; font-size:0.9rem;">
+                                <input id="vol-{{ acc.pk }}" type="number" name="prior_desludging_m3_4y" step="1" min="0" value="{{ acc.consumer_profile.prior_desludging_m3_4y|default:0 }}" class="form-control" style="width:90px; padding:4px 6px; font-size:0.9rem;" title="Past 4-year volume (m³), whole numbers only" aria-label="Past 4-year volume cubic meters whole m³">
+                                <input id="cycle-{{ acc.pk }}" type="date" name="last_cycle_request_date" class="form-control" style="width:138px; padding:4px 6px; font-size:0.85rem;" title="Last desludging request date for cycle" aria-label="Last request for cycle date" {% if acc.consumer_profile.last_cycle_request_date %}value="{{ acc.consumer_profile.last_cycle_request_date|date:'Y-m-d' }}"{% endif %}>
                                 <button type="submit" class="btn btn-sm btn-primary" style="padding:4px 10px; font-size:0.85rem;">Save</button>
                             </form>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5">No registered consumer accounts yet.</td>
+                        <td colspan="6">No registered consumer accounts yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -244,6 +253,7 @@
                     <th>Street Address</th>
                     <th>Municipality / Province</th>
                     <th>Past 4-year m³</th>
+                    <th>Last cycle request</th>
                     <th>Encoded Date</th>
                 </tr>
             </thead>
@@ -255,12 +265,13 @@
                     <td>{{ u.consumer_profile.barangay|default:"-" }}</td>
                     <td>{{ u.consumer_profile.street_address|default:"-" }}</td>
                     <td>{{ u.consumer_profile.municipality|default:"-" }}{% if u.consumer_profile.province %}, {{ u.consumer_profile.province }}{% endif %}</td>
-                    <td>{{ u.consumer_profile.prior_desludging_m3_4y|floatformat:2 }}</td>
+                    <td>{{ u.consumer_profile.prior_desludging_m3_4y|default:0 }}</td>
+                    <td>{% if u.consumer_profile.last_cycle_request_date %}{{ u.consumer_profile.last_cycle_request_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
                     <td>{{ u.date_joined|date:"M d, Y" }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7">{% if search_query %}No previous registrations match "{{ search_query }}".{% else %}No previous registrations yet.{% endif %}</td>
+                    <td colspan="8">{% if search_query %}No previous registrations match "{{ search_query }}".{% else %}No previous registrations yet.{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

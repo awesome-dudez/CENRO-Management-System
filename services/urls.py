@@ -15,6 +15,11 @@ urlpatterns = [
     ),
     path("api/reverse-geocode/", views.reverse_geocode, name="reverse_geocode"),
     path("api/verify-other-consumer/", views.verify_other_consumer, name="verify_other_consumer"),
+    path(
+        "request/<int:pk>/location-photo/<int:slot>/view/",
+        views.view_location_photo,
+        name="view_location_photo",
+    ),
     path("request/<int:pk>/", views.request_detail, name="request_detail"),
     path("request/<int:pk>/grasscutting-detail/", views.grasscutting_request_detail, name="grasscutting_request_detail"),
     path("request/<int:pk>/grasscutting-view/", views.grasscutting_request_view, name="grasscutting_request_view"),

@@ -15,7 +15,7 @@
     .btn-primary:hover { background: #16a085; }
     .btn-secondary { background: #e0e0e0; color: #2d3142; }
 
-    /* Signature capture styling for clearer pad edges */
+    /* Signature capture */
     .signature-mode-toggle { display:flex; gap:8px; margin-bottom:10px; }
     .sig-mode-btn {
         flex:1; padding:8px 14px; border:2px solid #e0e0e0; border-radius:6px;
@@ -24,20 +24,64 @@
     }
     .sig-mode-btn:hover { border-color:#1abc9c; color:#1abc9c; }
     .sig-mode-btn.active { background:#1abc9c; border-color:#1abc9c; color:#fff; }
-    .signature-draw-section { margin-top:10px; padding:10px; border-radius:10px; background:#f4f6f8; border:1px solid #cfd4e3; }
+    .signature-draw-section { margin-top:10px; padding:14px; border-radius:10px; background:#f4f6f8; border:1px solid #cfd4e3; }
     .signature-draw-section.hidden { display:none; }
+    .sig-edit-signature-link {
+        display: inline-block; margin-top: 10px; padding: 0; border: none; background: none;
+        color: #1abc9c; font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+    .sig-edit-signature-link:hover { color: #16a085; }
+    .sig-preview-wrap { margin-top: 12px; }
+    .sig-preview-wrap.hidden { display: none; }
+    .sig-preview-wrap span { font-size: 13px; color: #555; display: block; margin-bottom: 6px; }
+    .sig-preview-wrap img {
+        max-width: 100%; max-height: 120px; border: 1px solid #ddd; border-radius: 8px;
+        background: #fff; display: block;
+    }
+
+    /* Floating signature pad (fixed — no page scroll while drawing on mobile) */
+    .sig-modal {
+        position: fixed; inset: 0; z-index: 10000;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+                max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        box-sizing: border-box;
+        background: rgba(45, 49, 66, 0.55);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+    }
+    .sig-modal[hidden] { display: none !important; }
+    .sig-modal-panel {
+        background: #fff; border-radius: 14px; width: 100%; max-width: 520px;
+        max-height: min(92vh, 720px); overflow: auto;
+        padding: 18px 20px 16px; box-shadow: 0 24px 64px rgba(0,0,0,0.28);
+        border: 1px solid rgba(0,0,0,0.06);
+    }
+    .sig-modal-title { margin: 0 0 6px; font-size: 1.15rem; color: #2d3142; }
+    .sig-modal-sub { margin: 0 0 14px; font-size: 13px; color: #666; line-height: 1.45; }
     #witnessSignaturePad {
-        width:100%; height:180px; border:3px dashed #1abc9c; border-radius:8px;
-        background:#ffffff;
-        box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.2);
-        touch-action:none;
+        display: block; width: 100%; height: 220px;
+        border: 3px dashed #1abc9c; border-radius: 10px; background: #ffffff;
+        box-shadow: inset 0 0 0 1px rgba(26, 188, 156, 0.15);
+        touch-action: none;
+        box-sizing: border-box;
     }
-    .signature-actions { margin-top:8px; display:flex; justify-content:flex-end; }
-    .signature-clear-btn {
-        padding:6px 14px; border:1px solid #ccc; border-radius:4px;
-        background:#f8f9fa; font-size:13px; cursor:pointer;
+    @media (max-width: 480px) {
+        #witnessSignaturePad { height: 200px; }
     }
-    .signature-clear-btn:hover { background:#e9ecef; }
+    .sig-modal-actions {
+        display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 14px;
+    }
+    .sig-modal-actions button {
+        padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none;
+    }
+    .sig-modal-clear { background: #f1f3f5; color: #2d3142; }
+    .sig-modal-clear:hover { background: #e9ecef; }
+    .sig-modal-cancel { background: #dee2e6; color: #2d3142; }
+    .sig-modal-cancel:hover { background: #ced4da; }
+    .sig-modal-done { background: #1abc9c; color: #fff; }
+    .sig-modal-done:hover { background: #16a085; }
 </style>
 <div class="form-container">
     <div class="form-card">
@@ -72,10 +116,11 @@
                     <input type="file" name="witnessed_by_signature" id="witnessSignatureFile" accept="image/*">
                 </div>
                 <div id="witnessSignatureDrawSection" class="signature-draw-section hidden">
-                    <canvas id="witnessSignaturePad"></canvas>
-                    <div class="signature-actions">
-                        <button type="button" id="witnessSignatureClearBtn" class="signature-clear-btn">Clear</button>
+                    <div id="witnessSignaturePreviewWrap" class="sig-preview-wrap hidden">
+                        <span>Saved signature</span>
+                        <img id="witnessSignaturePreview" src="" alt="Witness signature preview">
                     </div>
+                    <button type="button" class="sig-edit-signature-link" id="witnessSignatureOpenPad">Change signature</button>
                     <input type="hidden" name="witness_signature_data" id="witnessSignatureData">
                 </div>
             </div>
@@ -95,6 +140,20 @@
         </form>
     </div>
 </div>
+
+<div id="witnessSignatureModal" class="sig-modal" hidden aria-hidden="true">
+    <div class="sig-modal-panel" role="dialog" aria-modal="true" aria-labelledby="witnessSigModalTitle">
+        <h3 id="witnessSigModalTitle" class="sig-modal-title">Draw witness signature</h3>
+        <p class="sig-modal-sub">Sign inside the box below. The rest of the page stays locked until you save or cancel.</p>
+        <canvas id="witnessSignaturePad"></canvas>
+        <div class="sig-modal-actions">
+            <button type="button" class="sig-modal-clear" id="witnessSignatureClearBtn">Clear</button>
+            <button type="button" class="sig-modal-cancel" id="witnessSignatureModalCancel">Cancel</button>
+            <button type="button" class="sig-modal-done" id="witnessSignatureModalDone">Save signature</button>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var modeUploadBtn = document.getElementById('witnessSigModeUpload');
@@ -102,9 +161,51 @@ document.addEventListener('DOMContentLoaded', function() {
     var uploadSection = document.getElementById('witnessSignatureUploadSection');
     var drawSection = document.getElementById('witnessSignatureDrawSection');
     var fileInput = document.getElementById('witnessSignatureFile');
+    var openPadBtn = document.getElementById('witnessSignatureOpenPad');
+    var modal = document.getElementById('witnessSignatureModal');
     var canvas = document.getElementById('witnessSignaturePad');
     var clearBtn = document.getElementById('witnessSignatureClearBtn');
+    var modalCancel = document.getElementById('witnessSignatureModalCancel');
+    var modalDone = document.getElementById('witnessSignatureModalDone');
     var hiddenInput = document.getElementById('witnessSignatureData');
+    var previewWrap = document.getElementById('witnessSignaturePreviewWrap');
+    var previewImg = document.getElementById('witnessSignaturePreview');
+
+    /** Set after canvas init; opens the floating pad (also called when “Draw Signature” is chosen). */
+    var openWitnessPad = null;
+
+    var scrollLockY = 0;
+    var bodyStyleTop = '';
+
+    function lockScroll() {
+        scrollLockY = window.scrollY || window.pageYOffset;
+        bodyStyleTop = document.body.style.top;
+        document.body.style.position = 'fixed';
+        document.body.style.top = '-' + scrollLockY + 'px';
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+    }
+
+    function unlockScroll() {
+        document.body.style.position = '';
+        document.body.style.top = bodyStyleTop;
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        window.scrollTo(0, scrollLockY);
+    }
+
+    function updateDrawPreview() {
+        var v = (hiddenInput && hiddenInput.value) || '';
+        if (v.indexOf('data:image') === 0 && previewImg && previewWrap) {
+            previewImg.src = v;
+            previewWrap.classList.remove('hidden');
+        } else if (previewWrap) {
+            previewWrap.classList.add('hidden');
+            if (previewImg) previewImg.removeAttribute('src');
+        }
+    }
 
     function setMode(mode) {
         var draw = mode === 'draw';
@@ -113,17 +214,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (uploadSection) uploadSection.style.display = draw ? 'none' : '';
         if (drawSection) drawSection.classList.toggle('hidden', !draw);
         if (draw && fileInput) fileInput.value = '';
-        if (!draw && hiddenInput) hiddenInput.value = '';
-        if (draw && canvas) {
-            // When switching to draw mode, ensure the canvas is calibrated
-            // after it becomes visible.
+        if (!draw && hiddenInput) {
+            hiddenInput.value = '';
+            updateDrawPreview();
+        }
+        if (draw && typeof openWitnessPad === 'function') {
             requestAnimationFrame(function() {
-                var evt = document.createEvent('Event');
-                evt.initEvent('resize', true, true);
-                window.dispatchEvent(evt);
+                openWitnessPad();
             });
         }
     }
+
     if (modeUploadBtn) modeUploadBtn.addEventListener('click', function() { setMode('upload'); });
     if (modeDrawBtn) modeDrawBtn.addEventListener('click', function() { setMode('draw'); });
 
@@ -132,26 +233,66 @@ document.addEventListener('DOMContentLoaded', function() {
         fileInput.setAttribute('capture', 'environment');
     }
 
+    function closeSignatureModal() {
+        if (!modal) return;
+        modal.setAttribute('hidden', '');
+        modal.setAttribute('aria-hidden', 'true');
+        unlockScroll();
+    }
+
     if (canvas && hiddenInput) {
         var ctx = canvas.getContext('2d');
 
-        // Calibrate canvas size to match its displayed size when visible,
-        // so pointer positions and strokes line up correctly.
         function calibrateSignatureCanvas() {
             var rect = canvas.getBoundingClientRect();
             if (!rect.width || !rect.height) return;
-            canvas.width = rect.width;
-            canvas.height = rect.height;
+            canvas.width = Math.floor(rect.width);
+            canvas.height = Math.floor(rect.height);
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
         }
 
-        window.addEventListener('resize', function() {
-            if (!drawSection.classList.contains('hidden')) {
-                calibrateSignatureCanvas();
+        function loadCanvasFromHiddenOrClear() {
+            var v = hiddenInput.value || '';
+            if (v.indexOf('data:image') === 0) {
+                var img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                };
+                img.onerror = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                };
+                img.src = v;
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
-        });
+        }
 
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 2;
+        function openSignatureModal() {
+            if (!modal) return;
+            if (!modal.hasAttribute('hidden')) return;
+            modal.removeAttribute('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+            lockScroll();
+            requestAnimationFrame(function() {
+                calibrateSignatureCanvas();
+                loadCanvasFromHiddenOrClear();
+            });
+        }
+
+        openWitnessPad = openSignatureModal;
+
+        if (openPadBtn) openPadBtn.addEventListener('click', openSignatureModal);
+        if (modalCancel) modalCancel.addEventListener('click', closeSignatureModal);
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) closeSignatureModal();
+            });
+        }
+
         var drawing = false;
 
         function getPos(e) {
@@ -164,19 +305,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 clientX = e.clientX;
                 clientY = e.clientY;
             }
-            return { x: clientX - rect.left, y: clientY - rect.top };
+            var scaleX = canvas.width / rect.width;
+            var scaleY = canvas.height / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
         }
+
         function start(e) {
-            if (canvas.width === 300 && canvas.height === 150) {
-                // Default size: calibrate the first time the user draws.
-                calibrateSignatureCanvas();
-            }
             drawing = true;
             var p = getPos(e);
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
             e.preventDefault();
         }
+
         function move(e) {
             if (!drawing) return;
             var p = getPos(e);
@@ -184,15 +328,10 @@ document.addEventListener('DOMContentLoaded', function() {
             ctx.stroke();
             e.preventDefault();
         }
+
         function end(e) {
             drawing = false;
             if (e) e.preventDefault();
-            try {
-                var dataUrl = canvas.toDataURL('image/png');
-                if (dataUrl && dataUrl.length > 200) {
-                    hiddenInput.value = dataUrl;
-                }
-            } catch (err) {}
         }
 
         canvas.addEventListener('mousedown', start);
@@ -206,10 +345,28 @@ document.addEventListener('DOMContentLoaded', function() {
         if (clearBtn) {
             clearBtn.addEventListener('click', function() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                hiddenInput.value = '';
+            });
+        }
+
+        if (modalDone) {
+            modalDone.addEventListener('click', function() {
+                try {
+                    var dataUrl = canvas.toDataURL('image/png');
+                    if (dataUrl && dataUrl.length > 200) {
+                        hiddenInput.value = dataUrl;
+                        updateDrawPreview();
+                    }
+                } catch (err) {}
+                closeSignatureModal();
             });
         }
     }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal && !modal.hasAttribute('hidden')) {
+            closeSignatureModal();
+        }
+    });
 });
 </script>
 {% endblock %}

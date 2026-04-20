@@ -1,17 +1,112 @@
 {% extends "base.html" %}
-{% block title %}Admin Analytics - CENRO Management System{% endblock %}
-{% block admin_subtitle %}Analytics{% endblock %}
+{% block title %}Statistics - CENRO Sanitary Management System{% endblock %}
+{% block admin_subtitle %}Statistics{% endblock %}
 {% block content %}
 <div class="analytics-page">
     <div class="analytics-refresh-bar" id="analyticsRefreshBar" aria-hidden="true" role="presentation"></div>
     <div class="analytics-print-summary" id="analyticsPrintSummary" aria-hidden="true">
         <div class="analytics-print-summary-inner" id="analyticsPrintSummaryInner"></div>
     </div>
+
+    <div class="admin-dashboard-page analytics-dashboard-overview">
+        <div class="charts-grid">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📈 Service Request Trends</h3>
+                    <p class="card-subtitle">Weekly incoming vs completed requests (last 4 weeks)</p>
+                </div>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="trendsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🏘️ Service Type Distribution</h3>
+                    <p class="card-subtitle">Breakdown by category</p>
+                </div>
+                <div class="distribution-chart">
+                    <div class="distribution-item">
+                        <div class="distribution-label">
+                            <span class="distribution-dot" style="background: var(--primary-green);"></span>
+                            <strong>Declogging (Residential)</strong>
+                        </div>
+                        <div class="distribution-bar-container">
+                            <div class="distribution-bar" style="width: {{ residential_pct }}%; background: var(--primary-green);"></div>
+                            <span class="distribution-percentage"><strong>{{ residential_pct|floatformat:0 }}%</strong></span>
+                        </div>
+                    </div>
+                    <div class="distribution-item">
+                        <div class="distribution-label">
+                            <span class="distribution-dot" style="background: var(--water-teal);"></span>
+                            <strong>Grass Cutting / Commercial</strong>
+                        </div>
+                        <div class="distribution-bar-container">
+                            <div class="distribution-bar" style="width: {{ commercial_pct }}%; background: var(--water-teal);"></div>
+                            <span class="distribution-percentage"><strong>{{ commercial_pct|floatformat:0 }}%</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">🏘️ Barangay Rankings</h3>
+                <p class="card-subtitle">Service requests by barangay - Top 10</p>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">Rank</th>
+                            <th>Barangay Name</th>
+                            <th style="text-align: center;">Total Requests</th>
+                            <th>Distribution</th>
+                            <th style="width: 120px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stat in barangay_stats %}
+                        <tr>
+                            <td><strong>#{{ forloop.counter }}</strong></td>
+                            <td><strong>{{ stat.barangay }}</strong></td>
+                            <td style="text-align: center; font-weight: 600;">{{ stat.count }}</td>
+                            <td>
+                                <div class="progress-bar-container" style="margin: 0; height: 20px;">
+                                    <div class="progress-bar" style="width: {% widthratio stat.count total_requests 100 %}%; font-size: 11px;">
+                                        {% widthratio stat.count total_requests 100 %}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if stat.count > 20 %}
+                                <span class="status-badge status-approved">High Activity</span>
+                                {% elif stat.count > 10 %}
+                                <span class="status-badge status-in-progress">Moderate</span>
+                                {% else %}
+                                <span class="status-badge status-scheduled">Low Activity</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 30px;">
+                                <em>No service requests data available yet</em>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="analytics-grid">
         <div class="analytics-card analytics-kpi">
             <h3 class="analytics-card-title analytics-card-title-row">
                 <span class="analytics-card-title-main">
-                    Service Analytics (30 Days)
+                    Service statistics (30 days)
                     <span class="analytics-split-toggle" id="analyticsSplitToggle">
                         <button type="button" class="analytics-split-btn active" data-service="desludging">Desludging</button>
                         <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
@@ -93,6 +188,46 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function() {
+    var trendsCtx = document.getElementById('trendsChart');
+    if (trendsCtx && typeof Chart !== 'undefined') {
+        try {
+            var trendsData = JSON.parse('{{ weeks_data|escapejs }}');
+            new Chart(trendsCtx, {
+                type: 'bar',
+                data: {
+                    labels: trendsData.map(function(d) { return d.week; }),
+                    datasets: [{
+                        label: 'Incoming Requests',
+                        data: trendsData.map(function(d) { return d.incoming; }),
+                        backgroundColor: 'rgba(45, 134, 89, 0.8)',
+                        borderColor: 'rgba(45, 134, 89, 1)',
+                        borderWidth: 1
+                    }, {
+                        label: 'Completions',
+                        data: trendsData.map(function(d) { return d.completed; }),
+                        backgroundColor: 'rgba(224, 228, 232, 0.8)',
+                        borderColor: 'rgba(100, 100, 100, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        } catch (e) {}
+    }
+})();
+</script>
+<script>
+(function() {
     var API_URL = "{% url 'dashboard:admin_analytics_api' %}";
     var POLL_INTERVAL_MS = 5000;
 
@@ -159,8 +294,8 @@
         var tb = s.top_barangay || {};
 
         parts.push('<header class="analytics-print-header">');
-        parts.push('<h1>CENRO Management System</h1>');
-        parts.push('<p class="analytics-print-meta analytics-print-service">Analytics Summary <span class="analytics-print-service-badge">' + escapeHtml(serviceLabel) + '</span></p>');
+        parts.push('<h1>CENRO Sanitary Management System</h1>');
+        parts.push('<p class="analytics-print-meta analytics-print-service">Statistics summary <span class="analytics-print-service-badge">' + escapeHtml(serviceLabel) + '</span></p>');
         parts.push('<p class="analytics-print-meta">Generated on ' + escapeHtml(new Date().toLocaleString()) + '</p>');
         parts.push('</header>');
 

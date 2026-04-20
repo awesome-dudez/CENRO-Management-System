@@ -5,9 +5,10 @@ import base64
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.forms import ValidationError
 from django.db import transaction
 from django.db.models import Q
-from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
@@ -18,30 +19,81 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 import io
 import json
+import mimetypes
 import time
 import os
 from uuid import uuid4
+from urllib.parse import urlencode
 
-from accounts.decorators import role_required
+from accounts.decorators import json_consumer_required, role_required
 from accounts.models import User
 from scheduling.models import Schedule
 from django.templatetags.static import static
 
 from .forms import (
     GRASSCUTTING_RATE_PER_HOUR,
+    LOCATION_PHOTO_ALLOWED_EXTENSIONS,
+    GrasscuttingAdminEditForm,
+    GrasscuttingApplicationForm,
     ServiceRequestForm,
     ServiceRequestStep1Form,
     ServiceRequestStep2Form,
     ServiceRequestStep3Form,
-    GrasscuttingApplicationForm,
-    GrasscuttingAdminEditForm,
+    validate_customer_receipt,
+    validate_location_photo,
 )
 from .location import detect_barangay_for_point
 from .geocode import address_in_bayawan, extract_barangay, reverse_geocode_osm
-from .models import CompletionInfo, InspectionDetail, Notification, ServiceRequest, ServiceRequestChangeLog
+from .models import (
+    CompletionInfo,
+    InspectionDetail,
+    Notification,
+    ServiceEquipment,
+    ServiceRequest,
+    ServiceRequestChangeLog,
+)
+
+_LOCATION_PHOTO_EXT_LOWER = frozenset(ext.lower() for ext in LOCATION_PHOTO_ALLOWED_EXTENSIONS)
 
 # Session flag: verified "other person" consumer for service request wizard (step 2).
 OTHER_VERIFIED_SESSION_KEY = "service_request_other_verified"
+
+# Admin/staff: last Requests list query (tab, filters) for "Back" from request detail.
+DASHBOARD_REQUESTS_LIST_SESSION_KEY = "dashboard_requests_list_query"
+
+_DASHBOARD_REQUESTS_TABS = frozenset({"pending", "inspection", "computation", "schedule", "completed"})
+_DASHBOARD_REQUESTS_SORT = frozenset({"id", "barangay", "date"})
+_DASHBOARD_REQUESTS_DIR = frozenset({"asc", "desc"})
+_DASHBOARD_REQUESTS_TYPES = frozenset({"all", "grass", "declogging"})
+
+
+def _persist_dashboard_requests_list_params(request) -> None:
+    """Store tab/sort/filter when opening a request from the dashboard Requests list."""
+    if request.GET.get("from") != "dashboard_requests":
+        return
+    q: dict[str, str] = {}
+    tab = request.GET.get("list_tab")
+    if tab in _DASHBOARD_REQUESTS_TABS:
+        q["tab"] = tab
+    rt = request.GET.get("list_request_type")
+    if rt in _DASHBOARD_REQUESTS_TYPES and rt != "all":
+        q["request_type"] = rt
+    s = request.GET.get("list_sort")
+    if s in _DASHBOARD_REQUESTS_SORT:
+        q["sort"] = s
+    d = request.GET.get("list_dir")
+    if d in _DASHBOARD_REQUESTS_DIR:
+        q["dir"] = d
+    request.session[DASHBOARD_REQUESTS_LIST_SESSION_KEY] = q
+
+
+def _dashboard_requests_list_back_url(request) -> str:
+    """Return URL to dashboard Requests with last saved tab/filters (admin/staff)."""
+    base = reverse("dashboard:admin_requests")
+    q = request.session.get(DASHBOARD_REQUESTS_LIST_SESSION_KEY) or {}
+    if not q:
+        return base
+    return f"{base}?{urlencode(q)}"
 
 
 def _collapse_ws(s: str) -> str:
@@ -102,7 +154,11 @@ def find_consumer_by_registered_profile(client_name, barangay, address):
             continue
         if _norm_key(prof.barangay or "") != _norm_key(brgy):
             continue
-        if _addresses_compatible(addr, prof.street_address or ""):
+        street = prof.street_address or ""
+        full_line = prof.full_address or ""
+        if _addresses_compatible(addr, street) or (
+            full_line and _addresses_compatible(addr, full_line)
+        ):
             matches.append(u)
 
     if len(matches) == 1:
@@ -112,12 +168,67 @@ def find_consumer_by_registered_profile(client_name, barangay, address):
     return None, "none"
 
 
-def _consumer_other_verification_valid(request, client_name, barangay, address) -> bool:
+def _consumer_other_verification_valid(request, *field_triples) -> bool:
+    """
+    Accept session verification if any (client_name, barangay, address) triple matches the
+    stored fingerprint or resolves to the same consumer_pk.
+
+    PIN mode overwrites barangay in cleaned_data (detected from map); verify uses raw POST,
+    so callers should pass both cleaned and raw triples when available.
+    """
     v = request.session.get(OTHER_VERIFIED_SESSION_KEY)
     if not v or not v.get("consumer_pk"):
         return False
-    fp = _other_verify_fingerprint(client_name, barangay, address)
-    return v.get("fp") == fp
+    consumer_pk = v["consumer_pk"]
+    if not User.objects.filter(
+        pk=consumer_pk,
+        role=User.Role.CONSUMER,
+        is_active=True,
+        is_approved=True,
+    ).exists():
+        request.session.pop(OTHER_VERIFIED_SESSION_KEY, None)
+        return False
+
+    seen = set()
+    for triple in field_triples:
+        if not triple or len(triple) != 3:
+            continue
+        cn, br, ad = triple
+        key = (_norm_key(str(cn or "")), _norm_key(str(br or "")), _norm_key(str(ad or "")))
+        if key in seen:
+            continue
+        if not any(key):
+            continue
+        seen.add(key)
+
+        fp = _other_verify_fingerprint(cn, br, ad)
+        if v.get("fp") == fp:
+            return True
+        user_obj, _err = find_consumer_by_registered_profile(cn, br, ad)
+        if user_obj and user_obj.pk == consumer_pk:
+            request.session[OTHER_VERIFIED_SESSION_KEY] = {"consumer_pk": consumer_pk, "fp": fp}
+            request.session.modified = True
+            return True
+    return False
+
+
+def _other_verification_triples_from_form_data(form_data) -> list[tuple]:
+    """Primary row is canonical wizard data; optional _verify_post_* holds raw step-2 POST for 'other' flow."""
+    primary = (
+        form_data.get("client_name") or "",
+        form_data.get("barangay") or "",
+        form_data.get("address") or "",
+    )
+    out: list[tuple] = [primary]
+    if form_data.get("request_for") == ServiceRequestStep2Form.REQUEST_FOR_OTHER:
+        raw = (
+            form_data.get("_verify_post_client_name") or "",
+            form_data.get("_verify_post_barangay") or "",
+            form_data.get("_verify_post_address") or "",
+        )
+        if any((x or "").strip() for x in raw):
+            out.append(raw)
+    return out
 
 
 def _clear_other_verification_if_stale(request, client_name, barangay, address) -> None:
@@ -268,13 +379,96 @@ def _can_view_grass_application_receipt(user, service_request):
     return _can_act_on_request(user, service_request)
 
 
+def _summarize_form_errors(error_dict) -> str:
+    """Short human-readable summary for API / JSON responses."""
+    if not error_dict:
+        return "Check the form fields and try again."
+    for field, errs in error_dict.items():
+        if errs:
+            label = "Form" if field in (None, "__all__") else str(field).replace("_", " ")
+            try:
+                first = errs[0]
+            except (TypeError, IndexError):
+                first = errs
+            return f"{label}: {first}"
+    return "Check the form fields and try again."
+
+
+def _message_uploaded_file_access_denied(request, service_request, what_phrase: str) -> None:
+    """
+    User-facing explanation when a receipt or location photo cannot be opened.
+    what_phrase examples: "this payment receipt", "this inspection fee receipt", "this location photo"
+    """
+    user = request.user
+    if user.is_staff_member() and not user.is_admin():
+        if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+            if service_request.assigned_inspector_id != user.id:
+                messages.error(
+                    request,
+                    f"As an inspector, you can open {what_phrase} only for requests assigned to you. "
+                    f"Request #{service_request.pk} is not on your assignment list. "
+                    "Ask an administrator if you should be assigned to this request.",
+                )
+                return
+    if getattr(user, "role", None) == User.Role.CONSUMER:
+        messages.error(
+            request,
+            f"You can open {what_phrase} only for service requests tied to your CENRO Sanitary Management System account "
+            "(as the customer or the person who submitted the request). "
+            "Use My Service Requests or Service History to find the correct request.",
+        )
+        return
+    messages.error(
+        request,
+        f"You do not have access to {what_phrase} for request #{service_request.pk}.",
+    )
+
+
+def _message_computation_letter_access_denied(request, service_request) -> None:
+    user = request.user
+    if user.is_staff_member() and not user.is_admin():
+        messages.error(
+            request,
+            "Cost computation letters are shared with the customer and administrators only. "
+            "As field staff, use Service Request details to review inspection, location, and schedules.",
+        )
+        return
+    messages.error(
+        request,
+        "Only the registered customer (or the person who submitted the request on their behalf) "
+        "can open this computation letter. If you opened a link from another account, return to "
+        "My Service Requests and select your own request.",
+    )
+
+
+def _message_receipt_upload_denied(request) -> None:
+    messages.error(
+        request,
+        "You can upload payment receipts only for your own service requests — where you are the "
+        "registered customer or the person who submitted the request on their behalf.",
+    )
+
+
+def _message_inspection_fee_page_denied(request) -> None:
+    messages.error(
+        request,
+        "Inspection fee documents apply only to your own septage (desludging) requests. "
+        "Open the request from My Service Requests or Service History.",
+    )
+
+
+_COMPUTATION_NOT_READY_MSG = (
+    "No cost computation has been prepared for this request yet. After inspection (or waived inspection) "
+    "and office processing, an administrator will enter charges — then the computation letter will be available here."
+)
+
+
 # ---------------------------------------------------------------------------
 # Multi-step service request wizard (3 steps)
 # ---------------------------------------------------------------------------
 
-@login_required
-@role_required("CONSUMER")
 @require_POST
+@json_consumer_required
 def verify_other_consumer(request):
     """
     Check that client name + barangay + address match an approved consumer account.
@@ -298,15 +492,15 @@ def verify_other_consumer(request):
     register_url = request.build_absolute_uri(register_path)
 
     messages_map = {
-        "missing_name": "Enter the client's full name (as registered on EcoTrack).",
+        "missing_name": "Enter the client's full name (as registered in CENRO Sanitary Management System).",
         "missing_barangay": "Set the service barangay (from the map or by typing it) before verifying.",
         "missing_address": (
-            "Enter the street address as it appears on the client's EcoTrack profile "
+            "Enter the street address as it appears on the client's profile in CENRO Sanitary Management System "
             "(Complete Address / Landmark), then verify again."
         ),
         "none": (
-            "No approved EcoTrack account matches this name, barangay, and address. "
-            "The client must create an EcoTrack consumer account first so their record is on file; "
+            "No approved consumer account on CENRO Sanitary Management System matches this name, barangay, and address. "
+            "The client must register a consumer account on CENRO Sanitary Management System first so their record is on file; "
             "then you can continue this request."
         ),
         "multiple": (
@@ -364,7 +558,14 @@ def offline_create_request(request):
         service_type=service_type or ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
     )
     if not form.is_valid():
-        return JsonResponse({"ok": False, "errors": form.errors, "message": "Validation failed."}, status=400)
+        return JsonResponse(
+            {
+                "ok": False,
+                "errors": form.errors,
+                "message": _summarize_form_errors(form.errors),
+            },
+            status=400,
+        )
 
     cd = form.cleaned_data
     target_consumer = request.user
@@ -475,18 +676,23 @@ def offline_create_request(request):
                 "prior_desludging_m3_4y", 0,
             ) or 0
             if legacy_vol <= 0:
-                service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
-                service_request.save(update_fields=["status"])
-                Notification.objects.create(
-                    user=service_request.consumer,
-                    message=(
-                        f"Request #{service_request.id} received. "
-                        "Please pay the ₱150 inspection fee at the Treasurer's Office "
-                        "and upload the receipt to continue."
-                    ),
-                    notification_type=Notification.NotificationType.STATUS_CHANGE,
-                    related_request=service_request,
-                )
+                if service_request.qualifies_public_bayawan_no_fees:
+                    service_request.apply_public_bayawan_inspection_fee_waiver(
+                        notify_user=service_request.consumer,
+                    )
+                else:
+                    service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
+                    service_request.save(update_fields=["status"])
+                    Notification.objects.create(
+                        user=service_request.consumer,
+                        message=(
+                            f"Request #{service_request.id} received. "
+                            "Please pay the ₱150 inspection fee at the Treasurer's Office "
+                            "and upload the receipt to continue."
+                        ),
+                        notification_type=Notification.NotificationType.STATUS_CHANGE,
+                        related_request=service_request,
+                    )
 
     _notify_admin_users(
         f"New {service_request.get_service_type_display()} request from {service_request.client_name}.",
@@ -529,6 +735,22 @@ def create_request(request):
         if form_data.get("request_for") != ServiceRequestStep2Form.REQUEST_FOR_OTHER:
             request.session.pop(OTHER_VERIFIED_SESSION_KEY, None)
 
+    # Footer / deep links: pre-select service type on step 1 (GET only)
+    if request.method == "GET" and step == 1:
+        prefill = (request.GET.get("prefill") or "").strip().lower()
+        prefill_map = {
+            "grass": ServiceRequest.ServiceType.GRASS_CUTTING,
+            "grasscutting": ServiceRequest.ServiceType.GRASS_CUTTING,
+            "grass_cutting": ServiceRequest.ServiceType.GRASS_CUTTING,
+            "septage": ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            "desludging": ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            "residential": ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            "commercial": ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+        }
+        if prefill in prefill_map:
+            form_data["service_type"] = prefill_map[prefill]
+            request.session["service_request_data"] = form_data
+
     form = None
 
     if request.method == "POST":
@@ -555,14 +777,21 @@ def create_request(request):
                     request.session.pop(OTHER_VERIFIED_SESSION_KEY, None)
                 elif not _consumer_other_verification_valid(
                     request,
-                    form.cleaned_data.get("client_name"),
-                    form.cleaned_data.get("barangay"),
-                    form.cleaned_data.get("address"),
+                    (
+                        form.cleaned_data.get("client_name"),
+                        form.cleaned_data.get("barangay"),
+                        form.cleaned_data.get("address"),
+                    ),
+                    (
+                        form.data.get("client_name", ""),
+                        form.data.get("barangay", ""),
+                        form.data.get("address", ""),
+                    ),
                 ):
                     messages.error(
                         request,
                         'Please click "Verify client account" and confirm the client\'s name, barangay, and street '
-                        "address match their registered EcoTrack profile before continuing.",
+                        "address match their registered profile in CENRO Sanitary Management System before continuing.",
                     )
                     owner_profile = _owner_profile_dict(request.user)
                     return render(
@@ -575,7 +804,19 @@ def create_request(request):
                             "owner_profile_json": json.dumps(owner_profile),
                             "verify_other_consumer_url": reverse("services:verify_other_consumer"),
                             "consumer_register_url": reverse("accounts:consumer_register"),
-                            "step2_other_verified": False,
+                            "step2_other_verified": _consumer_other_verification_valid(
+                                request,
+                                (
+                                    form.cleaned_data.get("client_name"),
+                                    form.cleaned_data.get("barangay"),
+                                    form.cleaned_data.get("address"),
+                                ),
+                                (
+                                    form.data.get("client_name", ""),
+                                    form.data.get("barangay", ""),
+                                    form.data.get("address", ""),
+                                ),
+                            ),
                         },
                     )
 
@@ -595,6 +836,15 @@ def create_request(request):
                     "connected_to_bawad": form.cleaned_data["connected_to_bawad"],
                     "public_private": form.cleaned_data["public_private"],
                 })
+                _req_for = form.cleaned_data.get("request_for") or ServiceRequestStep2Form.REQUEST_FOR_OWNER
+                if _req_for == ServiceRequestStep2Form.REQUEST_FOR_OTHER:
+                    form_data["_verify_post_client_name"] = (request.POST.get("client_name") or "").strip()
+                    form_data["_verify_post_barangay"] = (request.POST.get("barangay") or "").strip()
+                    form_data["_verify_post_address"] = (request.POST.get("address") or "").strip()
+                else:
+                    form_data.pop("_verify_post_client_name", None)
+                    form_data.pop("_verify_post_barangay", None)
+                    form_data.pop("_verify_post_address", None)
                 if form.cleaned_data.get("bawad_proof"):
                     request.session["_bawad_proof_pending"] = True
 
@@ -635,8 +885,8 @@ def create_request(request):
                     for key in ("location_photo_1", "location_photo_2"):
                         f = request.FILES.get(key)
                         if f:
-                            ext = os.path.splitext(f.name)[1] or ".jpg"
-                            if ext.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                            ext = (os.path.splitext(f.name)[1] or ".jpg").lower()
+                            if ext not in _LOCATION_PHOTO_EXT_LOWER:
                                 ext = ".jpg"
                             path = f"location_photos/temp/{uuid4()}{ext}"
                             default_storage.save(path, ContentFile(f.read()))
@@ -670,19 +920,17 @@ def create_request(request):
                 target_consumer = request.user
                 request_for = form_data.get("request_for") or ServiceRequestStep2Form.REQUEST_FOR_OWNER
                 if request_for == ServiceRequestStep2Form.REQUEST_FOR_OTHER:
-                    v = request.session.get(OTHER_VERIFIED_SESSION_KEY)
-                    fp = _other_verify_fingerprint(
-                        form_data.get("client_name"),
-                        form_data.get("barangay"),
-                        form_data.get("address"),
-                    )
-                    if not v or v.get("fp") != fp or not v.get("consumer_pk"):
+                    if not _consumer_other_verification_valid(
+                        request,
+                        *_other_verification_triples_from_form_data(form_data),
+                    ):
                         messages.error(
                             request,
                             "Verification is missing or out of date. Please return to step 2 and verify the "
                             "client's registered account again.",
                         )
                         return redirect(reverse("services:create_request") + "?step=2")
+                    v = request.session.get(OTHER_VERIFIED_SESSION_KEY)
                     try:
                         target_consumer = User.objects.get(
                             pk=v["consumer_pk"],
@@ -779,18 +1027,23 @@ def create_request(request):
                             "prior_desludging_m3_4y", 0,
                         ) or 0
                         if legacy_vol <= 0:
-                            service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
-                            service_request.save(update_fields=["status"])
-                            Notification.objects.create(
-                                user=service_request.consumer,
-                                message=(
-                                    f"Request #{service_request.id} received. "
-                                    "Please pay the ₱150 inspection fee at the Treasurer's Office "
-                                    "and upload the receipt to continue."
-                                ),
-                                notification_type=Notification.NotificationType.STATUS_CHANGE,
-                                related_request=service_request,
-                            )
+                            if service_request.qualifies_public_bayawan_no_fees:
+                                service_request.apply_public_bayawan_inspection_fee_waiver(
+                                    notify_user=service_request.consumer,
+                                )
+                            else:
+                                service_request.status = ServiceRequest.Status.INSPECTION_FEE_DUE
+                                service_request.save(update_fields=["status"])
+                                Notification.objects.create(
+                                    user=service_request.consumer,
+                                    message=(
+                                        f"Request #{service_request.id} received. "
+                                        "Please pay the ₱150 inspection fee at the Treasurer's Office "
+                                        "and upload the receipt to continue."
+                                    ),
+                                    notification_type=Notification.NotificationType.STATUS_CHANGE,
+                                    related_request=service_request,
+                                )
 
                 # Attach client signature image, if any was captured in step 2.
                 sig_path = form_data.get("_client_signature_path")
@@ -875,12 +1128,13 @@ def create_request(request):
         owner_profile = _owner_profile_dict(request.user)
         verify_other_consumer_url = reverse("services:verify_other_consumer")
         consumer_register_url = reverse("accounts:consumer_register")
-        step2_other_verified = _consumer_other_verification_valid(
-            request,
-            form_data.get("client_name"),
-            form_data.get("barangay"),
-            form_data.get("address"),
-        )
+        triples = list(_other_verification_triples_from_form_data(form_data))
+        if form is not None and getattr(form, "is_bound", False):
+            d = form.data
+            triples.append(
+                (d.get("client_name", ""), d.get("barangay", ""), d.get("address", ""))
+            )
+        step2_other_verified = _consumer_other_verification_valid(request, *triples)
 
     context = {
         "form": form,
@@ -910,14 +1164,12 @@ def grasscutting_application(request):
     if form_data.get("request_for") == ServiceRequestStep2Form.REQUEST_FOR_OTHER:
         if not _consumer_other_verification_valid(
             request,
-            form_data.get("client_name"),
-            form_data.get("barangay"),
-            form_data.get("address"),
+            *_other_verification_triples_from_form_data(form_data),
         ):
             messages.error(
                 request,
                 "Client verification is missing or out of date. Please complete step 2 and verify the "
-                "registered EcoTrack account before continuing.",
+                "registered CENRO Sanitary Management System account before continuing.",
             )
             return redirect(reverse("services:create_request") + "?step=2")
 
@@ -934,8 +1186,21 @@ def grasscutting_application(request):
             pass
 
     if request.method == "POST":
+        gc_sig_file = request.FILES.get("gc_client_signature")
+        gc_sig_data = (request.POST.get("gc_signature_data") or "").strip()
+        sig_photo_error = None
+        if gc_sig_file and not gc_sig_data.startswith("data:image"):
+            try:
+                validate_location_photo(gc_sig_file)
+            except ValidationError as e:
+                sig_photo_error = next(iter(e.messages))
+
         form = GrasscuttingApplicationForm(request.POST, initial=initial)
-        if form.is_valid():
+        if not form.is_valid():
+            pass
+        elif sig_photo_error:
+            messages.error(request, sig_photo_error)
+        else:
             cd = form.cleaned_data
             personnel = cd["number_of_personnel"]
             hours = float(cd["number_of_hours"])
@@ -987,18 +1252,16 @@ def grasscutting_application(request):
             target_consumer = request.user
             requested_by_user = None
             if form_data.get("request_for") == ServiceRequestStep2Form.REQUEST_FOR_OTHER:
-                v = request.session.get(OTHER_VERIFIED_SESSION_KEY)
-                fp = _other_verify_fingerprint(
-                    form_data.get("client_name"),
-                    form_data.get("barangay"),
-                    form_data.get("address"),
-                )
-                if not v or v.get("fp") != fp or not v.get("consumer_pk"):
+                if not _consumer_other_verification_valid(
+                    request,
+                    *_other_verification_triples_from_form_data(form_data),
+                ):
                     messages.error(
                         request,
                         "Verification is missing or out of date. Please return to step 2 and verify again.",
                     )
                     return redirect(reverse("services:create_request") + "?step=2")
+                v = request.session.get(OTHER_VERIFIED_SESSION_KEY)
                 try:
                     target_consumer = User.objects.get(
                         pk=v["consumer_pk"],
@@ -1080,8 +1343,8 @@ def grasscutting_application(request):
                         save=True,
                     )
                 elif gc_sig_file:
-                    ext = os.path.splitext(gc_sig_file.name)[1] or ".jpg"
-                    if ext.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                    ext = (os.path.splitext(gc_sig_file.name)[1] or ".jpg").lower()
+                    if ext not in _LOCATION_PHOTO_EXT_LOWER:
                         ext = ".jpg"
                     service_request.client_signature.save(
                         f"client_signatures/gc_{service_request.id}{ext}",
@@ -1129,7 +1392,17 @@ def grasscutting_application_receipt(request, pk):
     """Official application-form receipt (reference copy for consumer and admin)."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_view_grass_application_receipt(request.user, service_request):
-        messages.error(request, "You do not have permission to view this receipt.")
+        if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
+            messages.error(
+                request,
+                "This printable application receipt exists only for Grass Cutting requests.",
+            )
+        else:
+            messages.error(
+                request,
+                "You can open this receipt only as the customer, the person who submitted the request, "
+                "or as CENRO staff reviewing the case. Use My Service Requests to find your Grass Cutting request.",
+            )
         return redirect("services:request_list")
 
     g_date = service_request.grasscutting_date
@@ -1362,7 +1635,11 @@ def grasscutting_request_view(request, pk):
         or request.user.is_admin()
         or request.user.is_staff_member()
     ):
-        messages.error(request, "You do not have permission to view this grasscutting form.")
+        messages.error(
+            request,
+            "You can view this Grass Cutting application only when you are the customer, submitted it on someone's behalf, "
+            "or are logged in as CENRO staff. Open the request from My Service Requests or the admin request list.",
+        )
         return redirect("services:request_list")
 
     # Resolve stored values or backfill from notes
@@ -1516,13 +1793,19 @@ def reverse_geocode(request):
     lat = request.GET.get("lat")
     lon = request.GET.get("lon")
     if not lat or not lon:
-        return JsonResponse({"ok": False, "error": "Missing lat/lon"}, status=400)
+        return JsonResponse(
+            {"ok": False, "error": "Map lookup needs latitude and longitude. Tap the map again or refresh the page."},
+            status=400,
+        )
 
     try:
         lat_f = float(lat)
         lon_f = float(lon)
     except ValueError:
-        return JsonResponse({"ok": False, "error": "Invalid lat/lon"}, status=400)
+        return JsonResponse(
+            {"ok": False, "error": "The map sent coordinates this app could not read. Pin the location again on the map."},
+            status=400,
+        )
 
     detected = detect_barangay_for_point(lat_f, lon_f)
 
@@ -1544,7 +1827,16 @@ def reverse_geocode(request):
 
     data = reverse_geocode_osm(lat_f, lon_f)
     if not data:
-        return JsonResponse({"ok": False, "error": "Reverse geocoding failed"}, status=502)
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": (
+                    "Address lookup from the map is temporarily unavailable (map service did not respond). "
+                    "Try again in a moment, or switch to 'Type Address' and enter barangay and street manually."
+                ),
+            },
+            status=502,
+        )
 
     address = data.get("address") or {}
     display_name = data.get("display_name")
@@ -1621,15 +1913,25 @@ def request_detail(request, pk):
     # Consumers: can view their own requests plus any request they submitted
     # on behalf of another person (requested_by), at all statuses.
     if not is_admin_like and not _can_act_on_request(request.user, service_request):
-        messages.error(request, "You do not have permission to view this request.")
+        messages.error(
+            request,
+            "You can open this request only if you are the registered customer or the person who submitted it "
+            "on their behalf. CENRO staff should open requests from the dashboard or assigned list.",
+        )
         return redirect("services:request_list")
 
     # Staff: can only view requests assigned to them (grass cutting is not inspector-assigned).
     if is_staff:
         if service_request.service_type != ServiceRequest.ServiceType.GRASS_CUTTING:
             if service_request.assigned_inspector_id != request.user.id:
-                messages.error(request, "You can only view requests assigned to you.")
+                messages.error(
+                    request,
+                    f"As an inspector, you can only open request #{service_request.pk} if it is assigned to you. "
+                    "Check Pending assignments or ask an administrator to assign this inspection.",
+                )
                 return redirect("services:request_list")
+
+    _persist_dashboard_requests_list_params(request)
 
     # When an admin/staff opens a newly submitted request, automatically move it to "Under Review".
     # Grass Cutting uses its own payment-first statuses; do not auto-advance those rows.
@@ -1672,17 +1974,20 @@ def request_detail(request, pk):
             ]
         ).exists()
 
+        inspection_waived = "[NO_INSPECTION_FEE]" in (service_request.notes or "")
+
         can_assign_inspector = (
             service_request.status
             in [SRModel.Status.UNDER_REVIEW, SRModel.Status.SUBMITTED]
             and not has_prior_inspected
+            and not inspection_waived
         )
         inspection_optional = (
             service_request.status
             in [SRModel.Status.UNDER_REVIEW, SRModel.Status.SUBMITTED]
             and has_prior_inspected
+            and not inspection_waived
         )
-        inspection_waived = "[NO_INSPECTION_FEE]" in (service_request.notes or "")
 
     # Keep computation payment_status in sync with request state (receipt uploaded / confirmed).
     computation = getattr(service_request, "computation", None)
@@ -1740,17 +2045,33 @@ def request_detail(request, pk):
             except ValueError:
                 pass
 
+    _comp = getattr(service_request, "computation", None)
+    can_finalize_letter = bool(
+        is_admin
+        and _comp
+        and not _comp.is_finalized
+        and _comp.ready_to_finalize
+    )
+
+    if is_admin_like:
+        requests_list_back_url = _dashboard_requests_list_back_url(request)
+    else:
+        requests_list_back_url = reverse("services:request_list")
+
     context = {
         "sr": service_request,
         "staff_members": staff_members,
         "can_assign_inspector": can_assign_inspector,
         "inspection_optional": inspection_optional,
         "inspection_waived": inspection_waived,
+        "waived_crew_ready": service_request.waived_inspection_crew_ready,
         "has_prior_inspected": has_prior_inspected,
         "inspector_label": inspector_label,
         "inspection_time": inspection_time,
         "inspection_reason": inspection_reason,
         "desludging_time": desludging_time,
+        "can_finalize_letter": can_finalize_letter,
+        "requests_list_back_url": requests_list_back_url,
     }
     return render(request, "services/request_detail.html", context)
 
@@ -1827,7 +2148,12 @@ def submit_inspection(request, pk):
     # Once inspection is submitted, only admins may make further changes.
     if hasattr(request.user, "is_staff_member") and request.user.is_staff_member():
         if service_request.status != ServiceRequest.Status.INSPECTION_SCHEDULED:
-            messages.error(request, "You can only fill inspection details once. Further changes are handled by an admin.")
+            messages.error(
+                request,
+                f"Inspectors can submit the inspection form only while the request is in 'Inspection Scheduled'. "
+                f"Current status: {service_request.get_status_display()}. "
+                "If you already submitted inspection data, ask an administrator to make changes.",
+            )
             return redirect("services:request_detail", pk=pk)
     if request.method == "POST":
         InspectionDetail.objects.update_or_create(
@@ -1852,6 +2178,7 @@ def submit_inspection(request, pk):
             "date_completed": timezone.now().date(),
             "time_required": "N/A",
             "witnessed_by_name": request.POST.get("witnessed_by_name", ""),
+            "equipment": None,
             "declogger_no": "",
             "driver_name": "",
             "helper1_name": "",
@@ -1930,9 +2257,31 @@ def submit_inspection(request, pk):
 @login_required
 @role_required("ADMIN")
 def submit_completion(request, pk):
-    """Admin/Staff fills completion info, triggers computation generation."""
+    """Admin fills completion info, triggers computation generation."""
+    from .models import DesludgingPersonnel
+    from .personnel_schedule import find_personnel_schedule_conflicts, get_desludging_timeslot_for_request
+
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    personnel_drivers = DesludgingPersonnel.objects.filter(
+        role=DesludgingPersonnel.Role.DRIVER, is_active=True
+    ).order_by("full_name")
+    personnel_helpers = DesludgingPersonnel.objects.filter(
+        role=DesludgingPersonnel.Role.HELPER, is_active=True
+    ).order_by("full_name")
+
+    def _equipment_choices_for_form(extra_equipment=None):
+        active_qs = ServiceEquipment.objects.filter(is_active=True).order_by("unit_number")
+        rows = list(active_qs)
+        existing_ci = getattr(service_request, "completion_info", None)
+        if existing_ci and existing_ci.equipment_id and not existing_ci.equipment.is_active:
+            if existing_ci.equipment not in rows:
+                rows.insert(0, existing_ci.equipment)
+        if extra_equipment and extra_equipment not in rows:
+            rows.insert(0, extra_equipment)
+        return rows
+
     if request.method == "POST":
+        service_equipment = _equipment_choices_for_form()
         # Save cubic meters from completion form onto the service request
         raw_m3 = (request.POST.get("cubic_meters") or "").strip()
         if raw_m3:
@@ -1949,6 +2298,171 @@ def submit_completion(request, pk):
             existing_completion.witnessed_by_name if existing_completion else ""
         )
 
+        driver_name = (request.POST.get("driver_name") or "").strip()
+        helper1_name = (request.POST.get("helper1_name") or "").strip()
+        helper2_name = (request.POST.get("helper2_name") or "").strip()
+        helper3_name = (request.POST.get("helper3_name") or "").strip()
+
+        def _completion_personnel_key(name):
+            return " ".join((name or "").split()).casefold()
+
+        driver_key = _completion_personnel_key(driver_name)
+        _helper_seen = set()
+        for slot_label, h_raw in (
+            ("Helper 1", helper1_name),
+            ("Helper 2", helper2_name),
+            ("Helper 3", helper3_name),
+        ):
+            hk = _completion_personnel_key(h_raw)
+            if not hk:
+                continue
+            if driver_key and hk == driver_key:
+                messages.error(
+                    request,
+                    f"{slot_label} cannot be the same person as the driver. Choose a different helper or change the driver.",
+                )
+                return render(
+                    request,
+                    "services/completion_form.html",
+                    {
+                        "sr": service_request,
+                        "personnel_drivers": personnel_drivers,
+                        "personnel_helpers": personnel_helpers,
+                        "service_equipment": _equipment_choices_for_form(),
+                        "posted": {
+                            "equipment_id": (request.POST.get("equipment_id") or "").strip(),
+                            "driver_name": driver_name,
+                            "helper1_name": helper1_name,
+                            "helper2_name": helper2_name,
+                            "helper3_name": helper3_name,
+                            "witnessed_by_name": witnessed_name,
+                        },
+                    },
+                )
+            if hk in _helper_seen:
+                messages.error(
+                    request,
+                    "The same person cannot be selected for more than one helper slot. Each helper must be unique.",
+                )
+                return render(
+                    request,
+                    "services/completion_form.html",
+                    {
+                        "sr": service_request,
+                        "personnel_drivers": personnel_drivers,
+                        "personnel_helpers": personnel_helpers,
+                        "service_equipment": _equipment_choices_for_form(),
+                        "posted": {
+                            "equipment_id": (request.POST.get("equipment_id") or "").strip(),
+                            "driver_name": driver_name,
+                            "helper1_name": helper1_name,
+                            "helper2_name": helper2_name,
+                            "helper3_name": helper3_name,
+                            "witnessed_by_name": witnessed_name,
+                        },
+                    },
+                )
+            _helper_seen.add(hk)
+
+        raw_eq_id = (request.POST.get("equipment_id") or "").strip()
+        equipment = None
+        declogger_no = ""
+        equipment_id_str = ""
+        if raw_eq_id:
+            try:
+                eq = ServiceEquipment.objects.get(pk=int(raw_eq_id))
+            except (ValueError, TypeError, ServiceEquipment.DoesNotExist):
+                messages.error(
+                    request,
+                    "The equipment unit you chose is not in the active list (it may have been removed or the page is outdated). "
+                    "Refresh the page and pick a unit from the dropdown again.",
+                )
+                return render(
+                    request,
+                    "services/completion_form.html",
+                    {
+                        "sr": service_request,
+                        "personnel_drivers": personnel_drivers,
+                        "personnel_helpers": personnel_helpers,
+                        "service_equipment": service_equipment,
+                        "posted": {
+                            "equipment_id": raw_eq_id,
+                            "driver_name": driver_name,
+                            "helper1_name": helper1_name,
+                            "helper2_name": helper2_name,
+                            "helper3_name": helper3_name,
+                            "witnessed_by_name": witnessed_name,
+                        },
+                    },
+                )
+            if not eq.is_active:
+                allowed = (
+                    existing_completion
+                    and existing_completion.equipment_id == eq.pk
+                )
+                if not allowed:
+                    messages.error(
+                        request,
+                        "That equipment is inactive. Choose another unit or reactivate it under Equipment.",
+                    )
+                    return render(
+                        request,
+                        "services/completion_form.html",
+                        {
+                            "sr": service_request,
+                            "personnel_drivers": personnel_drivers,
+                            "personnel_helpers": personnel_helpers,
+                            "service_equipment": _equipment_choices_for_form(
+                                extra_equipment=eq
+                            ),
+                            "posted": {
+                                "equipment_id": str(eq.pk),
+                                "driver_name": driver_name,
+                                "helper1_name": helper1_name,
+                                "helper2_name": helper2_name,
+                                "helper3_name": helper3_name,
+                                "witnessed_by_name": witnessed_name,
+                            },
+                        },
+                    )
+            equipment = eq
+            declogger_no = eq.unit_number
+            equipment_id_str = str(eq.pk)
+
+        sched_date, sched_t_norm = get_desludging_timeslot_for_request(service_request)
+        overlap_conflicts = find_personnel_schedule_conflicts(
+            exclude_request_id=service_request.pk,
+            sched_date=sched_date,
+            sched_time_normalized=sched_t_norm,
+            selected_names=[driver_name, helper1_name, helper2_name, helper3_name],
+        )
+        override_overlap = request.POST.get("override_personnel_schedule_overlap") == "1"
+        if overlap_conflicts and not override_overlap:
+            messages.warning(
+                request,
+                "Selected driver or helper may already be assigned to another job at this date and time. "
+                "Review the warning and check the box to confirm before saving.",
+            )
+            return render(
+                request,
+                "services/completion_form.html",
+                {
+                    "sr": service_request,
+                    "personnel_drivers": personnel_drivers,
+                    "personnel_helpers": personnel_helpers,
+                    "service_equipment": service_equipment,
+                    "personnel_schedule_conflicts": overlap_conflicts,
+                    "posted": {
+                        "equipment_id": equipment_id_str or raw_eq_id,
+                        "driver_name": driver_name,
+                        "helper1_name": helper1_name,
+                        "helper2_name": helper2_name,
+                        "helper3_name": helper3_name,
+                        "witnessed_by_name": witnessed_name,
+                    },
+                },
+            )
+
         # Base completion info (date/time now auto-handled server-side)
         completion, _ = CompletionInfo.objects.update_or_create(
             service_request=service_request,
@@ -1956,11 +2470,12 @@ def submit_completion(request, pk):
                 "date_completed": timezone.now().date(),
                 "time_required": "N/A",
                 "witnessed_by_name": witnessed_name,
-                "declogger_no": request.POST.get("declogger_no", ""),
-                "driver_name": request.POST.get("driver_name", ""),
-                "helper1_name": request.POST.get("helper1_name", ""),
-                "helper2_name": request.POST.get("helper2_name", ""),
-                "helper3_name": request.POST.get("helper3_name", ""),
+                "equipment": equipment,
+                "declogger_no": declogger_no,
+                "driver_name": driver_name,
+                "helper1_name": helper1_name,
+                "helper2_name": helper2_name,
+                "helper3_name": helper3_name,
             },
         )
 
@@ -1995,7 +2510,50 @@ def submit_completion(request, pk):
         messages.success(request, "Completion info saved. Computation letter generated.")
         return redirect("services:request_detail", pk=pk)
 
-    return render(request, "services/completion_form.html", {"sr": service_request})
+    existing = getattr(service_request, "completion_info", None)
+    posted_initial = {
+        "equipment_id": "",
+        "driver_name": "",
+        "helper1_name": "",
+        "helper2_name": "",
+        "helper3_name": "",
+        "witnessed_by_name": "",
+    }
+    if existing:
+        posted_initial = {
+            "equipment_id": str(existing.equipment_id) if existing.equipment_id else "",
+            "driver_name": existing.driver_name or "",
+            "helper1_name": existing.helper1_name or "",
+            "helper2_name": existing.helper2_name or "",
+            "helper3_name": existing.helper3_name or "",
+            "witnessed_by_name": existing.witnessed_by_name or "",
+        }
+        if not posted_initial["equipment_id"] and existing.declogger_no:
+            match = ServiceEquipment.objects.filter(
+                unit_number__iexact=existing.declogger_no.strip()
+            ).first()
+            if match:
+                posted_initial["equipment_id"] = str(match.pk)
+    extra_eq = None
+    if posted_initial.get("equipment_id"):
+        try:
+            extra_eq = ServiceEquipment.objects.filter(
+                pk=int(posted_initial["equipment_id"])
+            ).first()
+        except (ValueError, TypeError):
+            pass
+    service_equipment = _equipment_choices_for_form(extra_equipment=extra_eq)
+    return render(
+        request,
+        "services/completion_form.html",
+        {
+            "sr": service_request,
+            "personnel_drivers": personnel_drivers,
+            "personnel_helpers": personnel_helpers,
+            "service_equipment": service_equipment,
+            "posted": posted_initial,
+        },
+    )
 
 
 def _auto_generate_computation(service_request, admin_user):
@@ -2051,54 +2609,104 @@ def _match_other_consumer_account(form_data):
 # Computation letter view
 # ---------------------------------------------------------------------------
 
+def _user_can_access_computation_letter(user, service_request) -> bool:
+    """Who may open the computation letter URL (admin, owner consumer, or submitter). Staff use inspection only."""
+    if user.is_admin():
+        return True
+    if service_request.consumer == user:
+        return True
+    if service_request.requested_by and service_request.requested_by == user:
+        return True
+    return False
+
+
+def _user_can_finalize_computation(user) -> bool:
+    """Only admins may preview draft letters, finalize, or download unfinalized PDFs."""
+    return user.is_admin()
+
+
 @login_required
 def view_computation(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
-    # Only admin, consumer (owner), or the account that submitted the request may view. Staff/inspector may not.
-    can_view = (
-        request.user.is_admin()
-        or service_request.consumer == request.user
-        or (service_request.requested_by and service_request.requested_by == request.user)
-    )
-    if not can_view:
-        messages.error(request, "Permission denied.")
+    if not _user_can_access_computation_letter(request.user, service_request):
+        _message_computation_letter_access_denied(request, service_request)
         return redirect("services:request_list")
 
     computation = getattr(service_request, "computation", None)
     if not computation:
-        messages.warning(request, "Computation not yet available.")
+        messages.warning(request, _COMPUTATION_NOT_READY_MSG)
         return redirect("services:request_detail", pk=pk)
 
-    # Allow admins/staff to post from this page to finalize and send.
     if request.method == "POST":
-        if not (request.user.is_admin() or request.user.is_staff_member()):
-            messages.error(request, "Permission denied.")
+        if not _user_can_finalize_computation(request.user):
+            messages.error(
+                request,
+                "Only a CENRO administrator can finalize the computation letter and send it to the customer.",
+            )
             return redirect("services:request_detail", pk=pk)
         action = request.POST.get("action") or "finalize"
         if action == "finalize":
+            from .computation_flow import computation_finalize_blockers
+
+            if not computation.ready_to_finalize:
+                messages.error(
+                    request,
+                    "Save the computation with Save & Recalculate on the edit screen first, then return here to finalize and send.",
+                )
+                return redirect("services:view_computation", pk=pk)
+
             sig = request.FILES.get("prepared_by_signature")
             if sig:
                 computation.prepared_by_signature = sig
+
+            blockers = computation_finalize_blockers(
+                service_request, computation, uploaded_signature=sig
+            )
+            if blockers:
+                for msg in blockers:
+                    messages.error(request, msg)
+                if sig:
+                    computation.save(update_fields=["prepared_by_signature", "updated_at"])
+                return redirect("services:view_computation", pk=pk)
+
             computation.prepared_by = request.user
             computation.is_finalized = True
             computation.finalized_at = timezone.now()
+            computation.ready_to_finalize = False
             computation.save()
 
-            service_request.status = ServiceRequest.Status.COMPUTATION_SENT
-            service_request.fee_amount = computation.total_charge
-            service_request.save(update_fields=["status", "fee_amount"])
+            from dashboard.models import ServiceComputation
+
+            computation.refresh_from_db()
+            if computation.payment_status == ServiceComputation.PaymentStatus.FREE:
+                service_request.status = ServiceRequest.Status.PAID
+                service_request.payment_confirmed_at = timezone.now()
+                service_request.fee_amount = computation.total_charge
+                service_request.save(
+                    update_fields=["status", "fee_amount", "payment_confirmed_at", "updated_at"]
+                )
+                free_msg = (
+                    "Your computation letter is ready. No treasurer payment is required for this request "
+                    "(public property within Bayawan City, BAWAD zero-charge eligibility, or other waived total). "
+                    "You can view and download the letter; staff may schedule desludging next."
+                )
+            else:
+                service_request.status = ServiceRequest.Status.COMPUTATION_SENT
+                service_request.fee_amount = computation.total_charge
+                service_request.save(update_fields=["status", "fee_amount", "updated_at"])
+                free_msg = "Your computation letter is ready. You can now view and download it."
 
             # Notify the account owner (consumer) and, if different, the account that submitted the request.
             Notification.objects.create(
                 user=service_request.consumer,
-                message="Your computation letter is ready. You can now view and download it.",
+                message=free_msg,
                 notification_type=Notification.NotificationType.COMPUTATION_READY,
                 related_request=service_request,
             )
             if service_request.requested_by and service_request.requested_by != service_request.consumer:
                 Notification.objects.create(
                     user=service_request.requested_by,
-                    message="Your computation letter is ready. You can now view and download it.",
+                    message=free_msg,
                     notification_type=Notification.NotificationType.COMPUTATION_READY,
                     related_request=service_request,
                 )
@@ -2113,8 +2721,10 @@ def view_computation(request, pk):
             computation.personnel_count = desired_personnel
             computation.save()
 
-    # Only admin may see unfinalized computation; consumer and requested_by see it only after finalization.
-    if not request.user.is_admin() and not computation.is_finalized:
+    computation.refresh_from_db()
+
+    # Consumers / requested_by may only see the letter after finalization; only admins may preview drafts.
+    if not _user_can_finalize_computation(request.user) and not computation.is_finalized:
         messages.info(request, "The computation is still being finalized by the administrator.")
         return redirect("services:request_detail", pk=pk)
 
@@ -2131,11 +2741,18 @@ def view_computation(request, pk):
     if computation.prepared_by_signature:
         prepared_by_signature_url = request.build_absolute_uri(computation.prepared_by_signature.url)
 
+    can_finalize_letter = (
+        _user_can_finalize_computation(request.user)
+        and not computation.is_finalized
+        and computation.ready_to_finalize
+    )
+
     return render(request, "services/computation_letter.html", {
         "sr": service_request,
         "comp": computation,
         "address_display": address_display,
         "prepared_by_signature_url": prepared_by_signature_url,
+        "can_finalize_letter": can_finalize_letter,
     })
 
 
@@ -2143,23 +2760,16 @@ def view_computation(request, pk):
 def download_computation_pdf(request, pk):
     """Generate and return the computation letter as a PDF download."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
-    # Only admin, consumer, or requested_by may download. Staff/inspector may not.
-    can_view = (
-        request.user.is_admin()
-        or service_request.consumer == request.user
-        or (service_request.requested_by and service_request.requested_by == request.user)
-    )
-    if not can_view:
-        messages.error(request, "Permission denied.")
+    if not _user_can_access_computation_letter(request.user, service_request):
+        _message_computation_letter_access_denied(request, service_request)
         return redirect("services:request_list")
 
     computation = getattr(service_request, "computation", None)
     if not computation:
-        messages.warning(request, "Computation not yet available.")
+        messages.warning(request, _COMPUTATION_NOT_READY_MSG)
         return redirect("services:request_detail", pk=pk)
 
-    # Only admin may download unfinalized PDF; others only after finalization.
-    if not request.user.is_admin() and not computation.is_finalized:
+    if not _user_can_finalize_computation(request.user) and not computation.is_finalized:
         messages.info(request, "The computation is still being finalized by the administrator.")
         return redirect("services:request_detail", pk=pk)
 
@@ -2168,7 +2778,8 @@ def download_computation_pdf(request, pk):
     except ImportError:
         messages.error(
             request,
-            "PDF download is not available. Install xhtml2pdf: pip install xhtml2pdf",
+            "PDF download is not enabled on this server (the xhtml2pdf library is missing). "
+            "Ask your system administrator to install it, or use Print from the letter page in your browser.",
         )
         return redirect("services:view_computation", pk=pk)
 
@@ -2199,7 +2810,6 @@ def download_computation_pdf(request, pk):
     bayawan_logo_url = request.build_absolute_uri(static("img/bayawan_logo.png"))
     cenro_logo_url = request.build_absolute_uri(static("img/cenro_logo.png"))
     bagong_pilipinas_logo_url = request.build_absolute_uri(static("img/bagong_pilipinas_logo.png"))
-    default_signature_url = request.build_absolute_uri(static("signatures/signature.png"))
 
     template = get_template("services/computation_letter_pdf.html")
     html = template.render({
@@ -2207,7 +2817,6 @@ def download_computation_pdf(request, pk):
         "comp": computation,
         "address_display": address_display,
         "prepared_by_signature_path": prepared_by_signature_path,
-        "default_signature_url": default_signature_url,
         "pdf_body_font_stack": pdf_body_font_stack,
         "bayawan_logo_url": bayawan_logo_url,
         "cenro_logo_url": cenro_logo_url,
@@ -2220,7 +2829,11 @@ def download_computation_pdf(request, pk):
         encoding="utf-8",
     )
     if pdf.err:
-        messages.error(request, "PDF generation failed.")
+        messages.error(
+            request,
+            f"The PDF could not be built from the computation letter (request #{service_request.pk}). "
+            "Try again, or use your browser's print option on the letter page. If it keeps failing, contact support.",
+        )
         return redirect("services:view_computation", pk=pk)
 
     filename = f"computation-ECO-{service_request.created_at.year}-{service_request.id:03d}.pdf"
@@ -2230,24 +2843,43 @@ def download_computation_pdf(request, pk):
 
 
 @login_required
-@role_required("ADMIN", "STAFF")
+@role_required("ADMIN")
 def edit_computation(request, pk):
-    """Edit computation (admin/staff only). Recalculates charges on save.
-    Admin can also finalize the computation, attach a signature, and send to customer.
-    """
+    """Edit computation (admin only). Recalculates charges on save; finalize on the letter view."""
     from dashboard.forms import ServiceComputationForm
-    from dashboard.models import ServiceComputation
 
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     computation = getattr(service_request, "computation", None)
     if not computation:
-        messages.warning(request, "Computation not yet available.")
+        messages.warning(request, _COMPUTATION_NOT_READY_MSG)
         return redirect("services:request_detail", pk=pk)
+
+    def _apply_computation_distance_help(f):
+        from dashboard.models import ConfigurableRate
+
+        sr = service_request
+        fk = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+        km_free = int(fk) if fk == fk.to_integral_value() else fk
+        if (
+            sr.is_within_bayawan
+            and not computation.is_outside_bayawan
+            and sr.consumer_is_bayawan_city_resident
+        ):
+            f.fields["distance_km"].help_text = (
+                f"Bayawan City resident + service within Bayawan: first {km_free} km are not charged "
+                "for distance travel (enter full km from CENRO; billing uses the distance above that)."
+            )
+        else:
+            f.fields["distance_km"].help_text = (
+                "Distance from CENRO (whole km). First 10 km free only when the customer is a "
+                "Bayawan City resident (profile municipality) and the service location is within Bayawan."
+            )
 
     form = ServiceComputationForm(instance=computation)
     form.fields.pop("charge_category", None)
     form.fields.pop("trips", None)
     form.fields.pop("is_outside_bayawan", None)
+    _apply_computation_distance_help(form)
 
     if request.method == "POST":
         action = request.POST.get("action") or "save"
@@ -2255,6 +2887,7 @@ def edit_computation(request, pk):
         form.fields.pop("charge_category", None)
         form.fields.pop("trips", None)
         form.fields.pop("is_outside_bayawan", None)
+        _apply_computation_distance_help(form)
         if form.is_valid():
             form.save()
 
@@ -2265,36 +2898,22 @@ def edit_computation(request, pk):
 
             service_request.fee_amount = computation.total_charge
 
+            service_request.save(update_fields=["fee_amount"])
+            computation.ready_to_finalize = True
             if action == "finalize":
-                # Attach preparer info, mark finalized, send notifications
-                computation.prepared_by = request.user
-                computation.is_finalized = True
-                computation.finalized_at = timezone.now()
-                service_request.status = ServiceRequest.Status.COMPUTATION_SENT
-                service_request.save(update_fields=["fee_amount", "status"])
-
-                Notification.objects.create(
-                    user=service_request.consumer,
-                    message="Your computation letter is ready. You can now view and download it.",
-                    notification_type=Notification.NotificationType.COMPUTATION_READY,
-                    related_request=service_request,
+                messages.info(
+                    request,
+                    "Finalize and send is only on the computation letter. Your changes were saved — open the letter and use Finalize & Send when ready.",
                 )
-                if service_request.requested_by and service_request.requested_by != service_request.consumer:
-                    Notification.objects.create(
-                        user=service_request.requested_by,
-                        message="Your computation letter is ready. You can now view and download it.",
-                        notification_type=Notification.NotificationType.COMPUTATION_READY,
-                        related_request=service_request,
-                    )
-                messages.success(request, "Computation finalized, signed, and sent to the customer.")
             else:
-                # For non-finalized edits, ensure we persist any updated signature or charge changes.
-                computation.is_finalized = False
-                computation.save(update_fields=["is_finalized"])
-                service_request.save(update_fields=["fee_amount"])
-                messages.success(request, "Computation updated. Charges recalculated.")
-
+                messages.success(
+                    request,
+                    "Computation updated. Charges recalculated. Review the letter to finalize and send.",
+                )
             computation.save()
+            from dashboard.models import ServiceComputation
+
+            ServiceComputation.objects.filter(pk=computation.pk).update(ready_to_finalize=True)
             return redirect("services:view_computation", pk=pk)
 
     prepared_by_signature_url = None
@@ -2317,7 +2936,7 @@ def edit_computation(request, pk):
 def upload_receipt(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_act_on_request(request.user, service_request):
-        messages.error(request, "Permission denied.")
+        _message_receipt_upload_denied(request)
         return redirect("services:request_list")
 
     if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
@@ -2332,13 +2951,20 @@ def upload_receipt(request, pk):
         ):
             messages.error(
                 request,
-                "You cannot upload a Treasurer payment receipt for this request at its current status.",
+                f"Treasurer payment receipts for Grass Cutting can only be uploaded while the request is waiting for payment "
+                f"or still being set up. Current status: {service_request.get_status_display()}. "
+                "Open the request detail page to see the current step.",
             )
             return redirect("services:request_detail", pk=pk)
 
     if request.method == "POST":
         receipt = request.FILES.get("treasurer_receipt")
         if receipt:
+            try:
+                validate_customer_receipt(receipt)
+            except ValidationError as e:
+                messages.error(request, next(iter(e.messages)))
+                return redirect("services:upload_receipt", pk=pk)
             if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
                 with transaction.atomic():
                     service_request.treasurer_receipt = receipt
@@ -2390,13 +3016,23 @@ def upload_receipt(request, pk):
 def inspection_fee_bill(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_act_on_request(request.user, service_request):
-        messages.error(request, "Permission denied.")
+        _message_inspection_fee_page_denied(request)
         return redirect("services:request_list")
     if service_request.service_type not in [
         ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
         ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
     ]:
-        messages.error(request, "Inspection fee is only applicable to desludging requests.")
+        messages.error(
+            request,
+            "The inspection fee bill applies only to residential or commercial septage desludging. "
+            "This request is for a different service type.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    if service_request.qualifies_public_bayawan_no_fees:
+        messages.info(
+            request,
+            "No inspection fee applies — public property within Bayawan City. Open the request for next steps.",
+        )
         return redirect("services:request_detail", pk=pk)
     return render(request, "services/inspection_fee_bill.html", {"sr": service_request, "amount": 150})
 
@@ -2406,13 +3042,22 @@ def download_inspection_fee_bill_pdf(request, pk):
     """Generate and return the inspection fee bill as a PDF download."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_act_on_request(request.user, service_request):
-        messages.error(request, "Permission denied.")
+        _message_inspection_fee_page_denied(request)
         return redirect("services:request_list")
     if service_request.service_type not in [
         ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
         ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
     ]:
-        messages.error(request, "Inspection fee is only applicable to desludging requests.")
+        messages.error(
+            request,
+            "The inspection fee PDF applies only to residential or commercial septage desludging.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    if service_request.qualifies_public_bayawan_no_fees:
+        messages.info(
+            request,
+            "No inspection fee applies — public property within Bayawan City.",
+        )
         return redirect("services:request_detail", pk=pk)
 
     try:
@@ -2420,7 +3065,8 @@ def download_inspection_fee_bill_pdf(request, pk):
     except ImportError:
         messages.error(
             request,
-            "PDF download is not available. Install xhtml2pdf: pip install xhtml2pdf",
+            "PDF download is not enabled on this server (the xhtml2pdf library is missing). "
+            "Use the on-screen bill and print from your browser, or ask an administrator to install xhtml2pdf.",
         )
         return redirect("services:inspection_fee_bill", pk=pk)
 
@@ -2444,7 +3090,11 @@ def download_inspection_fee_bill_pdf(request, pk):
         encoding="utf-8",
     )
     if pdf.err:
-        messages.error(request, "PDF generation failed.")
+        messages.error(
+            request,
+            f"The inspection fee bill PDF could not be generated (request #{service_request.pk}). "
+            "Try again or print the bill page from your browser.",
+        )
         return redirect("services:inspection_fee_bill", pk=pk)
 
     filename = f"inspection-fee-bill-{service_request.id:03d}.pdf"
@@ -2457,7 +3107,7 @@ def download_inspection_fee_bill_pdf(request, pk):
 def upload_inspection_fee_receipt(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_act_on_request(request.user, service_request):
-        messages.error(request, "Permission denied.")
+        _message_inspection_fee_page_denied(request)
         return redirect("services:request_list")
 
     allowed_upload_statuses = (
@@ -2467,13 +3117,27 @@ def upload_inspection_fee_receipt(request, pk):
     if service_request.status not in allowed_upload_statuses:
         messages.error(
             request,
-            "Inspection fee receipts can only be uploaded when payment is due or a new receipt is needed.",
+            f"You can upload an inspection fee receipt only while the request is 'Inspection Fee Due' or "
+            f"awaiting verification. Current status: {service_request.get_status_display()}. "
+            "Open the request detail page for the next step.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    if service_request.qualifies_public_bayawan_no_fees:
+        messages.info(
+            request,
+            "No inspection fee receipt is required — public property within Bayawan City.",
         )
         return redirect("services:request_detail", pk=pk)
 
     if request.method == "POST":
         receipt = request.FILES.get("inspection_fee_receipt")
         if receipt:
+            try:
+                validate_customer_receipt(receipt)
+            except ValidationError as e:
+                messages.error(request, next(iter(e.messages)))
+                return redirect("services:upload_inspection_fee", pk=pk)
             with transaction.atomic():
                 old_receipt = service_request.inspection_fee_receipt
                 if old_receipt:
@@ -2508,7 +3172,7 @@ def view_inspection_fee_receipt(request, pk):
     """Serve the uploaded inspection fee receipt so admins can view it reliably."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_view_request_uploaded_files(request.user, service_request):
-        messages.error(request, "Permission denied.")
+        _message_uploaded_file_access_denied(request, service_request, "the inspection fee receipt")
         return redirect("services:request_list")
     if not service_request.inspection_fee_receipt:
         messages.error(request, "No inspection fee receipt uploaded for this request.")
@@ -2520,11 +3184,41 @@ def view_inspection_fee_receipt(request, pk):
         messages.error(request, "The uploaded inspection fee receipt file could not be found on the server.")
         return redirect("services:request_detail", pk=pk)
 
-    return FileResponse(receipt_file, as_attachment=False)
+    ctype, _ = mimetypes.guess_type(service_request.inspection_fee_receipt.name or "")
+    if not ctype:
+        ctype = "application/octet-stream"
+    return FileResponse(receipt_file, as_attachment=False, content_type=ctype)
+
+
+@login_required
+def view_location_photo(request, pk, slot):
+    """Serve location photos with the same access rules as payment receipts (login + role)."""
+    if slot not in (1, 2):
+        raise Http404()
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if not _can_view_request_uploaded_files(request.user, service_request):
+        _message_uploaded_file_access_denied(request, service_request, "this location photo")
+        return redirect("services:request_list")
+    field = service_request.location_photo_1 if slot == 1 else service_request.location_photo_2
+    if not field:
+        messages.error(
+            request,
+            f"No location photo #{slot} was uploaded for request #{service_request.pk}.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    try:
+        photo_file = field.open("rb")
+    except FileNotFoundError:
+        messages.error(request, "The location photo file could not be found on the server.")
+        return redirect("services:request_detail", pk=pk)
+    ctype, _ = mimetypes.guess_type(field.name or "")
+    if not ctype or ctype == "application/octet-stream":
+        ctype = "image/jpeg"
+    return FileResponse(photo_file, as_attachment=False, content_type=ctype)
 
 
 def _can_view_request_uploaded_files(user, service_request):
-    """Who may open uploaded receipt files (served outside /media/)."""
+    """Who may open uploaded receipts and location photos (served outside /media/)."""
     if _can_act_on_request(user, service_request):
         return True
     if user.is_staff_member() and service_request.assigned_inspector_id == user.id:
@@ -2542,7 +3236,7 @@ def view_treasurer_receipt(request, pk):
     """Serve the treasurer payment receipt reliably (avoids broken /media/ URLs in dev)."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if not _can_view_request_uploaded_files(request.user, service_request):
-        messages.error(request, "Permission denied.")
+        _message_uploaded_file_access_denied(request, service_request, "the Treasurer payment receipt")
         return redirect("services:request_list")
     if not service_request.treasurer_receipt:
         messages.error(request, "No payment receipt uploaded for this request.")
@@ -2554,7 +3248,10 @@ def view_treasurer_receipt(request, pk):
         messages.error(request, "The uploaded payment receipt file could not be found on the server.")
         return redirect("services:request_detail", pk=pk)
 
-    return FileResponse(receipt_file, as_attachment=False)
+    ctype, _ = mimetypes.guess_type(service_request.treasurer_receipt.name or "")
+    if not ctype:
+        ctype = "application/octet-stream"
+    return FileResponse(receipt_file, as_attachment=False, content_type=ctype)
 
 
 # ---------------------------------------------------------------------------
@@ -2664,4 +3361,7 @@ def mark_all_notifications_read(request):
     if request.method == "POST":
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return JsonResponse({"ok": True})
-    return JsonResponse({"ok": False}, status=405)
+    return JsonResponse(
+        {"ok": False, "error": "This action requires POST (use the Mark all read control in the app)."},
+        status=405,
+    )

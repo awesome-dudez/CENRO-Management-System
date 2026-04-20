@@ -37,23 +37,24 @@
     }
     .letter-logos-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .letter-logos-right { display: flex; align-items: center; }
+    .letter-logo-bayawan { margin-top: 10px; }
 </style>
 <div class="form-container">
     <div class="form-card">
         <div class="edit-letter-header">
             <div class="letter-logos">
                 <div class="letter-logos-left">
-                    <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:96px;width:auto;">
-                    <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:52px;width:auto;">
+                    <img class="letter-logo-bayawan" src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:102px;width:auto;">
+                    <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:56px;width:auto;">
                 </div>
                 <div class="letter-logos-right">
-                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:56px;width:auto;">
+                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:60px;width:auto;">
                 </div>
             </div>
         </div>
         <h2>Edit / Finalize Computation</h2>
         <p class="subtitle">{{ sr.get_service_type_display }} &bull; {{ sr.client_name }}</p>
-        <p class="subtitle" style="margin-top: -12px;">Charges are recalculated automatically when you save. Finalize to attach your signature and send to the customer.</p>
+        <p class="subtitle" style="margin-top: -12px;">Charges are recalculated when you save. The letter is <strong>not</strong> sent from this screen. After Save &amp; Recalculate, open the letter and use <strong>Finalize &amp; Send to Customer</strong> there (admin only).</p>
 
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
@@ -93,23 +94,41 @@
                 {% if form.distance_km.errors %}<div class="form-error">{{ form.distance_km.errors.0 }}</div>{% endif %}
             </div>
 
+            <div class="form-row">
+                <div class="form-group">
+                    <div class="form-check">
+                        {{ form.waive_wear_charge }}
+                        <label for="{{ form.waive_wear_charge.id_for_label }}" style="margin:0; font-weight:600;">{{ form.waive_wear_charge.label }}</label>
+                    </div>
+                    {% if form.waive_wear_charge.errors %}<div class="form-error">{{ form.waive_wear_charge.errors.0 }}</div>{% endif %}
+                    <p style="font-size:12px;color:#666;margin:6px 0 0 28px;">Set to zero the wear portion (normally 20% of fixed trucking + distance travel).</p>
+                </div>
+                <div class="form-group">
+                    <div class="form-check">
+                        {{ form.waive_meals_transport_charge }}
+                        <label for="{{ form.waive_meals_transport_charge.id_for_label }}" style="margin:0; font-weight:600;">{{ form.waive_meals_transport_charge.label }}</label>
+                    </div>
+                    {% if form.waive_meals_transport_charge.errors %}<div class="form-error">{{ form.waive_meals_transport_charge.errors.0 }}</div>{% endif %}
+                    <p style="font-size:12px;color:#666;margin:6px 0 0 28px;">Set to zero the meals &amp; transportation charge (per personnel allowance).</p>
+                </div>
+            </div>
+
             <div class="form-group">
-                <label>Prepared by signature (optional until finalization)</label>
+                <label>Prepared by signature <span style="color:#c0392b;">(required to send)</span></label>
                 <div style="margin-bottom:8px;">
                     {% if prepared_by_signature_url %}
                     <img src="{{ prepared_by_signature_url }}" alt="Current signature" style="max-height:80px; display:block;">
                     {% else %}
-                    <img src="{% static 'signatures/signature.png' %}" alt="Current signature" style="max-height:80px; display:block;">
+                    <div style="min-height:80px; max-width:220px; border-bottom:1px solid #ccc; color:#999; font-size:13px; padding-top:8px;">No signature uploaded yet.</div>
                     {% endif %}
                 </div>
                 <input type="file" name="prepared_by_signature" accept="image/*">
-                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a scanned or digital signature that will appear on the computation letter.</p>
+                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a signature image. It is required before an admin can finalize and send the letter.</p>
             </div>
 
             <div class="btn-row">
                 <a href="{% url 'services:view_computation' sr.pk %}" class="btn btn-secondary">Cancel</a>
                 <button type="submit" name="action" value="save" class="btn btn-primary">Save &amp; Recalculate</button>
-                <button type="submit" name="action" value="finalize" class="btn btn-primary">Finalize &amp; Send to Customer</button>
             </div>
         </form>
     </div>

@@ -19,6 +19,8 @@ class ServiceComputationForm(forms.ModelForm):
             'is_outside_bayawan',
             'distance_km',
             'payment_status',
+            'waive_wear_charge',
+            'waive_meals_transport_charge',
         ]
         widgets = {
             'charge_category': forms.Select(attrs={'class': 'form-control'}),
@@ -36,6 +38,12 @@ class ServiceComputationForm(forms.ModelForm):
                 'placeholder': 'Distance in km',
             }),
             'payment_status': forms.Select(attrs={'class': 'form-control'}),
+            'waive_wear_charge': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'waive_meals_transport_charge': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'waive_wear_charge': 'Waive wear & tear (20%)',
+            'waive_meals_transport_charge': 'Waive meals & transportation',
         }
 
 
@@ -169,6 +177,19 @@ class QuickComputationForm(forms.Form):
         return value
 
 
+class OptionalWholeNumberM3Field(forms.IntegerField):
+    """Optional integer m³; blank HTML number inputs submit '' — treat as missing."""
+
+    def to_python(self, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if value == "":
+                return None
+        return super().to_python(value)
+
+
 class PreviousAccountRegistrationForm(forms.Form):
     first_name = forms.CharField(
         max_length=30,
@@ -203,22 +224,29 @@ class PreviousAccountRegistrationForm(forms.Form):
         initial="Negros Oriental",
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
-    prior_desludging_m3_4y = forms.DecimalField(
+    prior_desludging_m3_4y = OptionalWholeNumberM3Field(
         required=False,
-        min_value=Decimal("0"),
-        initial=Decimal("0"),
-        max_digits=7,
-        decimal_places=2,
+        min_value=0,
+        initial=0,
         widget=forms.NumberInput(
             attrs={
                 "class": "form-control",
-                "step": "0.01",
+                "step": "1",
                 "min": "0",
-                "placeholder": "0.00",
+                "placeholder": "0",
+                "inputmode": "numeric",
             }
         ),
-        label="Past 4-year desludging volume (m³)",
+        label="Past 4-year desludging volume (m³, whole numbers)",
     )
+    last_cycle_request_date = forms.DateField(
+        required=False,
+        label="Last request for cycle (date)",
+        widget=forms.DateInput(
+            attrs={"class": "form-control", "type": "date"},
+        ),
+    )
+
     def clean_mobile_number(self):
         num = (self.cleaned_data.get("mobile_number") or "").strip()
         if not num:
@@ -230,9 +258,22 @@ class PreviousAccountRegistrationForm(forms.Form):
 
     def clean_prior_desludging_m3_4y(self):
         value = self.cleaned_data.get("prior_desludging_m3_4y")
-        if value in (None, ""):
-            return Decimal("0")
-        return value
+        if value is None:
+            return 0
+        return int(value)
+
+    def clean(self):
+        cleaned = super().clean()
+        vol = cleaned.get("prior_desludging_m3_4y")
+        if vol is None:
+            vol = 0
+        cycle_date = cleaned.get("last_cycle_request_date")
+        if vol > 0 and not cycle_date:
+            self.add_error(
+                "last_cycle_request_date",
+                "Last service date is required when past 4-year volume is greater than zero.",
+            )
+        return cleaned
 
 
 class MembershipSearchForm(forms.Form):

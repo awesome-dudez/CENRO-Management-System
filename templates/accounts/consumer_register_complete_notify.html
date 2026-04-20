@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Registration complete</title>
+    <style>
+        body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #eef2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+        .card { background: #fff; border-radius: 12px; padding: 28px; max-width: 440px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid #e0e8ec; }
+        h1 { margin: 0 0 12px; font-size: 1.2rem; color: #2d3142; }
+        p { margin: 0 0 20px; color: #555; line-height: 1.55; font-size: 14px; }
+        .actions { display: flex; flex-direction: column; gap: 10px; }
+        button { padding: 12px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; border: none; }
+        .btn-primary { background: #1abc9c; color: #fff; }
+        .btn-primary:hover { background: #16a085; }
+        .btn-secondary { background: #ecf0f1; color: #2d3142; }
+        .btn-secondary:hover { background: #dde4e6; }
+        .hint { margin-top: 16px; font-size: 13px; color: #888; display: none; }
+        .hint.is-visible { display: block; }
+        .sub { font-size: 13px; color: #888; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <div class="card" role="dialog" aria-labelledby="regChoiceTitle" aria-modal="true">
+        <h1 id="regChoiceTitle">Customer registration complete</h1>
+        <p class="sub">Your new account is ready. Choose how to continue.</p>
+        <div class="actions">
+            <button type="button" class="btn-primary" id="btnUseNewAccount">Use new account for service request</button>
+            <button type="button" class="btn-secondary" id="btnContinuePrevious">Continue with my current account</button>
+        </div>
+        <p class="hint" id="closeTabHint">If this tab did not close automatically, close it manually to return to your previous tab and continue there.</p>
+        <p class="hint" id="noOpenerHint">This window was not opened from the service request page. You can <a href="{{ dashboard_url }}">go to the dashboard</a> or close this tab.</p>
+    </div>
+    <script>
+    (function() {
+        var createUrl = "{{ service_request_create_url|escapejs }}";
+        var origin = window.location.origin;
+        var btnNew = document.getElementById('btnUseNewAccount');
+        var btnPrev = document.getElementById('btnContinuePrevious');
+        var closeHint = document.getElementById('closeTabHint');
+        var noOpenerHint = document.getElementById('noOpenerHint');
+
+        function hasOpener() {
+            try {
+                return window.opener && !window.opener.closed;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        if (!hasOpener()) {
+            noOpenerHint.classList.add('is-visible');
+        }
+
+        btnNew.addEventListener('click', function() {
+            window.location.href = createUrl;
+        });
+
+        btnPrev.addEventListener('click', function() {
+            try {
+                if (hasOpener()) {
+                    window.opener.postMessage({ type: 'cenro_reg_continue_previous', ts: Date.now() }, origin);
+                }
+            } catch (e) {}
+            window.close();
+            setTimeout(function() {
+                if (!document.hidden) {
+                    closeHint.classList.add('is-visible');
+                }
+            }, 400);
+        });
+    })();
+    </script>
+</body>
+</html>

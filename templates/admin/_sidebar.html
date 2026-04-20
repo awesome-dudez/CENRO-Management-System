@@ -27,6 +27,10 @@ Icons beside each item; active page highlighted.
             <span class="admin-sidebar-icon" aria-hidden="true">🧑‍💼</span>
             <span>Staff</span>
         </a>
+        <a href="{% url 'dashboard:admin_equipment' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'admin_equipment' %}active{% endif %}">
+            <span class="admin-sidebar-icon" aria-hidden="true">🚛</span>
+            <span>Equipment</span>
+        </a>
         <a href="{% url 'dashboard:admin_computation' %}" class="admin-sidebar-link {% if 'admin_computation' in request.resolver_match.url_name or 'generate_receipt' in request.resolver_match.url_name %}active{% endif %}">
             <span class="admin-sidebar-icon" aria-hidden="true">💰</span>
             <span>Computation</span>
@@ -37,7 +41,7 @@ Icons beside each item; active page highlighted.
         </a>
         <a href="{% url 'dashboard:admin_analytics' %}" class="admin-sidebar-link {% if request.resolver_match.url_name == 'admin_analytics' %}active{% endif %}">
             <span class="admin-sidebar-icon" aria-hidden="true">📈</span>
-            <span>Analytics</span>
+            <span>Statistics</span>
         </a>
         {% endif %}
     </nav>

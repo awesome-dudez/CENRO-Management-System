@@ -6,8 +6,34 @@ from django.core.files.uploadedfile import UploadedFile
 
 from .models import ServiceRequest
 
-LOCATION_PHOTO_ALLOWED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
-LOCATION_PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5MB
+LOCATION_PHOTO_ALLOWED_EXTENSIONS = (
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+)
+LOCATION_PHOTO_MAX_SIZE_BYTES = 20 * 1024 * 1024  # 20MB
+
+LOCATION_PHOTO_ACCEPT_HTML = (
+    "image/jpeg,image/jpg,image/png,image/webp,image/gif,image/bmp,image/tiff,.tif,.tiff"
+)
+
+RECEIPT_UPLOAD_ALLOWED_EXTENSIONS = (
+    ".pdf",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+)
+RECEIPT_UPLOAD_MAX_SIZE_BYTES = 20 * 1024 * 1024  # 20MB
 
 
 def validate_location_photo(uploaded_file: UploadedFile) -> None:
@@ -16,11 +42,26 @@ def validate_location_photo(uploaded_file: UploadedFile) -> None:
     name = (uploaded_file.name or "").lower()
     if not any(name.endswith(ext) for ext in LOCATION_PHOTO_ALLOWED_EXTENSIONS):
         raise forms.ValidationError(
-            "Only image files are allowed (JPG, JPEG, PNG, WEBP)."
+            "Only image files are allowed (JPG, JPEG, PNG, WEBP, GIF, BMP, or TIFF)."
         )
     if uploaded_file.size > LOCATION_PHOTO_MAX_SIZE_BYTES:
         raise forms.ValidationError(
-            f"File size must be 5MB or less (current: {uploaded_file.size / (1024*1024):.1f}MB)."
+            f"File size must be 20MB or less (current: {uploaded_file.size / (1024*1024):.1f}MB)."
+        )
+
+
+def validate_customer_receipt(uploaded_file: UploadedFile) -> None:
+    """Treasurer / payment receipts and inspection fee receipts (images or PDF)."""
+    if not uploaded_file:
+        raise forms.ValidationError("Please select a file to upload.")
+    name = (uploaded_file.name or "").lower()
+    if not any(name.endswith(ext) for ext in RECEIPT_UPLOAD_ALLOWED_EXTENSIONS):
+        raise forms.ValidationError(
+            "Allowed types: PDF, JPG, JPEG, PNG, WEBP, GIF, BMP, or TIFF (max 20MB each)."
+        )
+    if uploaded_file.size > RECEIPT_UPLOAD_MAX_SIZE_BYTES:
+        raise forms.ValidationError(
+            f"File must be 20MB or less (current: {uploaded_file.size / (1024*1024):.1f}MB)."
         )
 from .geocode import address_in_bayawan, extract_barangay, reverse_geocode_osm
 from .location import detect_barangay_for_point, nearest_barangay, within_service_bounds
@@ -143,7 +184,7 @@ class ServiceRequestStep2Form(forms.Form):
         required=False,
         widget=forms.FileInput(attrs={
             "class": "form-control location-photo-input",
-            "accept": "image/jpeg,image/jpg,image/png,image/webp",
+            "accept": LOCATION_PHOTO_ACCEPT_HTML,
         }),
         label="Location photo 1",
     )
@@ -151,7 +192,7 @@ class ServiceRequestStep2Form(forms.Form):
         required=False,
         widget=forms.FileInput(attrs={
             "class": "form-control location-photo-input",
-            "accept": "image/jpeg,image/jpg,image/png,image/webp",
+            "accept": LOCATION_PHOTO_ACCEPT_HTML,
         }),
         label="Location photo 2",
     )

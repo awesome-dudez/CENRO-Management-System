@@ -349,6 +349,13 @@ body.consumer-view .notif-badge {
     position: relative; z-index: 1;
 }
 
+@media (max-width: 640px) {
+    .ce-welcome-banner {
+        padding: 22px 18px;
+        margin-bottom: 20px;
+    }
+}
+
 /* ============================================================
    STAT CARDS — Glassmorphism + Hover Lift
    ============================================================ */
@@ -666,7 +673,7 @@ body.consumer-view .notif-badge {
 
 .ce-search-input {
     flex: 1;
-    min-width: 200px;
+    min-width: 0;
     padding: 11px 16px;
     border-radius: 12px;
     border: 1.5px solid var(--ce-input-border);
@@ -853,6 +860,33 @@ body.consumer-view .notif-badge {
     100% { background-position: 100% 50%; }
 }
 
+@media (max-width: 640px) {
+    .ce-stepper {
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-start;
+        max-width: 100%;
+        margin: 20px 0;
+        padding: 0 4px 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+    .ce-step {
+        flex: 0 0 auto;
+    }
+    .ce-step-connector {
+        flex: 0 0 18px;
+        min-width: 12px;
+        margin-bottom: 28px;
+    }
+    .ce-step-label {
+        font-size: 10px;
+        max-width: 76px;
+        line-height: 1.2;
+    }
+}
+
 /* ============================================================
    SERVICE REQUEST WIZARD CARD
    ============================================================ */
@@ -869,7 +903,13 @@ body.consumer-view .notif-badge {
 }
 
 @media (max-width: 600px) {
-    .ce-wizard-card { padding: 20px 16px; }
+    .ce-wizard-card {
+        padding: 20px 16px;
+        max-width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        border-radius: 16px;
+    }
 }
 
 .ce-wizard-card h2 {
@@ -896,6 +936,14 @@ body.consumer-view .notif-badge {
     border-color: #1e7a4d !important;
     box-shadow: 0 0 0 3px rgba(30,122,77,0.12) !important;
     outline: none !important;
+}
+
+@media (max-width: 767px) {
+    .ce-wizard-card select,
+    .ce-wizard-card input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    .ce-wizard-card textarea {
+        font-size: 16px !important;
+    }
 }
 
 /* Next / Cancel buttons */
@@ -999,12 +1047,31 @@ body.consumer-view .notif-badge {
    ============================================================ */
 body.consumer-view .main-content .container {
     max-width: 1100px;
+    width: 100%;
     margin: 0 auto;
     padding: 24px 20px 48px;
+    box-sizing: border-box;
 }
 
 @media (max-width: 768px) {
     body.consumer-view .main-content .container {
         padding: 16px 12px 40px;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .ce-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .ce-filter-bar .ce-search-input,
+    .ce-filter-bar .ce-filter-select {
+        width: 100%;
+        max-width: none;
+    }
+    body.consumer-view .main-content img {
+        max-width: 100%;
+        height: auto;
     }
 }

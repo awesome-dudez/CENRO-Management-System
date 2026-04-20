@@ -48,6 +48,27 @@
         </p>
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
+            {% if personnel_schedule_conflicts %}
+            <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:14px 16px;margin-bottom:18px;color:#856404;">
+                <strong>Scheduling overlap</strong>
+                <p style="margin:8px 0 0;font-size:14px;">The same date and time are already saved for another request with overlapping crew:</p>
+                <ul style="margin:8px 0 0 18px;font-size:14px;">
+                    {% for c in personnel_schedule_conflicts %}
+                    <li>Request #{{ c.request_id }} ({{ c.client_name }}) — matches: {{ c.overlap_names|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+                <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:14px;cursor:pointer;">
+                    <input type="checkbox" name="override_personnel_schedule_overlap" value="1" style="width:auto;margin-top:3px;">
+                    <span>I understand and want to save anyway (override overlap warning).</span>
+                </label>
+            </div>
+            {% endif %}
+
+            {% if sr.scheduled_desludging_date %}
+            <p style="font-size:13px;color:#555;margin:-8px 0 16px;">Scheduled desludging: <strong>{{ sr.scheduled_desludging_date|date:"M d, Y" }}</strong> (crew overlap checks use this date and the time in the request notes).</p>
+            {% else %}
+            <p style="font-size:13px;color:#888;margin:-8px 0 16px;">No desludging date/time on file yet — crew overlap with other jobs is checked only after scheduling.</p>
+            {% endif %}
 
             {% if sr.inspection_date or sr.inspection_detail %}
             <div class="section-title" style="margin-top:0;">Inspection Summary</div>
@@ -67,36 +88,86 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label>Declogger No.</label>
-                    <input type="text" name="declogger_no" placeholder="Equipment ID">
+                    <label>Declogger / equipment</label>
+                    {% if service_equipment %}
+                    <select name="equipment_id" id="id_equipment_id" class="form-control">
+                        <option value="">— None —</option>
+                        {% for eq in service_equipment %}
+                        <option value="{{ eq.pk }}"{% if posted.equipment_id == eq.pk|stringformat:"s" %} selected{% endif %}>{{ eq.unit_number }}{% if eq.notes %} — {{ eq.notes }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <p style="font-size:12px;color:#666;margin-top:6px;">Manage the list under <strong>Equipment</strong> in the admin sidebar.</p>
+                    {% else %}
+                    <p style="font-size:13px;color:#c0392b;margin:0;">No equipment on file. Add units under <strong>Equipment</strong> before completing this job.</p>
+                    <input type="hidden" name="equipment_id" value="">
+                    {% endif %}
                 </div>
             </div>
 
             <div class="section-title">Driver</div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Driver Name <span style="color:red">*</span></label>
-                    <input type="text" name="driver_name" required placeholder="Full name">
+                    <label>Driver <span style="color:red">*</span></label>
+                    {% if personnel_drivers %}
+                    <select name="driver_name" id="id_driver_name" class="form-control" required>
+                        <option value="">— Select driver —</option>
+                        {% for p in personnel_drivers %}
+                        <option value="{{ p.full_name }}" {% if posted.driver_name == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <p style="font-size:12px;color:#666;margin-top:6px;">Manage the list under <strong>Staff</strong> → Drivers &amp; Helpers.</p>
+                    {% else %}
+                    <input type="text" name="driver_name" required placeholder="Full name" value="{{ posted.driver_name }}">
+                    <p style="font-size:12px;color:#c0392b;margin-top:6px;">No drivers on file. Add drivers under <strong>Staff</strong> for dropdown selection.</p>
+                    {% endif %}
                 </div>
             </div>
 
             <div class="section-title">Support / Helpers (up to 3)</div>
+            <p style="font-size:12px;color:#666;margin:-6px 0 12px;">Each helper must be a different person. The driver cannot be listed as a helper.</p>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Helper 1 Name</label>
-                    <input type="text" name="helper1_name" placeholder="Full name">
+                    <label>Helper 1</label>
+                    {% if personnel_helpers %}
+                    <select name="helper1_name" id="id_helper1_name" class="form-control completion-helper-select">
+                        <option value="">— None —</option>
+                        {% for p in personnel_helpers %}
+                        <option value="{{ p.full_name }}" {% if posted.helper1_name == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="text" name="helper1_name" placeholder="Full name" value="{{ posted.helper1_name }}">
+                    {% endif %}
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Helper 2 Name</label>
-                    <input type="text" name="helper2_name" placeholder="Full name">
+                    <label>Helper 2</label>
+                    {% if personnel_helpers %}
+                    <select name="helper2_name" id="id_helper2_name" class="form-control completion-helper-select">
+                        <option value="">— None —</option>
+                        {% for p in personnel_helpers %}
+                        <option value="{{ p.full_name }}" {% if posted.helper2_name == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="text" name="helper2_name" placeholder="Full name" value="{{ posted.helper2_name }}">
+                    {% endif %}
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Helper 3 Name</label>
-                    <input type="text" name="helper3_name" placeholder="Full name">
+                    <label>Helper 3</label>
+                    {% if personnel_helpers %}
+                    <select name="helper3_name" id="id_helper3_name" class="form-control completion-helper-select">
+                        <option value="">— None —</option>
+                        {% for p in personnel_helpers %}
+                        <option value="{{ p.full_name }}" {% if posted.helper3_name == p.full_name %}selected{% endif %}>{{ p.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="text" name="helper3_name" placeholder="Full name" value="{{ posted.helper3_name }}">
+                    {% endif %}
                 </div>
             </div>
 
@@ -134,6 +205,54 @@ document.addEventListener('DOMContentLoaded', function() {
         fileInput.setAttribute('accept', 'image/*');
         fileInput.setAttribute('capture', 'environment');
     }
+
+    (function completionUniqueCrew() {
+        var driverSel = document.getElementById('id_driver_name');
+        var h1 = document.getElementById('id_helper1_name');
+        var h2 = document.getElementById('id_helper2_name');
+        var h3 = document.getElementById('id_helper3_name');
+        var helpers = [h1, h2, h3].filter(Boolean);
+        if (!helpers.length) return;
+
+        function otherHelperValues(exceptSel) {
+            var out = [];
+            helpers.forEach(function(sel) {
+                if (sel !== exceptSel && sel.value) out.push(sel.value);
+            });
+            return out;
+        }
+
+        function refreshCrewDropdowns() {
+            var driver = driverSel ? driverSel.value : '';
+            var seen = new Set();
+            if (driver) seen.add(driver);
+            helpers.forEach(function(sel) {
+                var v = sel.value;
+                if (!v) return;
+                if (seen.has(v)) sel.value = '';
+                else seen.add(v);
+            });
+            helpers.forEach(function(sel) {
+                var cur = sel.value;
+                var others = otherHelperValues(sel);
+                Array.prototype.forEach.call(sel.options, function(opt) {
+                    if (!opt.value) {
+                        opt.disabled = false;
+                        return;
+                    }
+                    var takenByDriver = driver && opt.value === driver;
+                    var takenByOtherHelper = others.indexOf(opt.value) !== -1;
+                    opt.disabled = (takenByDriver || takenByOtherHelper) && opt.value !== cur;
+                });
+            });
+        }
+
+        if (driverSel) driverSel.addEventListener('change', refreshCrewDropdowns);
+        helpers.forEach(function(sel) {
+            sel.addEventListener('change', refreshCrewDropdowns);
+        });
+        refreshCrewDropdowns();
+    })();
 
     if (canvas && hiddenInput) {
         var ctx = canvas.getContext('2d');

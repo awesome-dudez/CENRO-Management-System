@@ -8,6 +8,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.urls import reverse
+from django.utils.dateparse import parse_date
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -16,8 +17,17 @@ from urllib.parse import urlencode
 from accounts.constants import CONSUMER_DEFAULT_RESET_PASSWORD
 from accounts.decorators import role_required
 from accounts.models import ConsumerProfile, User
-from services.models import ServiceRequest, Notification
+from services.models import ServiceEquipment, ServiceRequest, Notification
 from scheduling.models import Schedule
+
+
+def _membership_consumer_qs():
+    """
+    Consumers shown under Members / Account Management only.
+    Excludes Django staff and superusers so admin/staff accounts never appear here,
+    even if role was left as CONSUMER.
+    """
+    return User.objects.filter(role=User.Role.CONSUMER).exclude(is_superuser=True).exclude(is_staff=True)
 
 
 def _get_dashboard_context(request):
@@ -33,44 +43,47 @@ def _get_dashboard_context(request):
         pass
 
     total_requests = ServiceRequest.objects.count()
-    pending_count = ServiceRequest.objects.filter(
+    # All requests still in the workflow (not finished, cancelled, or expired).
+    pending_count = ServiceRequest.objects.exclude(
         status__in=[
-            ServiceRequest.Status.SUBMITTED,
-            ServiceRequest.Status.UNDER_REVIEW,
-            ServiceRequest.Status.GRASS_PENDING_PAYMENT,
-            ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
+            ServiceRequest.Status.COMPLETED,
+            ServiceRequest.Status.CANCELLED,
+            ServiceRequest.Status.EXPIRED,
         ]
     ).count()
     completed_this_month = ServiceRequest.objects.filter(
         status=ServiceRequest.Status.COMPLETED,
-        request_date__gte=start_of_month,
+        updated_at__date__gte=start_of_month,
     ).count()
 
     last_month_start = (start_of_month - timedelta(days=1)).replace(day=1)
     last_month_completed = ServiceRequest.objects.filter(
         status=ServiceRequest.Status.COMPLETED,
-        request_date__gte=last_month_start,
-        request_date__lt=start_of_month,
+        updated_at__date__gte=last_month_start,
+        updated_at__date__lt=start_of_month,
     ).count()
 
     efficiency_change = 0
     if last_month_completed > 0:
         efficiency_change = ((completed_this_month - last_month_completed) / last_month_completed) * 100
 
+    # Rolling last four calendar weeks (ending today) for trends on analytics.
     weeks_data = []
     for i in range(4):
-        week_start = start_of_month + timedelta(weeks=i)
-        week_end = week_start + timedelta(days=6)
+        weeks_ago = 3 - i
+        week_end = today - timedelta(days=7 * weeks_ago)
+        week_start = week_end - timedelta(days=6)
+        label = f"{week_start.strftime('%b %d')} – {week_end.strftime('%b %d')}"
         incoming = ServiceRequest.objects.filter(
             created_at__date__gte=week_start,
             created_at__date__lte=week_end,
         ).count()
         completed = ServiceRequest.objects.filter(
             status=ServiceRequest.Status.COMPLETED,
-            request_date__gte=week_start,
-            request_date__lte=week_end,
+            updated_at__date__gte=week_start,
+            updated_at__date__lte=week_end,
         ).count()
-        weeks_data.append({"week": f"Week {i+1}", "incoming": incoming, "completed": completed})
+        weeks_data.append({"week": label, "incoming": incoming, "completed": completed})
     weeks_data_json = json.dumps(weeks_data)
 
     residential = ServiceRequest.objects.filter(
@@ -93,6 +106,23 @@ def _get_dashboard_context(request):
         .order_by("-count")[:10]
     )
 
+    equipment_active_count = ServiceEquipment.objects.filter(is_active=True).count()
+    equipment_inactive_count = ServiceEquipment.objects.filter(is_active=False).count()
+    equipment_total_count = equipment_active_count + equipment_inactive_count
+
+    consumer_accounts_count = (
+        User.objects.filter(role=User.Role.CONSUMER, is_active=True)
+        .exclude(is_superuser=True)
+        .count()
+    )
+    staff_active_count = User.objects.filter(
+        role=User.Role.STAFF,
+        is_active=True,
+        is_approved=True,
+    ).count()
+    upcoming_schedules_count = Schedule.objects.filter(service_date__gte=today).count()
+    last_request = ServiceRequest.objects.order_by("-created_at").only("created_at").first()
+
     return {
         "total_requests": total_requests,
         "pending_count": pending_count,
@@ -103,6 +133,13 @@ def _get_dashboard_context(request):
         "commercial_pct": round(commercial_pct, 1),
         "barangay_stats": list(barangay_stats),
         "total_services": total_services,
+        "equipment_active_count": equipment_active_count,
+        "equipment_inactive_count": equipment_inactive_count,
+        "equipment_total_count": equipment_total_count,
+        "consumer_accounts_count": consumer_accounts_count,
+        "staff_active_count": staff_active_count,
+        "upcoming_schedules_count": upcoming_schedules_count,
+        "last_request_at": last_request.created_at if last_request else None,
     }
 
 
@@ -394,23 +431,44 @@ def _get_analytics_payload(request=None):
     }
 
 
+def _map_pin_color_for_status(status: str) -> str:
+    """Stable hex colors for Leaflet markers by request status."""
+    colors = {
+        ServiceRequest.Status.SUBMITTED: "#3498db",
+        ServiceRequest.Status.INSPECTION_FEE_DUE: "#e67e22",
+        ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION: "#ca6f1e",
+        ServiceRequest.Status.EXPIRED: "#7f8c8d",
+        ServiceRequest.Status.UNDER_REVIEW: "#2980b9",
+        ServiceRequest.Status.INSPECTION_SCHEDULED: "#9b59b6",
+        ServiceRequest.Status.INSPECTED: "#8e44ad",
+        ServiceRequest.Status.COMPUTATION_SENT: "#1abc9c",
+        ServiceRequest.Status.AWAITING_PAYMENT: "#f39c12",
+        ServiceRequest.Status.PAID: "#16a085",
+        ServiceRequest.Status.DESLUDGING_SCHEDULED: "#2ecc71",
+        ServiceRequest.Status.COMPLETED: "#1e8449",
+        ServiceRequest.Status.GRASS_PENDING_PAYMENT: "#e74c3c",
+        ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION: "#c0392b",
+        ServiceRequest.Status.CANCELLED: "#95a5a6",
+    }
+    return colors.get(status, "#34495e")
+
+
 @login_required
 @role_required("ADMIN")
 def admin_map_requests(request):
-    """Map view: list of consumers with completed requests (with GPS); click consumer to show their locations on map."""
+    """Map of all requests with GPS: clustered markers, colors by status, filter by status."""
     import json
+
     qs = (
         ServiceRequest.objects.filter(
-            status=ServiceRequest.Status.COMPLETED,
             gps_latitude__isnull=False,
             gps_longitude__isnull=False,
         )
         .select_related("consumer")
-        .order_by("consumer__first_name", "consumer__last_name", "-request_date")
+        .order_by("-updated_at")
     )
-    consumers_seen = set()
-    consumers = []
     requests_list = []
+    statuses_present: set[str] = set()
     for sr in qs:
         try:
             lat = float(sr.gps_latitude)
@@ -419,29 +477,45 @@ def admin_map_requests(request):
             continue
         cid = sr.consumer_id
         cname = (sr.consumer.get_full_name() or sr.consumer.username or "").strip() or "Unknown"
-        if cid not in consumers_seen:
-            consumers_seen.add(cid)
-            consumers.append({"id": cid, "name": cname})
-        date_completed = sr.request_date.strftime("%b %d, %Y") if sr.request_date else ""
-        requests_list.append({
-            "consumer_id": cid,
-            "consumer_name": cname,
-            "client_name": sr.client_name or "",
-            "service_type": sr.get_service_type_display() if sr.service_type else "",
-            "address": sr.address or "",
-            "date_completed": date_completed,
-            "lat": lat,
-            "lng": lng,
-        })
-    consumers_json = json.dumps(consumers)
-    requests_json = json.dumps(requests_list)
+        date_str = sr.request_date.strftime("%b %d, %Y") if sr.request_date else ""
+        st = sr.status
+        statuses_present.add(st)
+        requests_list.append(
+            {
+                "request_id": sr.pk,
+                "consumer_id": cid,
+                "consumer_name": cname,
+                "client_name": sr.client_name or "",
+                "service_type": sr.get_service_type_display() if sr.service_type else "",
+                "address": sr.address or "",
+                "request_date": date_str,
+                "status": st,
+                "status_label": sr.get_status_display(),
+                "pin_color": _map_pin_color_for_status(st),
+                "detail_url": reverse("services:request_detail", args=[sr.pk]),
+                "lat": lat,
+                "lng": lng,
+            }
+        )
+
+    status_filters = []
+    for code, label in ServiceRequest.Status.choices:
+        if code in statuses_present:
+            status_filters.append(
+                {
+                    "value": code,
+                    "label": label,
+                    "color": _map_pin_color_for_status(code),
+                }
+            )
+
     return render(
         request,
         "dashboard/admin_map_requests.html",
         {
-            "consumers": consumers,
-            "consumers_json": consumers_json,
-            "requests_json": requests_json,
+            "map_request_count": len(requests_list),
+            "status_filters": status_filters,
+            "requests_json": json.dumps(requests_list),
         },
     )
 
@@ -450,8 +524,9 @@ def admin_map_requests(request):
 @role_required("ADMIN")
 def admin_analytics(request):
     """Analytics page – KPI cards, charts, table; initial data for first paint."""
-    payload = _get_analytics_payload(request)
-    return render(request, "dashboard/admin_analytics.html", {"analytics_data": payload})
+    context = _get_dashboard_context(request)
+    context["analytics_data"] = _get_analytics_payload(request)
+    return render(request, "dashboard/admin_analytics.html", context)
 
 
 @login_required
@@ -805,6 +880,67 @@ def reject_inspection_fee(request, pk):
 
 @login_required
 @role_required("ADMIN")
+@require_POST
+def waive_public_bayawan_inspection_fee(request, pk):
+    """
+    First-time inspection fee: waive for public-property desludging within Bayawan City
+    (policy — computation is already ₱0 when the letter is saved).
+    """
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if not service_request.qualifies_public_bayawan_no_fees:
+        messages.error(
+            request,
+            "This action applies only to residential or commercial desludging marked as public property "
+            "with a location inside Bayawan City.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    if service_request.status not in (
+        ServiceRequest.Status.INSPECTION_FEE_DUE,
+        ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+    ):
+        messages.error(
+            request,
+            "Waiving the inspection fee here is only available while the request is awaiting "
+            "the ₱150 inspection fee payment or verification.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    with transaction.atomic():
+        if service_request.inspection_fee_receipt:
+            service_request.inspection_fee_receipt.delete(save=False)
+            service_request.inspection_fee_receipt = None
+        service_request.status = ServiceRequest.Status.UNDER_REVIEW
+        service_request.save(update_fields=["inspection_fee_receipt", "status", "updated_at"])
+
+    if not service_request.apply_public_bayawan_inspection_fee_waiver(
+        notify_user=service_request.consumer,
+    ):
+        messages.error(request, "Could not record the inspection fee waiver.")
+        return redirect("services:request_detail", pk=pk)
+
+    if (
+        service_request.requested_by_id
+        and service_request.requested_by_id != service_request.consumer_id
+    ):
+        Notification.objects.create(
+            user_id=service_request.requested_by_id,
+            message=(
+                f"Request #{service_request.id} ({service_request.client_name}): "
+                "inspection fee waived — public property within Bayawan City."
+            )[:500],
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+
+    messages.success(
+        request,
+        "Inspection fee waived for this public Bayawan request. Computation charges remain ₱0 when the letter is prepared.",
+    )
+    return redirect("services:request_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
 def approve_request(request, pk):
     """Move a submitted request to under review"""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
@@ -878,7 +1014,11 @@ def assign_inspector(request, pk):
         try:
             inspector = inspectors_qs.get(pk=inspector_id)
         except User.DoesNotExist:
-            messages.error(request, "Selected inspector is invalid.")
+            messages.error(
+                request,
+                "The inspector you selected is not in the current assignable list (they may have been removed or deactivated). "
+                "Refresh the page and choose an active inspector.",
+            )
             context = {
                 "service_request": service_request,
                 "inspectors": inspectors_qs,
@@ -971,7 +1111,12 @@ def waive_inspection(request, pk):
         if note_flag not in existing_notes:
             appended = (existing_notes + "\n" if existing_notes else "") + f"{note_flag} Inspection waived by admin."
             service_request.notes = appended
-            service_request.save(update_fields=["notes"])
+            save_fields = ["notes"]
+            # Was inspection already scheduled? Move back to under review so workflow matches waiver.
+            if service_request.status == ServiceRequest.Status.INSPECTION_SCHEDULED:
+                service_request.status = ServiceRequest.Status.UNDER_REVIEW
+                save_fields.append("status")
+            service_request.save(update_fields=save_fields)
 
         # If a computation already exists, recalculate without inspection fee.
         computation = getattr(service_request, "computation", None)
@@ -995,6 +1140,77 @@ def waive_inspection(request, pk):
     return redirect("services:request_detail", pk=pk)
 
 
+# Statuses allowed to start/edit draft computation when inspection is waived ([NO_INSPECTION_FEE]).
+# Includes INSPECTION_SCHEDULED / INSPECTED for rows scheduled or inspected before waiver; new waivers
+# from INSPECTION_SCHEDULED are moved to UNDER_REVIEW in waive_inspection().
+_WAIVED_COMPUTATION_ELIGIBLE_STATUSES = (
+    ServiceRequest.Status.UNDER_REVIEW,
+    ServiceRequest.Status.SUBMITTED,
+    ServiceRequest.Status.INSPECTION_SCHEDULED,
+    ServiceRequest.Status.INSPECTED,
+)
+
+# Broader than _WAIVED_COMPUTATION_ELIGIBLE_STATUSES: crew can be set or corrected after
+# computation is created/sent (e.g. backfill personnel_count).
+_WAIVED_CREW_ASSIGNMENT_STATUSES = (
+    *_WAIVED_COMPUTATION_ELIGIBLE_STATUSES,
+    ServiceRequest.Status.COMPUTATION_SENT,
+    ServiceRequest.Status.AWAITING_PAYMENT,
+    ServiceRequest.Status.PAID,
+    ServiceRequest.Status.DESLUDGING_SCHEDULED,
+)
+
+
+def _try_create_initial_computation_for_waived_request(service_request, prepared_by_user):
+    """
+    When inspection is waived ([NO_INSPECTION_FEE]), create a draft ServiceComputation
+    for desludging requests. Caller must ensure waived crew (driver/helpers) are assigned first.
+
+    Returns:
+        "created" — new draft computation was saved
+        "exists" — computation already present
+        "ineligible" — wrong type, status, or missing waiver flag
+    """
+    from dashboard.models import ServiceComputation
+    from services.location import distance_from_cenro
+
+    if service_request.service_type not in (
+        ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+    ):
+        return "ineligible"
+    if "[NO_INSPECTION_FEE]" not in (service_request.notes or ""):
+        return "ineligible"
+    if service_request.status not in _WAIVED_COMPUTATION_ELIGIBLE_STATUSES:
+        return "ineligible"
+    if getattr(service_request, "computation", None):
+        return "exists"
+
+    is_outside = not service_request.is_within_bayawan
+    dist = Decimal("0")
+    if service_request.gps_latitude and service_request.gps_longitude:
+        km = distance_from_cenro(
+            float(service_request.gps_latitude),
+            float(service_request.gps_longitude),
+        )
+        dist = Decimal(str(round(km, 2)))
+    personnel_count = max(1, service_request.waived_inspection_personnel_count)
+    computation = ServiceComputation.objects.create(
+        service_request=service_request,
+        is_outside_bayawan=is_outside,
+        cubic_meters=service_request.cubic_meters or Decimal("5"),
+        distance_km=dist,
+        trips=1,
+        personnel_count=personnel_count,
+        prepared_by=prepared_by_user,
+    )
+    computation.is_finalized = False
+    computation.save()
+    service_request.fee_amount = computation.total_charge
+    service_request.save(update_fields=["fee_amount"])
+    return "created"
+
+
 @login_required
 @role_required("ADMIN")
 def proceed_to_computation(request, pk):
@@ -1002,9 +1218,6 @@ def proceed_to_computation(request, pk):
     When inspection has been waived, create an initial computation (if none exists)
     and send the admin to edit/finalize it. Allows the request to move to the next step.
     """
-    from dashboard.models import ServiceComputation
-    from services.location import distance_from_cenro
-
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if service_request.service_type not in (
         ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
@@ -1012,41 +1225,117 @@ def proceed_to_computation(request, pk):
     ):
         messages.error(request, "Computation flow is only for desludging requests.")
         return redirect("services:request_detail", pk=pk)
-    if service_request.status not in (
-        ServiceRequest.Status.UNDER_REVIEW,
-        ServiceRequest.Status.SUBMITTED,
-    ):
-        messages.info(request, "This request is not in a state to create computation.")
-        return redirect("services:request_detail", pk=pk)
     if "[NO_INSPECTION_FEE]" not in (service_request.notes or ""):
         messages.warning(request, "Inspection must be waived before using this action.")
         return redirect("services:request_detail", pk=pk)
+    if service_request.status not in _WAIVED_COMPUTATION_ELIGIBLE_STATUSES:
+        messages.info(request, "This request is not in a state to create computation.")
+        return redirect("services:request_detail", pk=pk)
 
-    computation = getattr(service_request, "computation", None)
-    if not computation:
-        is_outside = not service_request.is_within_bayawan
-        dist = Decimal("0")
-        if service_request.gps_latitude and service_request.gps_longitude:
-            km = distance_from_cenro(
-                float(service_request.gps_latitude),
-                float(service_request.gps_longitude),
-            )
-            dist = Decimal(str(round(km, 2)))
-        computation = ServiceComputation.objects.create(
-            service_request=service_request,
-            is_outside_bayawan=is_outside,
-            cubic_meters=service_request.cubic_meters or Decimal("5"),
-            distance_km=dist,
-            trips=1,
-            personnel_count=4,
-            prepared_by=request.user,
+    if not service_request.waived_inspection_crew_ready:
+        messages.warning(
+            request,
+            "Assign the driver and helpers (as needed) before creating the computation.",
         )
-        computation.is_finalized = False
-        computation.save()
-        service_request.fee_amount = computation.total_charge
-        service_request.save(update_fields=["fee_amount"])
+        return redirect("dashboard:assign_waived_inspection_crew", pk=pk)
+
+    outcome = _try_create_initial_computation_for_waived_request(service_request, request.user)
+    if outcome == "created":
         messages.success(request, "Computation created. You can now edit and finalize it to send to the customer.")
+    elif outcome == "exists":
+        pass
     return redirect("services:edit_computation", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
+def assign_waived_inspection_crew(request, pk):
+    """
+    When site inspection is waived, record driver/helpers so personnel count is set
+    for computation (and can be updated after computation is sent).
+    """
+    from services.models import DesludgingPersonnel
+
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.service_type not in (
+        ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+    ):
+        messages.error(request, "Crew assignment for waived inspection applies only to desludging requests.")
+        return redirect("services:request_detail", pk=pk)
+    if "[NO_INSPECTION_FEE]" not in (service_request.notes or ""):
+        messages.error(request, "This request does not use the waived-inspection workflow.")
+        return redirect("services:request_detail", pk=pk)
+    if service_request.status not in _WAIVED_CREW_ASSIGNMENT_STATUSES:
+        messages.error(request, "This request is not in a state for crew assignment.")
+        return redirect("services:request_detail", pk=pk)
+
+    drivers = DesludgingPersonnel.objects.filter(
+        role=DesludgingPersonnel.Role.DRIVER, is_active=True
+    ).order_by("full_name")
+    helpers = DesludgingPersonnel.objects.filter(
+        role=DesludgingPersonnel.Role.HELPER, is_active=True
+    ).order_by("full_name")
+
+    posted = {
+        "driver_name": service_request.waived_crew_driver_name or "",
+        "helper1": service_request.waived_crew_helper1_name or "",
+        "helper2": service_request.waived_crew_helper2_name or "",
+        "helper3": service_request.waived_crew_helper3_name or "",
+    }
+
+    if request.method == "POST":
+        driver_name = (request.POST.get("waived_crew_driver_name") or "").strip()
+        h1 = (request.POST.get("waived_crew_helper1_name") or "").strip()
+        h2 = (request.POST.get("waived_crew_helper2_name") or "").strip()
+        h3 = (request.POST.get("waived_crew_helper3_name") or "").strip()
+        posted = {
+            "driver_name": driver_name,
+            "helper1": h1,
+            "helper2": h2,
+            "helper3": h3,
+        }
+
+        if not driver_name:
+            messages.error(request, "Select or enter a driver.")
+        else:
+            service_request.assigned_inspector = None
+            service_request.waived_crew_driver_name = driver_name
+            service_request.waived_crew_helper1_name = h1
+            service_request.waived_crew_helper2_name = h2
+            service_request.waived_crew_helper3_name = h3
+            service_request.save(
+                update_fields=[
+                    "assigned_inspector",
+                    "waived_crew_driver_name",
+                    "waived_crew_helper1_name",
+                    "waived_crew_helper2_name",
+                    "waived_crew_helper3_name",
+                    "updated_at",
+                ]
+            )
+            comp = getattr(service_request, "computation", None)
+            if comp:
+                comp.personnel_count = service_request.waived_inspection_personnel_count
+                comp.save()
+                service_request.fee_amount = comp.total_charge
+                service_request.save(update_fields=["fee_amount"])
+            messages.success(
+                request,
+                "Crew saved. Personnel count is updated on the computation when one exists.",
+            )
+            return redirect("services:request_detail", pk=pk)
+
+    return render(
+        request,
+        "dashboard/assign_waived_inspection_crew.html",
+        {
+            "service_request": service_request,
+            "personnel_drivers": drivers,
+            "personnel_helpers": helpers,
+            "posted": posted,
+        },
+    )
 
 
 @login_required
@@ -1213,7 +1502,11 @@ def admin_membership(request):
         tab = "account_management"
     search = (request.GET.get("q") or "").strip()
 
-    consumers = User.objects.filter(role=User.Role.CONSUMER).select_related("consumer_profile")
+    consumers = (
+        _membership_consumer_qs()
+        .select_related("consumer_profile")
+        .order_by("last_name", "first_name", "id")
+    )
     previous_form = None
     previous_records = User.objects.none()
 
@@ -1222,7 +1515,8 @@ def admin_membership(request):
 
         previous_form = PreviousAccountRegistrationForm(request.POST or None)
         previous_records = (
-            User.objects.filter(role=User.Role.CONSUMER, is_legacy_record=True)
+            _membership_consumer_qs()
+            .filter(is_legacy_record=True)
             .select_related("consumer_profile")
             .order_by("-date_joined", "-id")
         )
@@ -1242,11 +1536,13 @@ def admin_membership(request):
             lname = (cd["last_name"] or "").strip()
             brgy = (cd["barangay"] or "").strip()
             street = (cd["street_address"] or "").strip()
-            prior_vol = cd.get("prior_desludging_m3_4y") or Decimal("0")
+            prior_vol = cd.get("prior_desludging_m3_4y")
+            if prior_vol is None:
+                prior_vol = 0
 
             existing_real = (
-                User.objects.filter(
-                    role=User.Role.CONSUMER,
+                _membership_consumer_qs()
+                .filter(
                     is_legacy_record=False,
                     first_name__iexact=fname,
                     last_name__iexact=lname,
@@ -1261,6 +1557,7 @@ def admin_membership(request):
                 with transaction.atomic():
                     prof = existing_real.consumer_profile
                     prof.prior_desludging_m3_4y = prior_vol
+                    prof.last_cycle_request_date = cd.get("last_cycle_request_date")
                     if cd.get("mobile_number"):
                         prof.mobile_number = cd["mobile_number"]
                     prof.save()
@@ -1285,9 +1582,9 @@ def admin_membership(request):
                             Notification.objects.create(
                                 user=existing_real,
                                 message=(
-                                    f"Request #{sr.id}: Inspection fee has been waived because "
-                                    "your prior desludging history was confirmed. "
-                                    "Your request is now under review."
+                                    f"Request #{sr.id}: Inspection fee waived based on your prior desludging record. "
+                                    "No site inspection is required. Open the request to assign crew (driver/helpers), "
+                                    "then proceed to computation."
                                 ),
                                 notification_type=Notification.NotificationType.STATUS_CHANGE,
                                 related_request=sr,
@@ -1295,18 +1592,21 @@ def admin_membership(request):
 
                 msg = f"Account for {existing_real.get_full_name()} updated with prior desludging record."
                 if waived_ids:
-                    msg += f" Inspection fee waived on request(s) #{', #'.join(waived_ids)}."
+                    msg += f" Inspection fee waived on request(s) #{', #'.join(waived_ids)}. Assign crew on each request before computation."
                 messages.success(request, msg)
                 return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
 
-            duplicate_legacy = User.objects.filter(
-                role=User.Role.CONSUMER,
-                is_legacy_record=True,
-                first_name__iexact=fname,
-                last_name__iexact=lname,
-                consumer_profile__barangay__iexact=brgy,
-                consumer_profile__street_address__iexact=street,
-            ).exists()
+            duplicate_legacy = (
+                _membership_consumer_qs()
+                .filter(
+                    is_legacy_record=True,
+                    first_name__iexact=fname,
+                    last_name__iexact=lname,
+                    consumer_profile__barangay__iexact=brgy,
+                    consumer_profile__street_address__iexact=street,
+                )
+                .exists()
+            )
             if duplicate_legacy:
                 previous_form.add_error(
                     None,
@@ -1341,6 +1641,7 @@ def admin_membership(request):
                         municipality=(cd.get("municipality") or "").strip() or "Bayawan City",
                         province=(cd.get("province") or "").strip() or "Negros Oriental",
                         prior_desludging_m3_4y=prior_vol,
+                        last_cycle_request_date=cd.get("last_cycle_request_date"),
                     )
 
                 messages.success(
@@ -1365,11 +1666,8 @@ def admin_membership(request):
     existing_accounts = User.objects.none()
     if tab == "previous_account_registration":
         existing_accounts = (
-            User.objects.filter(
-                role=User.Role.CONSUMER,
-                is_legacy_record=False,
-                consumer_profile__isnull=False,
-            )
+            _membership_consumer_qs()
+            .filter(is_legacy_record=False, consumer_profile__isnull=False)
             .select_related("consumer_profile")
             .order_by("last_name", "first_name")
         )
@@ -1387,24 +1685,103 @@ def admin_membership(request):
 
 @login_required
 @role_required("ADMIN")
+def admin_equipment(request):
+    """Maintain declogger / service equipment list for completion-form dropdowns."""
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+
+        if action == "add":
+            unit_number = (request.POST.get("unit_number") or "").strip()
+            notes = (request.POST.get("notes") or "").strip()
+            if not unit_number:
+                messages.error(request, "Enter a declogger or unit number.")
+            elif ServiceEquipment.objects.filter(unit_number__iexact=unit_number).exists():
+                messages.error(request, "That unit number already exists.")
+            else:
+                ServiceEquipment.objects.create(unit_number=unit_number, notes=notes)
+                messages.success(request, f"Added equipment {unit_number}.")
+            return redirect("dashboard:admin_equipment")
+
+        if action == "delete":
+            raw_id = request.POST.get("equipment_id")
+            try:
+                eq = ServiceEquipment.objects.get(pk=int(raw_id))
+            except (ValueError, TypeError, ServiceEquipment.DoesNotExist):
+                messages.error(request, "Equipment entry not found.")
+            else:
+                label = eq.unit_number
+                eq.delete()
+                messages.success(request, f"Removed equipment {label}.")
+            return redirect("dashboard:admin_equipment")
+
+        if action == "toggle_active":
+            raw_id = request.POST.get("equipment_id")
+            try:
+                eq = ServiceEquipment.objects.get(pk=int(raw_id))
+            except (ValueError, TypeError, ServiceEquipment.DoesNotExist):
+                messages.error(request, "Equipment entry not found.")
+            else:
+                eq.is_active = not eq.is_active
+                eq.save(update_fields=["is_active"])
+                state = "active" if eq.is_active else "inactive"
+                messages.success(request, f"{eq.unit_number} is now {state}.")
+            return redirect("dashboard:admin_equipment")
+
+        messages.error(
+            request,
+            "That equipment action was not recognized (the form may be outdated). Refresh the Equipment page and try again.",
+        )
+        return redirect("dashboard:admin_equipment")
+
+    equipment_list = ServiceEquipment.objects.all().order_by("unit_number")
+    return render(
+        request,
+        "dashboard/admin_equipment.html",
+        {"equipment_list": equipment_list},
+    )
+
+
+@login_required
+@role_required("ADMIN")
 @require_POST
 def admin_update_prior_volume(request, user_id):
     """Quick-update a consumer's prior desludging volume and waive pending inspection fees."""
     consumer = get_object_or_404(
-        User, pk=user_id, role=User.Role.CONSUMER, is_legacy_record=False
+        User,
+        pk=user_id,
+        role=User.Role.CONSUMER,
+        is_legacy_record=False,
+        is_superuser=False,
+        is_staff=False,
     )
-    raw = request.POST.get("prior_desludging_m3_4y", "0")
+    raw = (request.POST.get("prior_desludging_m3_4y") or "0").strip().replace(",", "")
     try:
-        volume = Decimal(raw)
-    except Exception:
-        volume = Decimal("0")
+        volume = max(0, int(round(float(raw))))
+    except (ValueError, TypeError, OverflowError):
+        volume = 0
 
+    raw_cycle_date = (request.POST.get("last_cycle_request_date") or "").strip()
+    last_cycle_date = None
+    if raw_cycle_date:
+        last_cycle_date = parse_date(raw_cycle_date)
+        if last_cycle_date is None:
+            messages.error(request, "Invalid date for last request for cycle. Use YYYY-MM-DD or leave blank.")
+            return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
+
+    if volume > 0 and last_cycle_date is None:
+        messages.error(
+            request,
+            "Last service date is required: enter the date of last request for cycle before saving a prior volume above zero.",
+        )
+        return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
+
+    waived_ids = []
     with transaction.atomic():
         prof, _ = ConsumerProfile.objects.get_or_create(user=consumer)
         prof.prior_desludging_m3_4y = volume
-        prof.save(update_fields=["prior_desludging_m3_4y"])
+        prof.last_cycle_request_date = last_cycle_date
+        prof.save(update_fields=["prior_desludging_m3_4y", "last_cycle_request_date"])
 
-        waived_ids = []
         if volume > 0:
             pending_fee_reqs = ServiceRequest.objects.filter(
                 consumer=consumer,
@@ -1424,9 +1801,9 @@ def admin_update_prior_volume(request, user_id):
                 Notification.objects.create(
                     user=consumer,
                     message=(
-                        f"Request #{sr.id}: Inspection fee has been waived because "
-                        "your prior desludging history was confirmed. "
-                        "Your request is now under review."
+                        f"Request #{sr.id}: Inspection fee waived based on your prior desludging record. "
+                        "No site inspection is required. Open the request to assign crew (driver/helpers), "
+                        "then proceed to computation."
                     ),
                     notification_type=Notification.NotificationType.STATUS_CHANGE,
                     related_request=sr,
@@ -1434,8 +1811,15 @@ def admin_update_prior_volume(request, user_id):
 
     display = consumer.get_full_name() or consumer.username
     msg = f"Prior desludging volume for {display} updated to {volume} m³."
+    if last_cycle_date:
+        msg += f" Last cycle request date set to {last_cycle_date.strftime('%b %d, %Y')}."
+    else:
+        msg += " Last cycle request date cleared."
     if waived_ids:
-        msg += f" Inspection fee waived on request(s) #{', #'.join(waived_ids)}."
+        msg += (
+            f" Inspection fee waived on request(s) #{', #'.join(waived_ids)}. "
+            "Assign crew on each request before computation."
+        )
     messages.success(request, msg)
     return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
 
@@ -1448,7 +1832,13 @@ def admin_reset_consumer_password(request, user_id):
     Set a consumer's password to the system default temporary password and
     require them to choose a new password on next login.
     """
-    consumer = get_object_or_404(User, pk=user_id, role=User.Role.CONSUMER)
+    consumer = get_object_or_404(
+        User,
+        pk=user_id,
+        role=User.Role.CONSUMER,
+        is_superuser=False,
+        is_staff=False,
+    )
     consumer.set_password(CONSUMER_DEFAULT_RESET_PASSWORD)
     consumer.must_change_password = True
     consumer.save(update_fields=["password", "must_change_password"])
@@ -1472,7 +1862,13 @@ def admin_reset_consumer_password(request, user_id):
 @role_required("ADMIN")
 def member_service_history(request, user_id):
     """Service history for a specific member"""
-    consumer = get_object_or_404(User, pk=user_id, role=User.Role.CONSUMER)
+    consumer = get_object_or_404(
+        User,
+        pk=user_id,
+        role=User.Role.CONSUMER,
+        is_superuser=False,
+        is_staff=False,
+    )
     service_requests = ServiceRequest.objects.filter(
         consumer=consumer,
         status=ServiceRequest.Status.COMPLETED,

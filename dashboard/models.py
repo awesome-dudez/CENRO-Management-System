@@ -30,6 +30,10 @@ class ConfigurableRate(models.Model):
         "bawad_free_limit_m3": (Decimal("5"), "BAWAD free service limit (cubic meters)"),
         "bawad_cycle_years": (Decimal("4"), "BAWAD cycle period (years)"),
         "min_cubic_meters": (Decimal("5"), "Minimum billable cubic meters"),
+        "bayawan_resident_free_km": (
+            Decimal("10"),
+            "Free travel distance (km) for Bayawan City residents when service is within Bayawan",
+        ),
     }
 
     class Meta:
@@ -121,8 +125,21 @@ class ServiceComputation(models.Model):
     )
     is_finalized = models.BooleanField(default=False)
     finalized_at = models.DateTimeField(null=True, blank=True)
+    ready_to_finalize = models.BooleanField(
+        default=False,
+        help_text="Set when charges are saved from the edit screen; enables Finalize on the letter.",
+    )
     receipt_generated = models.BooleanField(default=False)
     receipt_date = models.DateTimeField(null=True, blank=True)
+
+    waive_wear_charge = models.BooleanField(
+        default=False,
+        help_text="Admin: waive wear & tear (20% of fixed trucking + distance travel) for this computation.",
+    )
+    waive_meals_transport_charge = models.BooleanField(
+        default=False,
+        help_text="Admin: waive meals & transportation charge for this computation.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -160,6 +177,16 @@ class ServiceComputation(models.Model):
                 "amount": excess_amount,
             })
         return lines
+
+    def billable_subtotal(self) -> Decimal:
+        """Sum of line-item charges (same as total_charge before a FREE waiver zeroes it)."""
+        return (
+            (self.fixed_trucking or Decimal("0"))
+            + (self.desludging_fee or Decimal("0"))
+            + (self.distance_travel_fee or Decimal("0"))
+            + (self.wear_charge or Decimal("0"))
+            + (self.meals_transport_charge or Decimal("0"))
+        )
 
     def calculate_charges(self):
         """Calculate all charges based on the correct business rules."""
@@ -202,11 +229,21 @@ class ServiceComputation(models.Model):
             rate = desludging_per_m3 if t == 0 else (desludging_per_m3 + second_trip_surcharge)
             self.desludging_fee += vol_this_trip * rate
 
-        # Distance Travel Fee: distance_km × 20 × 2 (rounded down to whole km)
+        # Distance Travel Fee: distance_km × 20 × 2 on billable km (rounded down to whole km).
+        # Bayawan City residents: first N km free when service location is within Bayawan
+        # and computation is not forced "outside Bayawan".
         raw_dist = self.distance_km or Decimal("0")
         dist = raw_dist.quantize(Decimal("1"), rounding=ROUND_DOWN)
         self.distance_km = dist
-        self.distance_travel_fee = dist * Decimal("20") * 2
+        billable_dist = dist
+        resident_free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+        if (
+            sr.is_within_bayawan
+            and not self.is_outside_bayawan
+            and sr.consumer_is_bayawan_city_resident
+        ):
+            billable_dist = max(Decimal("0"), dist - resident_free_km)
+        self.distance_travel_fee = billable_dist * Decimal("20") * 2
         self.distance_charge = Decimal("0")  # no longer used in breakdown
 
         # Meals and transportation: ₱200 per personnel (driver + helpers)
@@ -218,6 +255,11 @@ class ServiceComputation(models.Model):
         # Wear and tear: 20% of (Fixed Trucking + Distance Travel Fee)
         base_for_wear = self.fixed_trucking + self.distance_travel_fee
         self.wear_charge = base_for_wear * wear_pct
+
+        if self.waive_wear_charge:
+            self.wear_charge = Decimal("0")
+        if self.waive_meals_transport_charge:
+            self.meals_transport_charge = Decimal("0")
 
         # Total (no inspection_charge)
         self.total_charge = (
@@ -258,6 +300,9 @@ def compute_quick_desludging_estimate(
     connected_to_bawad: bool,
     public_private: str,
     bawad_prior_used_m3: Decimal,
+    bayawan_city_resident: bool = False,
+    waive_wear_charge: bool = False,
+    waive_meals_transport_charge: bool = False,
 ) -> dict:
     """
     Same charge math as ServiceComputation.calculate_charges, for admin demo / quick calculator.
@@ -304,7 +349,11 @@ def compute_quick_desludging_estimate(
 
     raw_dist = distance_km or Decimal("0")
     dist = raw_dist.quantize(Decimal("1"), rounding=ROUND_DOWN)
-    distance_travel_fee = dist * Decimal("20") * 2
+    billable_dist = dist
+    if is_within_bayawan and not is_outside and bayawan_city_resident:
+        resident_free_km = R("bayawan_resident_free_km", Decimal("10"))
+        billable_dist = max(Decimal("0"), dist - resident_free_km)
+    distance_travel_fee = billable_dist * Decimal("20") * 2
 
     if meals_transport_override is not None and meals_transport_override > 0:
         meals_transport_charge = meals_transport_override
@@ -313,6 +362,10 @@ def compute_quick_desludging_estimate(
 
     base_for_wear = fixed_trucking + distance_travel_fee
     wear_charge = base_for_wear * wear_pct
+    if waive_wear_charge:
+        wear_charge = Decimal("0")
+    if waive_meals_transport_charge:
+        meals_transport_charge = Decimal("0")
 
     subtotal = (
         fixed_trucking

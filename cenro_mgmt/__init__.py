@@ -1,3 +1,3 @@
 """
-Core package for the CENRO Management System Django project.
+Core package for the CENRO Sanitary Management System Django project.
 """

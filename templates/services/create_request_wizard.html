@@ -491,7 +491,15 @@
         margin-top: 10px;
         font-weight: 600;
         color: #2980b9;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font-size: inherit;
+        font-family: inherit;
+        text-decoration: underline;
     }
+    #otherVerifyRegisterLink:hover { color: #1f5f8a; }
 
     /* Service Location mode toggle */
     .location-mode-section { margin-bottom: 20px; }
@@ -681,18 +689,17 @@
                 </div>
                 <!-- Type Address: no map; optional location photos -->
                 <div class="location-text-section hidden" id="locationTextSection">
-                    <p class="form-help-text" style="margin-bottom:12px;">Enter your barangay and full address. No map required.</p>
                     <div class="form-group location-photos-upload" id="locationPhotosUpload">
                         <label>Location photos (optional)</label>
-                        <p class="form-help-text">Optional: upload up to 2 photos to help our team find the location. JPG, PNG, or WEBP, max 5MB each.</p>
+                        <p class="form-help-text">Optional: upload up to 2 photos to help our team find the location. JPG, PNG, WEBP, GIF, BMP, or TIFF, max 20MB each.</p>
                         <div class="location-photos-inputs">
                             <div class="location-photo-slot">
-                                <input type="file" name="location_photo_1" id="id_location_photo_1" class="form-control location-photo-input" accept="image/jpeg,image/jpg,image/png,image/webp" data-slot="1">
+                                <input type="file" name="location_photo_1" id="id_location_photo_1" class="form-control location-photo-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/bmp,image/tiff,.tif,.tiff" data-slot="1">
                                 <div class="location-photo-preview" id="preview1"></div>
                                 <div class="form-error" id="locationPhoto1Error"></div>
                             </div>
                             <div class="location-photo-slot">
-                                <input type="file" name="location_photo_2" id="id_location_photo_2" class="form-control location-photo-input" accept="image/jpeg,image/jpg,image/png,image/webp" data-slot="2">
+                                <input type="file" name="location_photo_2" id="id_location_photo_2" class="form-control location-photo-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/bmp,image/tiff,.tif,.tiff" data-slot="2">
                                 <div class="location-photo-preview" id="preview2"></div>
                                 <div class="form-error" id="locationPhoto2Error"></div>
                             </div>
@@ -723,7 +730,7 @@
                 </p>
                 <button type="button" class="btn-verify-other" id="btnVerifyOtherConsumer">Verify client account</button>
                 <div id="otherVerifyMessage" class="form-help-text" style="margin-top:10px;min-height:1.2em;"></div>
-                <a href="{{ consumer_register_url }}" id="otherVerifyRegisterLink" target="_blank" rel="noopener" style="display:none;">Open consumer registration</a>
+                <button type="button" id="otherVerifyRegisterLink" style="display:none;">Open Customer Registration</button>
             </div>
 
             <div class="form-group">
@@ -832,6 +839,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var step2NextBtn = document.getElementById('step2NextBtn');
     var barangayInputEl = document.querySelector('input[name="barangay"]');
     var verifyUrl = "{{ verify_other_consumer_url|escapejs }}";
+    var consumerRegisterBaseUrl = '';
+    var cenroRegWindow = null;
     var serverOtherVerified = {% if step2_other_verified %}true{% else %}false{% endif %};
     var otherVerified = serverOtherVerified;
 
@@ -848,7 +857,32 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             credentials: 'same-origin',
             body: JSON.stringify(body)
-        }).then(function(r) { return r.json(); });
+        }).then(function(r) {
+            return r.text().then(function(text) {
+                var data;
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    return {
+                        ok: false,
+                        message: 'The server returned an unexpected response. Try refreshing the page, then verify again.'
+                    };
+                }
+                if (!r.ok) {
+                    data.ok = false;
+                    if (!data.message) {
+                        if (r.status === 401) {
+                            data.message = 'Your session may have expired. Refresh the page and sign in again.';
+                        } else if (r.status === 403) {
+                            data.message = 'You are not allowed to verify right now (for example, your account may be pending approval).';
+                        } else {
+                            data.message = 'Verification request failed (' + r.status + ').';
+                        }
+                    }
+                }
+                return data;
+            });
+        });
     }
     function clearOtherVerificationServer() {
         if (!verifyUrl) return;
@@ -860,6 +894,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!isOther) {
             if (otherVerifyMsg) otherVerifyMsg.textContent = '';
             if (otherVerifyReg) otherVerifyReg.style.display = 'none';
+            consumerRegisterBaseUrl = '';
         }
         if (step2NextBtn) {
             if (!isOther) step2NextBtn.disabled = false;
@@ -875,6 +910,7 @@ document.addEventListener('DOMContentLoaded', function() {
             otherVerifyMsg.textContent = 'Details changed — please verify again before continuing.';
         }
         if (otherVerifyReg) otherVerifyReg.style.display = 'none';
+        consumerRegisterBaseUrl = '';
         updateOtherRequesterUI();
     }
     window.markOtherVerificationStale = markOtherVerificationStale;
@@ -893,33 +929,51 @@ document.addEventListener('DOMContentLoaded', function() {
     function setRequesterMode(mode, opts) {
         opts = opts || {};
         var skipResetVerify = !!opts.skipResetVerify;
+        var isPageLoad = !!opts.isPageLoad;
         btnOwner.classList.toggle('active', mode === 'owner');
         btnOther.classList.toggle('active', mode === 'other');
         if (requestForInput) {
             requestForInput.value = mode;
         }
+        var latEl = document.querySelector('input[name="gps_latitude"]');
+        var lonEl = document.querySelector('input[name="gps_longitude"]');
         if (mode === 'owner') {
             clearOtherVerificationServer();
             otherVerified = false;
             if (clientNameInput && ownerProfile.client_name) clientNameInput.value = ownerProfile.client_name;
             if (contactInput && ownerProfile.contact_number) contactInput.value = ownerProfile.contact_number;
             if (addressInput && ownerProfile.address) { addressInput.value = ownerProfile.address; window.lastAutoAddress = ownerProfile.address; }
-            if (ownerProfile.gps_latitude && ownerProfile.gps_longitude) {
+            // Saved profile coordinates: write hidden fields immediately so "Pin on Map" init does not
+            // call device GPS before the map script runs (placeMarker is defined in a later DOMContentLoaded).
+            var olat = ownerProfile.gps_latitude;
+            var olon = ownerProfile.gps_longitude;
+            var latN = olat != null ? Number(olat) : NaN;
+            var lonN = olon != null ? Number(olon) : NaN;
+            var hasSavedPin = !Number.isNaN(latN) && !Number.isNaN(lonN);
+            if (hasSavedPin) {
+                if (latEl) latEl.value = latN.toFixed(6);
+                if (lonEl) lonEl.value = lonN.toFixed(6);
                 if (typeof window.placeMarker === 'function') {
-                    window.placeMarker(ownerProfile.gps_latitude, ownerProfile.gps_longitude, true);
+                    window.placeMarker(latN, lonN, true);
                 }
             } else {
+                if (latEl) latEl.value = '';
+                if (lonEl) lonEl.value = '';
                 useDeviceLocation();
             }
         } else {
-            if (!skipResetVerify) {
-                otherVerified = false;
-                clearOtherVerificationServer();
+            if (!isPageLoad) {
+                if (!skipResetVerify) {
+                    otherVerified = false;
+                    clearOtherVerificationServer();
+                }
+                if (clientNameInput) clientNameInput.value = '';
+                if (contactInput) contactInput.value = '';
+                if (addressInput) { addressInput.value = ''; window.lastAutoAddress = ''; }
+                if (latEl) latEl.value = '';
+                if (lonEl) lonEl.value = '';
+                useDeviceLocation();
             }
-            if (clientNameInput) clientNameInput.value = '';
-            if (contactInput) contactInput.value = '';
-            if (addressInput) { addressInput.value = ''; window.lastAutoAddress = ''; }
-            useDeviceLocation();
         }
         if (otherVerifyMsg) { otherVerifyMsg.style.color = ''; }
         updateOtherRequesterUI();
@@ -931,8 +985,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Default behavior: respect whatever is currently stored in the hidden
     // request_for field (so going Back from step 3 preserves the choice).
     var initialMode = (requestForInput && requestForInput.value === 'other') ? 'other' : 'owner';
-    // Only preserve session + UI verification when server confirms it still matches form fields.
-    setRequesterMode(initialMode, { skipResetVerify: initialMode === 'other' && serverOtherVerified });
+    // On first paint, do not clear fields or POST reset — server already rendered the form and session.
+    // skipResetVerify only applies when user switches modes via buttons (not on isPageLoad).
+    setRequesterMode(initialMode, {
+        skipResetVerify: initialMode === 'other' && serverOtherVerified,
+        isPageLoad: true
+    });
 
     if (btnVerifyOther && verifyUrl) {
         btnVerifyOther.addEventListener('click', function() {
@@ -946,11 +1004,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         otherVerified = true;
                         if (otherVerifyMsg) { otherVerifyMsg.style.color = '#1a7f5a'; otherVerifyMsg.textContent = data.message || 'Verified.'; }
                         if (otherVerifyReg) otherVerifyReg.style.display = 'none';
+                        consumerRegisterBaseUrl = '';
                     } else {
                         otherVerified = false;
                         if (otherVerifyMsg) { otherVerifyMsg.style.color = '#c0392b'; otherVerifyMsg.textContent = data.message || 'No matching account.'; }
                         if (otherVerifyReg && data.register_url) {
-                            otherVerifyReg.href = data.register_url;
+                            consumerRegisterBaseUrl = data.register_url;
                             otherVerifyReg.style.display = 'inline-block';
                         }
                     }
@@ -963,6 +1022,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         });
     }
+    function isOtherRequester() {
+        return requestForInput && requestForInput.value === 'other';
+    }
+    if (otherVerifyReg) {
+        otherVerifyReg.addEventListener('click', function() {
+            if (!consumerRegisterBaseUrl) return;
+            var w = window.open(consumerRegisterBaseUrl, 'cenroCustomerRegistration');
+            if (w) cenroRegWindow = w;
+        });
+    }
+    /* Registration tab posts here when user chooses to stay on the original account */
+    window.addEventListener('message', function(ev) {
+        if (ev.origin !== window.location.origin) return;
+        var d = ev.data;
+        if (!d || d.type !== 'cenro_reg_continue_previous') return;
+        if (!isOtherRequester()) return;
+        cenroRegWindow = null;
+        if (otherVerifyMsg) {
+            otherVerifyMsg.style.color = '#e67e22';
+            otherVerifyMsg.textContent = 'Please click Verify client account again to confirm the customer is on file.';
+        }
+    });
     if (clientNameInput) clientNameInput.addEventListener('input', markOtherVerificationStale);
     if (addressInput) addressInput.addEventListener('input', markOtherVerificationStale);
     if (barangayInputEl) barangayInputEl.addEventListener('change', markOtherVerificationStale);
@@ -1058,17 +1139,17 @@ document.addEventListener('DOMContentLoaded', function() {
     setLocationMode(initialMode);
 
     // ---- Location photos (Type Address): validate type + size, preview ----
-    var LOCATION_PHOTO_MAX_MB = 5;
-    var LOCATION_PHOTO_ACCEPT = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    var LOCATION_PHOTO_MAX_MB = 20;
+    var LOCATION_PHOTO_ACCEPT = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff', 'image/x-ms-bmp'];
     function validateLocationPhoto(file, errorElId) {
         var errEl = document.getElementById(errorElId);
         if (!errEl) return true;
         errEl.textContent = '';
         if (!file) return true;
-        var typeOk = LOCATION_PHOTO_ACCEPT.indexOf(file.type) !== -1 || /\.(jpe?g|png|webp)$/i.test(file.name);
-        if (!typeOk) { errEl.textContent = 'Only JPG, PNG, or WEBP images allowed.'; return false; }
+        var typeOk = LOCATION_PHOTO_ACCEPT.indexOf(file.type) !== -1 || /\.(jpe?g|png|webp|gif|bmp|tif|tiff)$/i.test(file.name);
+        if (!typeOk) { errEl.textContent = 'Only JPG, PNG, WEBP, GIF, BMP, or TIFF images allowed.'; return false; }
         if (file.size > LOCATION_PHOTO_MAX_MB * 1024 * 1024) {
-            errEl.textContent = 'Max 5MB per file.';
+            errEl.textContent = 'Max 20MB per file.';
             return false;
         }
         return true;

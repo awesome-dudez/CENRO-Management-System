@@ -19,6 +19,7 @@
     .btn-primary:hover { background:#16a085; }
     .btn-secondary { background:#e0e0e0; color:#2d3142; }
     .logo-row { display:flex; align-items:center; gap:16px; flex:1; }
+    .bill-logo-bagong { position: relative; top: -6px; }
     .title-block { margin-top:8px; }
     .date-right { text-align:right; white-space:nowrap; }
 
@@ -50,11 +51,11 @@
     <div class="bill-card">
         <div class="bill-header">
             <div class="logo-row">
-                <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:128px;">
-                <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:64px;">
+                <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:134px;">
+                <img class="bill-logo-bagong" src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:68px;">
             </div>
             <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; justify-content:flex-start; margin-top:18px;">
-                <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:64px; margin-bottom:8px;">
+                <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:68px; margin-bottom:8px;">
                 <div class="bill-meta date-right">Date: {{ sr.request_date|date:"M d, Y" }}</div>
             </div>
         </div>
@@ -91,7 +92,7 @@
             <h3>Payment Instructions</h3>
             <p style="font-size:14px; color:#444; line-height:1.5;">
                 Please bring this bill to the <strong>Treasurer's Office</strong> and pay the
-                inspection fee of <strong>₱{{ amount }}.00</strong>. After payment, return to the CENRO Management System
+                inspection fee of <strong>₱{{ amount }}.00</strong>. After payment, return to the CENRO Sanitary Management System
                 and upload a clear photo or scanned copy of your official receipt on the request detail page.
             </p>
         </div>

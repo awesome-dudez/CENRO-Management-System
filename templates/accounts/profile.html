@@ -10,13 +10,26 @@
                     <img src="{{ profile.profile_picture.url }}" alt="Profile" id="avatarImg">
                     {% elif profile.gender == 'FEMALE' %}
                     <svg viewBox="0 0 100 100" width="80" height="80" id="avatarSvg"><circle cx="50" cy="50" r="50" fill="#2d8659"/><ellipse cx="50" cy="38" rx="16" ry="18" fill="white"/><path d="M50 20 C30 20 28 40 30 48 Q32 36 40 30 Q45 28 50 28 Q55 28 60 30 Q68 36 70 48 C72 40 70 20 50 20Z" fill="white" opacity="0.5"/><path d="M25 85 Q25 60 50 56 Q75 60 75 85" fill="white"/></svg>
+                    {% elif profile.gender == 'NON_BINARY' %}
+                    <svg viewBox="0 0 100 100" width="80" height="80" id="avatarSvg"><circle cx="50" cy="50" r="50" fill="#2d8659"/><circle cx="50" cy="36" r="15" fill="white"/><ellipse cx="50" cy="72" rx="24" ry="20" fill="white"/></svg>
                     {% else %}
                     <svg viewBox="0 0 100 100" width="80" height="80" id="avatarSvg"><circle cx="50" cy="50" r="50" fill="#2d8659"/><circle cx="50" cy="36" r="15" fill="white"/><path d="M25 85 Q25 58 50 54 Q75 58 75 85" fill="white"/></svg>
                     {% endif %}
                 </div>
-                <label for="id_profile_picture" class="avatar-upload-btn" title="Change photo">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                </label>
+                <button type="button" class="avatar-upload-btn" id="avatarPhotoMenuBtn" title="Change photo"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="avatarPhotoMenu">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </button>
+                <div class="avatar-photo-menu" id="avatarPhotoMenu" role="menu" aria-hidden="true" hidden>
+                    <button type="button" role="menuitem" class="avatar-photo-menu-item" id="avatarPhotoTakeCamera">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                        <span>Use camera</span>
+                    </button>
+                    <button type="button" role="menuitem" class="avatar-photo-menu-item" id="avatarPhotoUpload">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <span>Upload photo</span>
+                    </button>
+                </div>
             </div>
             <div>
                 <h1 class="profile-name">{{ request.user.get_full_name|default:request.user.username|title }}</h1>
@@ -35,6 +48,11 @@
 
             {# Do not use display:none — browsers often skip file inputs in non-visible containers. #}
             <div class="profile-picture-file-sr">{{ form.profile_picture }}</div>
+            <div class="profile-picture-aux-sr" aria-hidden="true">
+                {# No name= — not submitted; chosen file is copied onto id_profile_picture for the form. #}
+                <input type="file" id="profilePictureCamera" accept="image/*" capture="user" tabindex="-1">
+                <input type="file" id="profilePictureUpload" accept="image/*" tabindex="-1">
+            </div>
 
             <div class="section-label">Personal Information</div>
 
@@ -61,8 +79,10 @@
                             <span class="gender-icon">
                                 {% if radio.choice_label == "Male" %}
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"/><line x1="14" y1="10" x2="21" y2="3"/><polyline points="15,3 21,3 21,9"/></svg>
-                                {% else %}
+                                {% elif radio.choice_label == "Female" %}
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><line x1="12" y1="13" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+                                {% else %}
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="4"/><path d="M6 21v-1a6 6 0 0112 0v1"/><path d="M12 13v3"/></svg>
                                 {% endif %}
                             </span>
                             <span>{{ radio.choice_label }}</span>
@@ -123,6 +143,30 @@
                 <a href="{% url 'dashboard:home' %}" class="btn-cancel">Cancel</a>
             </div>
         </form>
+
+        {# Live camera via getUserMedia — never fall back to &lt;input capture&gt; (that opens the file dialog on Windows). #}
+        <div id="avatarCameraModal" class="avatar-camera-modal" hidden>
+            <div class="avatar-camera-backdrop" id="avatarCameraBackdrop" tabindex="-1"></div>
+            <div class="avatar-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="avatarCameraTitle">
+                <div class="avatar-camera-title" id="avatarCameraTitle">Take a photo</div>
+                <div id="avatarCameraLiveBlock">
+                    <video id="avatarCameraVideo" class="avatar-camera-video" playsinline webkit-playsinline muted autoplay></video>
+                    <p class="avatar-camera-hint">Allow camera access if prompted. Preview your shot, then tap Capture.</p>
+                    <div class="avatar-camera-actions">
+                        <button type="button" class="btn-camera-capture" id="avatarCameraCapture">Capture</button>
+                        <button type="button" class="btn-camera-cancel" id="avatarCameraCancel">Cancel</button>
+                    </div>
+                </div>
+                <div id="avatarCameraErrorBlock" class="avatar-camera-error-block" hidden>
+                    <p class="avatar-camera-error-text" id="avatarCameraErrorText"></p>
+                    <div class="avatar-camera-actions">
+                        <button type="button" class="btn-camera-capture" id="avatarCameraTryUpload">Upload a photo instead</button>
+                        <button type="button" class="btn-camera-cancel" id="avatarCameraErrorClose">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <canvas id="avatarCameraCanvas" class="avatar-camera-canvas" hidden></canvas>
     </div>
 </div>
 
@@ -130,6 +174,7 @@
 .profile-container { max-width: 640px; margin: 40px auto; padding: 0 20px; }
 .profile-card {
     position: relative;
+    overflow: visible;
     background: white; border-radius: 12px; padding: 32px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
@@ -137,6 +182,7 @@
     display: flex; align-items: center; gap: 20px;
     margin-bottom: 28px; padding-bottom: 20px;
     border-bottom: 1px solid #e8e8e8;
+    overflow: visible;
 }
 /* Screen-reader / off-screen: keeps file input in the tab order & included in multipart POST */
 .profile-picture-file-sr {
@@ -151,7 +197,16 @@
     margin: 0;
     font-size: 12px;
 }
-.profile-avatar-wrapper { position: relative; flex-shrink: 0; }
+.profile-picture-aux-sr {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+.profile-picture-aux-sr input { margin: 0; font-size: 12px; }
+.profile-avatar-wrapper { position: relative; flex-shrink: 0; overflow: visible; z-index: 1; }
 .profile-avatar {
     width: 80px; height: 80px; border-radius: 50%; overflow: hidden;
     background: #f0f0f0; display: flex; align-items: center; justify-content: center;
@@ -169,6 +224,175 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
 }
 .avatar-upload-btn:hover { background: #1f5c3d; }
+.avatar-photo-menu {
+    /* position top/left set in JS (fixed) so menu stays above .top-nav (z-index ~1000) */
+    position: fixed;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    padding: 6px;
+    z-index: 10060;
+}
+.avatar-photo-menu[hidden] { display: none !important; }
+.avatar-camera-modal {
+    position: fixed;
+    inset: 0;
+    /* iOS notch / home indicator */
+    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+        max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    z-index: 10100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+.avatar-camera-modal[hidden] { display: none !important; }
+.avatar-camera-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+}
+.avatar-camera-dialog {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+}
+.avatar-camera-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #222;
+    margin: 0 0 12px;
+}
+.avatar-camera-video {
+    width: 100%;
+    max-height: 280px;
+    border-radius: 8px;
+    background: #111;
+    object-fit: cover;
+    display: block;
+    /* iOS: avoid fullscreen takeover; Android Chrome inline preview */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+.avatar-camera-hint {
+    font-size: 13px;
+    color: #666;
+    margin: 10px 0 14px;
+    line-height: 1.4;
+}
+.avatar-camera-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.btn-camera-capture {
+    background: #2d8659;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+.btn-camera-capture:hover { background: #1f5c3d; }
+.btn-camera-cancel {
+    background: #f0f0f0;
+    color: #444;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+.btn-camera-cancel:hover { background: #e0e0e0; }
+.avatar-camera-canvas {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+}
+.avatar-camera-error-block {
+    padding: 4px 0 0;
+}
+.avatar-camera-error-text {
+    font-size: 14px;
+    color: #444;
+    line-height: 1.5;
+    margin: 0 0 16px;
+}
+@media (max-width: 600px) {
+    .avatar-camera-modal {
+        align-items: flex-end;
+        padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    }
+    .avatar-camera-dialog {
+        max-height: min(92vh, 92dvh);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 16px;
+    }
+    .avatar-camera-video {
+        max-height: min(48vh, 320px);
+        min-height: 160px;
+    }
+    .avatar-camera-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .btn-camera-capture,
+    .btn-camera-cancel {
+        min-height: 48px;
+        padding: 12px 18px;
+        font-size: 16px;
+        touch-action: manipulation;
+        width: 100%;
+        justify-content: center;
+    }
+    .avatar-photo-menu-item {
+        min-height: 48px;
+        padding: 14px 14px;
+        font-size: 16px;
+        touch-action: manipulation;
+    }
+    .avatar-upload-btn {
+        width: 32px;
+        height: 32px;
+        touch-action: manipulation;
+    }
+}
+.avatar-photo-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    cursor: pointer;
+    text-align: left;
+}
+.avatar-photo-menu-item:hover,
+.avatar-photo-menu-item:focus {
+    background: #f0fdf4;
+    color: #1f5c3d;
+    outline: none;
+}
 .profile-name { font-size: 22px; font-weight: 700; color: #222; margin: 0; }
 .profile-role {
     font-size: 13px; color: #2d8659; font-weight: 600;
@@ -188,9 +412,9 @@
 .req { color: #dc3545; font-weight: 600; }
 .text-danger { color: #dc3545; font-size: 13px; display: block; margin-top: 4px; }
 
-.gender-toggle-group { display: flex; gap: 8px; margin-top: 2px; }
+.gender-toggle-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .gender-option {
-    flex: 1; display: flex; align-items: center; gap: 6px;
+    flex: 1; min-width: 5.5rem; display: flex; align-items: center; gap: 6px;
     padding: 9px 12px; border: 2px solid #ddd; border-radius: 6px;
     cursor: pointer; font-size: 14px; font-weight: 500; color: #555;
     transition: all 0.15s;
@@ -224,20 +448,336 @@
 document.addEventListener('DOMContentLoaded', function() {
     var fileInput = document.getElementById('id_profile_picture');
     var preview = document.getElementById('avatarPreview');
+    var menuBtn = document.getElementById('avatarPhotoMenuBtn');
+    var menu = document.getElementById('avatarPhotoMenu');
+    var btnCamera = document.getElementById('avatarPhotoTakeCamera');
+    var btnUpload = document.getElementById('avatarPhotoUpload');
+    var inputCamera = document.getElementById('profilePictureCamera');
+    var inputUpload = document.getElementById('profilePictureUpload');
+    var cameraModal = document.getElementById('avatarCameraModal');
+    var cameraVideo = document.getElementById('avatarCameraVideo');
+    var cameraCanvas = document.getElementById('avatarCameraCanvas');
+    var btnCapture = document.getElementById('avatarCameraCapture');
+    var btnCamCancel = document.getElementById('avatarCameraCancel');
+    var cameraBackdrop = document.getElementById('avatarCameraBackdrop');
+    var cameraLiveBlock = document.getElementById('avatarCameraLiveBlock');
+    var cameraErrorBlock = document.getElementById('avatarCameraErrorBlock');
+    var cameraErrorText = document.getElementById('avatarCameraErrorText');
+    var cameraTitle = document.getElementById('avatarCameraTitle');
+    var btnCameraTryUpload = document.getElementById('avatarCameraTryUpload');
+    var btnCameraErrorClose = document.getElementById('avatarCameraErrorClose');
+    var maxBytes = 5 * 1024 * 1024;
+    var cameraStream = null;
+    var cameraVideoObjectUrl = null;
+
+    function isMobileCameraDevice() {
+        var ua = navigator.userAgent || '';
+        if (/iPhone|iPod|Android.*Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return true;
+        if (/iPad|Tablet|Android(?!.*Mobile)/i.test(ua)) return true;
+        if (ua.indexOf('Mac') !== -1 && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1) {
+            return true;
+        }
+        try {
+            if (window.matchMedia('(pointer: coarse)').matches && window.matchMedia('(max-width: 896px)').matches) {
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function showPreviewDataUrl(dataUrl) {
+        preview.innerHTML = '<img src="' + dataUrl + '" alt="Preview" id="avatarImg" style="width:100%;height:100%;object-fit:cover;display:block;">';
+    }
+
+    function previewFile(file) {
+        var reader = new FileReader();
+        reader.onload = function(e) { showPreviewDataUrl(e.target.result); };
+        reader.readAsDataURL(file);
+    }
+
+    function setMainFile(file) {
+        if (!file || !fileInput) return false;
+        if (file.size > maxBytes) {
+            alert('File too large. Maximum size is 5 MB.');
+            return false;
+        }
+        try {
+            var dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+        } catch (err) {
+            alert('Could not attach this photo. Try another file or browser.');
+            return false;
+        }
+        previewFile(file);
+        return true;
+    }
+
+    function positionPhotoMenu() {
+        if (!menu || !menuBtn || menu.hidden) return;
+        var r = menuBtn.getBoundingClientRect();
+        var gap = 8;
+        var mw = menu.offsetWidth || 200;
+        var mh = menu.offsetHeight || 88;
+        var top = r.bottom + gap;
+        var left = r.left;
+        if (top + mh > window.innerHeight - 12) {
+            top = r.top - mh - gap;
+            if (top < 12) top = 12;
+        }
+        if (left + mw > window.innerWidth - 12) {
+            left = window.innerWidth - mw - 12;
+        }
+        if (left < 12) left = 12;
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+    }
+
+    function closePhotoMenu() {
+        if (!menu || !menuBtn) return;
+        menu.hidden = true;
+        menu.setAttribute('aria-hidden', 'true');
+        menuBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function togglePhotoMenu() {
+        if (!menu || !menuBtn) return;
+        var opening = menu.hidden;
+        menu.hidden = !opening;
+        menu.setAttribute('aria-hidden', opening ? 'false' : 'true');
+        menuBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        if (opening) {
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    positionPhotoMenu();
+                    var first = menu.querySelector('.avatar-photo-menu-item');
+                    if (first) first.focus();
+                });
+            });
+        }
+    }
+
+    function stopCameraStream() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(function(t) { t.stop(); });
+            cameraStream = null;
+        }
+        if (cameraVideoObjectUrl) {
+            try { URL.revokeObjectURL(cameraVideoObjectUrl); } catch (e) {}
+            cameraVideoObjectUrl = null;
+        }
+        if (cameraVideo) {
+            cameraVideo.srcObject = null;
+            cameraVideo.removeAttribute('src');
+        }
+    }
+
+    function resetCameraModalPanels() {
+        if (cameraLiveBlock) cameraLiveBlock.hidden = false;
+        if (cameraErrorBlock) cameraErrorBlock.hidden = true;
+        if (cameraTitle) cameraTitle.textContent = 'Take a photo';
+    }
+
+    function closeCameraModal() {
+        stopCameraStream();
+        if (cameraModal) {
+            cameraModal.hidden = true;
+            document.documentElement.style.overflow = '';
+        }
+        resetCameraModalPanels();
+    }
+
+    function getUserMediaCompat(constraints) {
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+            return navigator.mediaDevices.getUserMedia(constraints);
+        }
+        var legacy = navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        if (!legacy) {
+            return Promise.reject(Object.assign(new Error('no-api'), { name: 'NotSupportedError' }));
+        }
+        return new Promise(function(resolve, reject) {
+            legacy.call(navigator, constraints, resolve, reject);
+        });
+    }
+
+    function getCameraStream() {
+        var mobile = isMobileCameraDevice();
+        if (mobile) {
+            return getUserMediaCompat({
+                video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            }).catch(function() {
+                return getUserMediaCompat({ video: { facingMode: 'user' }, audio: false });
+            }).catch(function() {
+                return getUserMediaCompat({ video: true, audio: false });
+            });
+        }
+        return getUserMediaCompat({ video: true, audio: false });
+    }
+
+    function showCameraErrorInModal(err) {
+        stopCameraStream();
+        if (cameraLiveBlock) cameraLiveBlock.hidden = true;
+        if (cameraErrorBlock) cameraErrorBlock.hidden = false;
+        if (cameraTitle) cameraTitle.textContent = 'Camera unavailable';
+        var msg = 'We could not open your camera.';
+        if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+            msg = 'Camera access was blocked. Allow camera for this site (tap the lock or “aA” icon in the address bar on iPhone, or the lock icon in Chrome on Android), then try again.';
+            if (isMobileCameraDevice() && /iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
+                msg += ' You can also check Settings → Safari → Camera, or Settings → [this browser] → Camera.';
+            }
+        } else if (err && err.name === 'NotFoundError') {
+            msg = 'No camera was detected. Connect a webcam or use Upload photo to pick an image from your device.';
+        } else if (err && err.name === 'NotReadableError') {
+            msg = 'The camera is already in use by another application. Close it and try again, or use Upload photo.';
+        } else if (err && err.name === 'OverconstrainedError') {
+            msg = 'Your camera could not be started with the requested settings. Use Upload photo instead.';
+        } else if (err && (err.name === 'NotSupportedError' || err.message === 'no-api')) {
+            msg = 'This browser does not support live camera here. Use Upload photo, or try the latest Chrome, Edge, or Firefox.';
+        }
+        if (!window.isSecureContext) {
+            msg = 'Camera requires a secure site (HTTPS). If you opened this app over plain HTTP from another device, use HTTPS or use Upload photo.';
+        }
+        if (cameraErrorText) cameraErrorText.textContent = msg;
+        if (cameraModal) {
+            cameraModal.hidden = false;
+            document.documentElement.style.overflow = 'hidden';
+        }
+    }
+
+    function openCameraModalWithStream() {
+        if (!cameraModal || !cameraVideo) return;
+        resetCameraModalPanels();
+        getCameraStream().then(function(stream) {
+            cameraStream = stream;
+            cameraVideo.muted = true;
+            cameraVideo.defaultMuted = true;
+            cameraVideo.setAttribute('muted', '');
+            cameraVideo.playsInline = true;
+            cameraVideo.setAttribute('playsinline', '');
+            cameraVideo.setAttribute('webkit-playsinline', '');
+            try {
+                cameraVideo.srcObject = stream;
+            } catch (e) {
+                try {
+                    cameraVideo.mozSrcObject = stream;
+                } catch (e2) {
+                    cameraVideoObjectUrl = URL.createObjectURL(stream);
+                    cameraVideo.src = cameraVideoObjectUrl;
+                }
+            }
+            cameraModal.hidden = false;
+            document.documentElement.style.overflow = 'hidden';
+            var p = cameraVideo.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(function() {
+                    requestAnimationFrame(function() {
+                        cameraVideo.play().catch(function() {});
+                    });
+                });
+            }
+        }).catch(function(err) {
+            showCameraErrorInModal(err);
+        });
+    }
+
+    if (menuBtn && menu) {
+        menuBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            togglePhotoMenu();
+        });
+        document.addEventListener('click', function() { closePhotoMenu(); });
+        menu.addEventListener('click', function(e) { e.stopPropagation(); });
+        function onViewportChange() {
+            if (menu && !menu.hidden) positionPhotoMenu();
+        }
+        window.addEventListener('resize', onViewportChange);
+        window.addEventListener('orientationchange', onViewportChange);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', onViewportChange);
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if (cameraModal && !cameraModal.hidden) {
+            closeCameraModal();
+            return;
+        }
+        closePhotoMenu();
+    });
+
+    if (btnCamera) {
+        btnCamera.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closePhotoMenu();
+            openCameraModalWithStream();
+        });
+    }
+    if (btnUpload && inputUpload) {
+        btnUpload.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            inputUpload.click();
+            closePhotoMenu();
+        });
+    }
+
+    function onAuxChange(aux) {
+        var file = aux.files[0];
+        aux.value = '';
+        if (!file) return;
+        setMainFile(file);
+    }
+
+    if (inputCamera) inputCamera.addEventListener('change', function() { onAuxChange(this); });
+    if (inputUpload) inputUpload.addEventListener('change', function() { onAuxChange(this); });
+
+    if (btnCapture && cameraCanvas && cameraVideo) {
+        btnCapture.addEventListener('click', function() {
+            var w = cameraVideo.videoWidth;
+            var h = cameraVideo.videoHeight;
+            if (!w || !h) {
+                alert('Camera is not ready yet. Wait a moment and try again.');
+                return;
+            }
+            cameraCanvas.width = w;
+            cameraCanvas.height = h;
+            var ctx = cameraCanvas.getContext('2d');
+            ctx.drawImage(cameraVideo, 0, 0, w, h);
+            cameraCanvas.toBlob(function(blob) {
+                if (!blob) {
+                    alert('Could not capture image.');
+                    return;
+                }
+                var file = new File([blob], 'profile-photo.jpg', { type: 'image/jpeg' });
+                if (setMainFile(file)) closeCameraModal();
+            }, 'image/jpeg', 0.92);
+        });
+    }
+    if (btnCamCancel) btnCamCancel.addEventListener('click', function() { closeCameraModal(); });
+    if (cameraBackdrop) cameraBackdrop.addEventListener('click', function() { closeCameraModal(); });
+    if (btnCameraTryUpload && inputUpload) {
+        btnCameraTryUpload.addEventListener('click', function() {
+            closeCameraModal();
+            inputUpload.click();
+        });
+    }
+    if (btnCameraErrorClose) {
+        btnCameraErrorClose.addEventListener('click', function() { closeCameraModal(); });
+    }
+
     if (fileInput) {
         fileInput.addEventListener('change', function() {
             var file = this.files[0];
             if (!file) return;
-            if (file.size > 5 * 1024 * 1024) {
+            if (file.size > maxBytes) {
                 alert('File too large. Maximum size is 5 MB.');
                 this.value = '';
                 return;
             }
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                preview.innerHTML = '<img src="' + e.target.result + '" alt="Preview" id="avatarImg" style="width:100%;height:100%;object-fit:cover;display:block;">';
-            };
-            reader.readAsDataURL(file);
+            previewFile(file);
         });
     }
 });

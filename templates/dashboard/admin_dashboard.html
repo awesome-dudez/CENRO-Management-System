@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin Dashboard - CENRO Management System{% endblock %}
+{% block title %}Admin Dashboard - CENRO Sanitary Management System{% endblock %}
 {% block admin_subtitle %}System Dashboard{% endblock %}
 {% block content %}
 <div class="admin-dashboard-page">
@@ -31,9 +31,9 @@
     <div class="summary-card pending">
         <div class="summary-card-icon">⏳</div>
         <div class="summary-card-content">
-            <div class="summary-card-title">Pending Service</div>
+            <div class="summary-card-title">Open requests</div>
             <div class="summary-card-value">{{ pending_count|default:0 }}</div>
-            <div class="summary-card-status">Awaiting execution</div>
+            <div class="summary-card-status">Not completed, cancelled, or expired</div>
         </div>
     </div>
     
@@ -42,7 +42,7 @@
         <div class="summary-card-content">
             <div class="summary-card-title">Completed This Month</div>
             <div class="summary-card-value">{{ completed_this_month|default:0 }}</div>
-            <div class="summary-card-trend">{{ efficiency_change|floatformat:0 }}% change from last month</div>
+            <div class="summary-card-trend">Marked complete this month vs. prior month ({{ efficiency_change|floatformat:0 }}%)</div>
         </div>
     </div>
     
@@ -50,103 +50,15 @@
         <div class="summary-card-icon">🚛</div>
         <div class="summary-card-content">
             <div class="summary-card-title">Field Units Active</div>
-            <div class="summary-card-value">8</div>
-            <div class="summary-card-status">2 units on maintenance</div>
-        </div>
-    </div>
-</div>
-
-<!-- Analytics Charts -->
-<div class="charts-grid">
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">📈 Service Request Trends</h3>
-            <p class="card-subtitle">Weekly incoming vs completed requests (last 4 weeks)</p>
-        </div>
-        <div class="chart-container" style="height: 300px;">
-            <canvas id="trendsChart"></canvas>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">🏘️ Service Type Distribution</h3>
-            <p class="card-subtitle">Breakdown by category</p>
-        </div>
-        <div class="distribution-chart">
-            <div class="distribution-item">
-                <div class="distribution-label">
-                    <span class="distribution-dot" style="background: var(--primary-green);"></span>
-                    <strong>Declogging (Residential)</strong>
-                </div>
-                <div class="distribution-bar-container">
-                    <div class="distribution-bar" style="width: {{ residential_pct }}%; background: var(--primary-green);"></div>
-                    <span class="distribution-percentage"><strong>{{ residential_pct|floatformat:0 }}%</strong></span>
-                </div>
-            </div>
-            <div class="distribution-item">
-                <div class="distribution-label">
-                    <span class="distribution-dot" style="background: var(--water-teal);"></span>
-                    <strong>Grass Cutting / Commercial</strong>
-                </div>
-                <div class="distribution-bar-container">
-                    <div class="distribution-bar" style="width: {{ commercial_pct }}%; background: var(--water-teal);"></div>
-                    <span class="distribution-percentage"><strong>{{ commercial_pct|floatformat:0 }}%</strong></span>
-                </div>
+            <div class="summary-card-value">{{ equipment_active_count|default:0 }}</div>
+            <div class="summary-card-status">
+                {% if equipment_total_count %}
+                    {{ equipment_inactive_count }} unit{{ equipment_inactive_count|pluralize }} inactive (equipment registry)
+                {% else %}
+                    No equipment on file — add units under Equipment
+                {% endif %}
             </div>
         </div>
-    </div>
-</div>
-
-<!-- Barangay Performance -->
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">🏘️ Barangay Rankings</h3>
-        <p class="card-subtitle">Service requests by barangay - Top 10</p>
-    </div>
-    <div class="table-responsive">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width: 50px;">Rank</th>
-                    <th>Barangay Name</th>
-                    <th style="text-align: center;">Total Requests</th>
-                    <th>Distribution</th>
-                    <th style="width: 120px;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for stat in barangay_stats %}
-                <tr>
-                    <td><strong>#{{ forloop.counter }}</strong></td>
-                    <td><strong>{{ stat.barangay }}</strong></td>
-                    <td style="text-align: center; font-weight: 600;">{{ stat.count }}</td>
-                    <td>
-                        <div class="progress-bar-container" style="margin: 0; height: 20px;">
-                            <div class="progress-bar" style="width: {% widthratio stat.count total_requests 100 %}%; font-size: 11px;">
-                                {% widthratio stat.count total_requests 100 %}%
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        {% if stat.count > 20 %}
-                        <span class="status-badge status-approved">High Activity</span>
-                        {% elif stat.count > 10 %}
-                        <span class="status-badge status-in-progress">Moderate</span>
-                        {% else %}
-                        <span class="status-badge status-scheduled">Low Activity</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5" style="text-align: center; padding: 30px;">
-                        <em>No service requests data available yet</em>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 </div>
 
@@ -175,73 +87,30 @@
     
     <div class="card">
         <div class="card-header">
-            <h4 class="card-title">System Status</h4>
-            <p class="card-subtitle">Current system health</p>
+            <h4 class="card-title">System snapshot</h4>
+            <p class="card-subtitle">Counts from your live data</p>
         </div>
         <div class="system-status-grid">
             <div class="system-status-item">
-                <strong>Status</strong>
-                <span class="status-badge status-approved">Operational</span>
+                <strong>Member accounts</strong>
+                <span style="color: var(--text-gray); font-size: 0.9rem;">{{ consumer_accounts_count|default:0 }} active consumers</span>
             </div>
             <div class="system-status-item">
-                <strong>Database</strong>
-                <span class="status-badge status-completed">Active</span>
+                <strong>Field staff</strong>
+                <span style="color: var(--text-gray); font-size: 0.9rem;">{{ staff_active_count|default:0 }} approved &amp; can sign in</span>
             </div>
             <div class="system-status-item">
-                <strong>Server</strong>
-                <span class="status-badge status-completed">Running</span>
+                <strong>Upcoming schedules</strong>
+                <span style="color: var(--text-gray); font-size: 0.9rem;">{{ upcoming_schedules_count|default:0 }} from today onward</span>
             </div>
             <div class="system-status-item">
-                <strong>Last Sync</strong>
-                <span style="color: var(--text-gray); font-size: 0.9rem;">Just now</span>
+                <strong>Latest request submitted</strong>
+                <span style="color: var(--text-gray); font-size: 0.9rem;">
+                    {% if last_request_at %}{{ last_request_at|date:"M j, Y g:i A" }}{% else %}No requests yet{% endif %}
+                </span>
             </div>
         </div>
     </div>
 </div>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-// Service Request Trends Chart
-const trendsCtx = document.getElementById('trendsChart');
-if (trendsCtx) {
-    const trendsData = JSON.parse('{{ weeks_data|escapejs }}');
-    new Chart(trendsCtx, {
-        type: 'bar',
-        data: {
-            labels: trendsData.map(d => d.week),
-            datasets: [{
-                label: 'Incoming Requests',
-                data: trendsData.map(d => d.incoming),
-                backgroundColor: 'rgba(45, 134, 89, 0.8)',
-                borderColor: 'rgba(45, 134, 89, 1)',
-                borderWidth: 1
-            }, {
-                label: 'Completions',
-                data: trendsData.map(d => d.completed),
-                backgroundColor: 'rgba(224, 228, 232, 0.8)',
-                borderColor: 'rgba(100, 100, 100, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
-            }
-        }
-    });
-}
-</script>
 {% endblock %}

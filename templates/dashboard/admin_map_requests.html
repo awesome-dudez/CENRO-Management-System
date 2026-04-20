@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}View Map Requests - CENRO Management System{% endblock %}
+{% block title %}View Map Requests - CENRO Sanitary Management System{% endblock %}
 {% block admin_subtitle %}View Map Requests{% endblock %}
-{% block content %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="anonymous" />
 <style>
 .admin-map-page .card { margin-bottom: 0; }
 .ls-wrap { position: relative; display: inline-block; }
@@ -21,74 +23,96 @@
 .ls-opt-label { font-size: 11px; font-weight: 600; color: #444; margin-top: 5px; text-align: center; }
 .ls-opt.ls-active .ls-opt-label { color: #1abc9c; }
 .admin-map-layout { display: flex; gap: 24px; align-items: stretch; margin-top: 16px; }
-.admin-map-list { flex: 0 0 280px; min-width: 0; display: flex; flex-direction: column; }
-.admin-map-list .card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.admin-map-list .card-header { flex-shrink: 0; }
-.admin-map-list-wrap { flex: 1; overflow-y: auto; min-height: 200px; }
-.admin-map-consumer-item { display: block; width: 100%; padding: 12px 16px; text-align: left; border: none; border-radius: 6px; background: transparent; color: var(--text-dark, #333); font-size: 0.95rem; cursor: pointer; transition: background 0.2s; border-left: 3px solid transparent; }
-.admin-map-consumer-item:hover { background: rgba(45, 134, 89, 0.08); }
-.admin-map-consumer-item.active { background: rgba(45, 134, 89, 0.12); border-left-color: var(--primary-green, #2d8659); font-weight: 600; }
+.admin-map-sidebar { flex: 0 0 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.admin-map-sidebar .card { flex: 0 0 auto; }
+.admin-map-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.admin-map-filter-actions button { font-size: 12px; padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; font-weight: 600; color: #333; }
+.admin-map-filter-actions button:hover { background: #f0f0f0; }
+.admin-map-status-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; cursor: pointer; }
+.admin-map-status-check:last-child { border-bottom: none; }
+.admin-map-status-check input { margin-top: 3px; flex-shrink: 0; }
+.admin-map-swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; border: 2px solid rgba(0,0,0,0.12); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+.admin-map-sidebar-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }
 .admin-map-map { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #admin-map-requests-map { width: 100%; height: 100%; min-height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; }
 .admin-map-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 400px; background: #f8f9fa; border-radius: 8px; color: #666; font-size: 0.95rem; padding: 24px; text-align: center; }
-.admin-map-empty-list { padding: 24px; text-align: center; color: #666; }
 .admin-map-popup { min-width: 220px; font-size: 13px; }
 .admin-map-popup strong { display: block; margin-bottom: 6px; }
+.admin-map-pin-outer { width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+.admin-map-pin-inner { width: 8px; height: 8px; margin: 5px; border-radius: 50%; background: #fff; opacity: 0.95; }
+.leaflet-div-icon.admin-map-divicon { background: transparent !important; border: none !important; }
 @media (max-width: 768px) {
     .admin-map-layout { flex-direction: column; }
-    .admin-map-list { flex: 0 0 auto; max-height: 240px; }
+    .admin-map-sidebar { flex: 0 0 auto; }
     #admin-map-requests-map { min-height: 320px; }
     .admin-map-placeholder { min-height: 320px; }
 }
 </style>
+{% endblock %}
+{% block content %}
 <div class="admin-map-page">
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">🗺️ View Map Requests</h3>
-            <p class="card-subtitle">Consumers with completed, serviced requests (with GPS). Select a consumer to view their service location on the map.</p>
+            <p class="card-subtitle">All service requests with a map pin are shown together. Markers are clustered when zoomed out and colored by status. Use the filters to limit which statuses appear.</p>
         </div>
         <div class="admin-map-layout">
-            <div class="admin-map-list">
+            <div class="admin-map-sidebar">
                 <div class="card">
                     <div class="card-header">
-                        <h4 class="card-title">Consumers</h4>
-                        <p class="card-subtitle">Click a name to show map</p>
+                        <h4 class="card-title">Filter by status</h4>
+                        <p class="card-subtitle">Showing <span id="admin-map-visible-count">{{ map_request_count }}</span> of {{ map_request_count }} request{{ map_request_count|pluralize }} with GPS</p>
                     </div>
-                    <div class="admin-map-list-wrap">
-                        {% if consumers %}
-                        {% for c in consumers %}
-                        <button type="button" class="admin-map-consumer-item" data-consumer-id="{{ c.id }}" aria-pressed="false">{{ c.name }}</button>
-                        {% endfor %}
+                    <div style="padding: 0 1rem 1rem;">
+                        {% if status_filters %}
+                        <div class="admin-map-filter-actions">
+                            <button type="button" id="admin-map-filter-all">Show all</button>
+                            <button type="button" id="admin-map-filter-none">Hide all</button>
+                        </div>
+                        <div class="admin-map-sidebar-scroll" id="admin-map-status-filters">
+                            {% for s in status_filters %}
+                            <label class="admin-map-status-check">
+                                <input type="checkbox" name="map_status" value="{{ s.value }}" checked data-color="{{ s.color }}">
+                                <span class="admin-map-swatch" style="background-color: {{ s.color }};" aria-hidden="true"></span>
+                                <span>{{ s.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
                         {% else %}
-                        <div class="admin-map-empty-list">No completed requests with map location data.</div>
+                        <p style="margin:0;color:#666;font-size:0.95rem;">No requests with GPS coordinates yet.</p>
                         {% endif %}
                     </div>
                 </div>
             </div>
             <div class="admin-map-map">
                 <div id="admin-map-container" class="admin-map-map-inner" style="position: relative; flex: 1; min-height: 400px;">
-                    <div class="admin-map-placeholder" id="admin-map-placeholder">Select a consumer to view their service location(s).</div>
-                    <div id="admin-map-requests-map" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;" aria-label="Map of selected consumer service locations"></div>
+                    {% if map_request_count %}
+                    <div id="admin-map-requests-map" aria-label="Map of service request locations"></div>
+                    {% else %}
+                    <div class="admin-map-placeholder" id="admin-map-placeholder">No requests with map coordinates. Submitted locations will appear here.</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
 <script type="application/json" id="admin-map-requests-data">{{ requests_json|safe }}</script>
-<script type="application/json" id="admin-map-consumers-data">{{ consumers_json|safe }}</script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
 <script>
 (function() {
-    var placeholder = document.getElementById('admin-map-placeholder');
     var mapEl = document.getElementById('admin-map-requests-map');
-    if (!mapEl || typeof L === 'undefined') return;
+    if (!mapEl || typeof L === 'undefined' || typeof L.markerClusterGroup !== 'function') return;
+
     var requestsData = [];
     try {
         var dataEl = document.getElementById('admin-map-requests-data');
         if (dataEl) requestsData = JSON.parse(dataEl.textContent);
     } catch (e) {}
+
     var defaultCenter = [9.3696, 122.7960];
     var defaultZoom = 11;
     var map = L.map(mapEl, { attributionControl: true, maxZoom: 20 }).setView(defaultCenter, defaultZoom);
+
     var _amStreet = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 22, maxNativeZoom: 20
     });
@@ -117,51 +141,92 @@
         });
         new Ctrl().addTo(m);
     })(map);
-    var markersLayer = L.layerGroup().addTo(map);
-    function clearMarkers() {
-        markersLayer.clearLayers();
+
+    function esc(s) {
+        if (s == null || s === '') return '—';
+        var d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
     }
-    function showMapForConsumer(consumerId) {
-        clearMarkers();
-        var list = requestsData.filter(function(r) { return String(r.consumer_id) === String(consumerId); });
-        if (list.length === 0) {
-            if (placeholder) placeholder.style.display = 'flex';
-            mapEl.style.display = 'none';
-            return;
-        }
-        if (placeholder) placeholder.style.display = 'none';
-        mapEl.style.display = 'block';
+
+    function pinIcon(hexColor) {
+        var html = '<div class="admin-map-pin-outer" style="background:' + hexColor + ';"><div class="admin-map-pin-inner"></div></div>';
+        return L.divIcon({
+            className: 'admin-map-divicon',
+            html: html,
+            iconSize: [22, 22],
+            iconAnchor: [11, 20],
+            popupAnchor: [0, -18]
+        });
+    }
+
+    var clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 55,
+        spiderfyOnMaxZoom: true,
+        disableClusteringAtZoom: 16
+    });
+    map.addLayer(clusterGroup);
+
+    function getAllowedStatuses() {
+        var allowed = {};
+        document.querySelectorAll('input[name="map_status"]').forEach(function(cb) {
+            if (cb.checked) allowed[cb.value] = true;
+        });
+        return allowed;
+    }
+
+    function rebuildMarkers() {
+        clusterGroup.clearLayers();
+        var allowed = getAllowedStatuses();
         var bounds = null;
-        for (var i = 0; i < list.length; i++) {
-            var r = list[i];
+        var visible = 0;
+        for (var i = 0; i < requestsData.length; i++) {
+            var r = requestsData[i];
+            if (!allowed[r.status]) continue;
             var lat = parseFloat(r.lat);
             var lng = parseFloat(r.lng);
             if (isNaN(lat) || isNaN(lng)) continue;
+            visible++;
             var popupHtml = '<div class="admin-map-popup">' +
-                '<strong>Consumer:</strong> ' + (r.consumer_name || '—') + '<br>' +
-                '<strong>Service:</strong> ' + (r.service_type || '—') + '<br>' +
-                '<strong>Address:</strong> ' + (r.address || '—') + '<br>' +
-                '<strong>Date Completed:</strong> ' + (r.date_completed || '—') +
+                '<strong>Request #' + esc(r.request_id) + '</strong>' +
+                '<span><strong>Status:</strong> ' + esc(r.status_label) + '</span><br>' +
+                '<strong>Consumer:</strong> ' + esc(r.consumer_name) + '<br>' +
+                '<strong>Client / site:</strong> ' + esc(r.client_name) + '<br>' +
+                '<strong>Service:</strong> ' + esc(r.service_type) + '<br>' +
+                '<strong>Address:</strong> ' + esc(r.address) + '<br>' +
+                '<strong>Request date:</strong> ' + esc(r.request_date) + '<br>' +
+                '<a href="' + String(r.detail_url || '#') + '">Open request detail →</a>' +
                 '</div>';
-            var marker = L.marker([lat, lng]).addTo(markersLayer).bindPopup(popupHtml);
+            var marker = L.marker([lat, lng], { icon: pinIcon(r.pin_color || '#34495e') });
+            marker.bindPopup(popupHtml);
+            clusterGroup.addLayer(marker);
             if (!bounds) bounds = L.latLngBounds([lat, lng], [lat, lng]);
             else bounds.extend([lat, lng]);
         }
-        if (bounds && list.length > 0) {
-            map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+        var countEl = document.getElementById('admin-map-visible-count');
+        if (countEl) countEl.textContent = String(visible);
+        if (bounds && visible > 0) {
+            map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 });
         }
         map.invalidateSize();
     }
-    var items = document.querySelectorAll('.admin-map-consumer-item[data-consumer-id]');
-    items.forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var id = this.getAttribute('data-consumer-id');
-            items.forEach(function(b) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-            this.classList.add('active');
-            this.setAttribute('aria-pressed', 'true');
-            showMapForConsumer(id);
-        });
+
+    document.querySelectorAll('input[name="map_status"]').forEach(function(cb) {
+        cb.addEventListener('change', rebuildMarkers);
     });
+    var btnAll = document.getElementById('admin-map-filter-all');
+    var btnNone = document.getElementById('admin-map-filter-none');
+    if (btnAll) btnAll.addEventListener('click', function() {
+        document.querySelectorAll('input[name="map_status"]').forEach(function(cb) { cb.checked = true; });
+        rebuildMarkers();
+    });
+    if (btnNone) btnNone.addEventListener('click', function() {
+        document.querySelectorAll('input[name="map_status"]').forEach(function(cb) { cb.checked = false; });
+        rebuildMarkers();
+    });
+
+    rebuildMarkers();
 })();
 </script>
 {% endblock %}

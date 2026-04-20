@@ -52,8 +52,10 @@
                             <span class="gender-icon">
                                 {% if radio.choice_label == "Male" %}
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"/><line x1="14" y1="10" x2="21" y2="3"/><polyline points="15,3 21,3 21,9"/></svg>
-                                {% else %}
+                                {% elif radio.choice_label == "Female" %}
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><line x1="12" y1="13" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+                                {% else %}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="4"/><path d="M6 21v-1a6 6 0 0112 0v1"/><path d="M12 13v3"/></svg>
                                 {% endif %}
                             </span>
                             <span>{{ radio.choice_label }}</span>
@@ -249,9 +251,9 @@
     .req { color: #dc3545; font-weight: 600; }
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-    .gender-toggle-group { display: flex; gap: 8px; margin-top: 2px; }
+    .gender-toggle-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
     .gender-option {
-        flex: 1; display: flex; align-items: center; gap: 6px;
+        flex: 1; min-width: 5.5rem; display: flex; align-items: center; gap: 6px;
         padding: 9px 12px; border: 2px solid #ddd; border-radius: 6px;
         cursor: pointer; font-size: 14px; font-weight: 500; color: #555;
         transition: all 0.15s;

@@ -19,6 +19,7 @@
     }
     .letter-logos-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .letter-logos-right { display: flex; align-items: center; }
+    .letter-logo-bayawan { margin-top: 10px; }
     .letter-header-titles { text-align: center; }
     .letter-header h2 { font-size: 20px; color: #2d3142; margin: 0 0 4px; }
     .letter-header p { font-size: 13px; color: #666; margin: 0; }
@@ -48,8 +49,10 @@
     .btn-edit:hover { background: #2980b9; border-color: #2980b9; color: white; }
     .btn-secondary { background: #e0e0e0; color: #2d3142; border-color: #e0e0e0; }
     .btn-secondary:hover { background: #d0d0d0; }
+    .finalize-letter-wrap { margin-top: 20px; padding: 16px; background: #f8faf9; border-radius: 8px; border: 1px solid #c7efe6; }
+    .finalize-pending-hint { margin-top: 16px; padding: 14px 16px; background: #fff8e6; border: 1px solid #f0d090; border-radius: 8px; font-size: 14px; color: #5d4a1f; max-width: 800px; margin-left: auto; margin-right: auto; }
     @media print {
-        .print-bar, .btn-edit, header, footer, .top-nav, .admin-header, .toast-container { display: none !important; }
+        .print-bar, .btn-edit, .finalize-letter-wrap, .finalize-pending-hint, header, footer, .top-nav, .admin-header, .toast-container { display: none !important; }
         .letter-container { margin: 0; padding: 0; }
         .letter-card { border: none; box-shadow: none; padding: 20px; }
     }
@@ -60,11 +63,11 @@
         <div class="letter-header">
             <div class="letter-logos">
                 <div class="letter-logos-left">
-                    <img src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:96px;width:auto;">
-                    <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:52px;width:auto;">
+                    <img class="letter-logo-bayawan" src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:102px;width:auto;">
+                    <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:56px;width:auto;">
                 </div>
                 <div class="letter-logos-right">
-                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:56px;width:auto;">
+                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:60px;width:auto;">
                 </div>
             </div>
             <div class="letter-header-titles">
@@ -106,7 +109,8 @@
                 <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>
                 <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
                 {% if comp.payment_status == "FREE" %}
-                <tr class="free"><td>BAWAD Discount (Free Service)</td><td>- &#8369;{{ comp.total_charge }}</td></tr>
+                <tr class="subtotal"><td>Total charges</td><td>&#8369;{{ comp.billable_subtotal }}</td></tr>
+                <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Public property waiver (no charge){% else %}BAWAD discount (free service){% endif %}</td><td>- &#8369;{{ comp.billable_subtotal }}</td></tr>
                 <tr class="total"><td>TOTAL</td><td>&#8369;0.00</td></tr>
                 {% else %}
                 <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
@@ -119,32 +123,34 @@
                 {% if prepared_by_signature_url %}
                 <img src="{{ prepared_by_signature_url }}" alt="Prepared by signature" style="max-height:80px; display:block;">
                 {% else %}
-                <img src="{% static 'signatures/signature.png' %}" alt="Prepared by signature" style="max-height:80px; display:block;">
+                <div style="min-height:80px; max-width:220px; border-bottom:1px solid #ccc;" aria-hidden="true"></div>
                 {% endif %}
             </div>
             <p>Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>
         </div>
 
-        {% if user.is_admin %}
-        {% if not comp.is_finalized %}
-        <form method="post" enctype="multipart/form-data" style="margin-top:16px;">
+        {% if can_finalize_letter %}
+        <form id="finalize-letter-form" method="post" enctype="multipart/form-data" class="finalize-letter-wrap">
             {% csrf_token %}
             <div class="form-group">
-                <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature (optional until finalization)</label>
+                <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature <span style="color:#c0392b;">(required to send)</span></label>
                 <input type="file" name="prepared_by_signature" accept="image/*">
-                <p style="font-size:12px;color:#666;margin-top:4px;">Upload a scanned or digital signature that will appear on the computation letter.</p>
-            </div>
-            <div style="margin-top:10px;">
-                <button type="submit" name="action" value="finalize" class="btn btn-primary">Finalize &amp; Send to Customer</button>
+                <p style="font-size:12px;color:#666;margin-top:4px;">Required before finalizing, along with complete crew (waived) or completion info (inspected).</p>
             </div>
         </form>
         {% endif %}
-        {% endif %}
     </div>
+
+    {% if not comp.is_finalized and not can_finalize_letter %}
+    <p class="finalize-pending-hint"><strong>Draft preview.</strong> Use <strong>Edit Computation</strong>, click <strong>Save &amp; Recalculate</strong>, then return here — <strong>Finalize &amp; Send to Customer</strong> will appear and the customer will only be notified after you finalize.</p>
+    {% endif %}
 
     <div class="print-bar">
         {% if user.is_admin %}
         <a href="{% url 'services:edit_computation' sr.pk %}" class="btn btn-edit">Edit Computation</a>
+        {% endif %}
+        {% if can_finalize_letter %}
+        <button type="submit" form="finalize-letter-form" name="action" value="finalize" class="btn btn-primary">Finalize &amp; Send to Customer</button>
         {% endif %}
         <button type="button" class="btn btn-primary" onclick="window.print()">Print</button>
         <a href="{% url 'services:download_computation_pdf' sr.pk %}" class="btn btn-download" download>Download PDF</a>

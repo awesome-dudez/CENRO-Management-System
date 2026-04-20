@@ -1,7 +1,7 @@
 # Admin Section Implementation Guide
 
 ## Overview
-The admin section has been redesigned to match the EcoTrack visual style with a modern, clean interface featuring top navigation instead of a sidebar.
+The admin section has been redesigned with a modern, clean interface featuring top navigation instead of a sidebar.
 
 ## Admin Features Implemented
 
@@ -65,7 +65,7 @@ The Schedule view tracks progress toward a 10-person limit per barangay:
 - Orange: #f39c12 (for warnings/pending)
 
 ### Layout
-- Top navigation bar with EcoTrack branding
+- Top navigation bar with CENRO Sanitary Management System branding
 - Horizontal admin tabs (Dashboard, Requests, Membership, Computation, Declogging App)
 - Secondary navigation tabs for sub-sections
 - Card-based layouts throughout

@@ -1,4 +1,4 @@
-const CACHE_NAME = "cenro-shell-v1";
+const CACHE_NAME = "cenro-shell-v2";
 const OFFLINE_URL = "/offline/";
 const PRECACHE_URLS = [
   "/",
@@ -32,6 +32,17 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
+
+  // JSON APIs (notifications, etc.): never cache — stale responses hide new alerts.
+  try {
+    const path = new URL(req.url).pathname;
+    if (path.includes("/api/")) {
+      event.respondWith(fetch(req));
+      return;
+    }
+  } catch (e) {
+    /* fall through */
+  }
 
   // HTML navigation: network-first, fallback to cache/offline page.
   if (req.mode === "navigate") {
