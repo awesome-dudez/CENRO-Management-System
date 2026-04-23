@@ -105,13 +105,16 @@
                 <tr><td>{{ line.label }}</td><td>&#8369;{{ line.amount }}</td></tr>
                 {% endfor %}
                 <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td>&#8369;{{ comp.desludging_fee }}</td></tr>
-                {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee ({{ comp.distance_km|floatformat:0 }} km &#215; &#8369;20 &#215; 2)</td><td>&#8369;{{ comp.distance_travel_fee }}</td></tr>{% endif %}
+                {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee{% if comp.billable_travel_km < comp.distance_km %}<br><span style="font-size:11px;color:#666;">{{ comp.distance_km|floatformat:0 }} km to site; first {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO office not charged — {{ comp.billable_travel_km|floatformat:0 }} km billable &#215; &#8369;20 &#215; 2</span>{% else %} ({{ comp.distance_km|floatformat:0 }} km &#215; &#8369;20 &#215; 2){% endif %}</td><td>&#8369;{{ comp.distance_travel_fee }}</td></tr>{% endif %}
                 <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>
                 <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
                 {% if comp.payment_status == "FREE" %}
                 <tr class="subtotal"><td>Total charges</td><td>&#8369;{{ comp.billable_subtotal }}</td></tr>
                 <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Public property waiver (no charge){% else %}BAWAD discount (free service){% endif %}</td><td>- &#8369;{{ comp.billable_subtotal }}</td></tr>
                 <tr class="total"><td>TOTAL</td><td>&#8369;0.00</td></tr>
+                {% elif comp.uses_inside_public_bawad_partial_waiver %}
+                <tr class="free"><td>Public / BAWAD waiver — fixed trucking &amp; tipping / septage (inside Bayawan; site &gt; {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO)</td><td>- &#8369;{{ comp.waived_inside_base_service_amount }}</td></tr>
+                <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
                 {% else %}
                 <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
                 {% endif %}

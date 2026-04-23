@@ -1395,6 +1395,29 @@ body.admin-view .main-content {
     color: var(--text-gray);
 }
 
+/* Whole tile is one link — no underline on any state or nested text */
+.admin-dashboard-page a.summary-card-link,
+.admin-dashboard-page a.summary-card-link:hover,
+.admin-dashboard-page a.summary-card-link:visited,
+.admin-dashboard-page a.summary-card-link:active {
+    text-decoration: none;
+    -webkit-text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.admin-dashboard-page a.summary-card-link .summary-card-title,
+.admin-dashboard-page a.summary-card-link .summary-card-value,
+.admin-dashboard-page a.summary-card-link .summary-card-trend,
+.admin-dashboard-page a.summary-card-link .summary-card-status {
+    text-decoration: none;
+}
+
+.admin-dashboard-page a.summary-card-link:focus-visible {
+    outline: 2px solid var(--primary-green);
+    outline-offset: 3px;
+}
+
 /* Chart cards – cleaner and friendlier */
 .admin-dashboard-page .charts-grid {
     gap: 28px;

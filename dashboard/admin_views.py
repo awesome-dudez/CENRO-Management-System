@@ -617,6 +617,17 @@ def admin_requests(request):
                 ServiceRequest.Status.CANCELLED,
             ],
         )
+    elif tab == "all":
+        requests_qs = base_qs
+    elif tab == "open":
+        # Matches dashboard "open requests" count: in workflow, excluding terminal states.
+        requests_qs = base_qs.exclude(
+            status__in=[
+                ServiceRequest.Status.COMPLETED,
+                ServiceRequest.Status.CANCELLED,
+                ServiceRequest.Status.EXPIRED,
+            ]
+        )
     else:
         requests_qs = base_qs
 

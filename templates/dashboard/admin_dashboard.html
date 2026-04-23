@@ -17,36 +17,36 @@
     </div>
 </div>
 
-<!-- Key Metrics Cards -->
+<!-- Key Metrics Cards (click-through to matching admin sections) -->
 <div class="summary-cards">
-    <div class="summary-card total">
+    <a href="{% url 'dashboard:admin_requests' %}?tab=all" class="summary-card total summary-card-link" aria-label="View all requests">
         <div class="summary-card-icon">📋</div>
         <div class="summary-card-content">
             <div class="summary-card-title">Total Requests</div>
             <div class="summary-card-value">{{ total_requests|default:0 }}</div>
             <div class="summary-card-trend">All-time cumulative</div>
         </div>
-    </div>
+    </a>
     
-    <div class="summary-card pending">
+    <a href="{% url 'dashboard:admin_requests' %}?tab=open" class="summary-card pending summary-card-link" aria-label="View open requests">
         <div class="summary-card-icon">⏳</div>
         <div class="summary-card-content">
             <div class="summary-card-title">Open requests</div>
             <div class="summary-card-value">{{ pending_count|default:0 }}</div>
             <div class="summary-card-status">Not completed, cancelled, or expired</div>
         </div>
-    </div>
+    </a>
     
-    <div class="summary-card completed">
+    <a href="{% url 'dashboard:admin_requests' %}?tab=completed" class="summary-card completed summary-card-link" aria-label="View completed requests">
         <div class="summary-card-icon">✅</div>
         <div class="summary-card-content">
             <div class="summary-card-title">Completed This Month</div>
             <div class="summary-card-value">{{ completed_this_month|default:0 }}</div>
             <div class="summary-card-trend">Marked complete this month vs. prior month ({{ efficiency_change|floatformat:0 }}%)</div>
         </div>
-    </div>
+    </a>
     
-    <div class="summary-card active">
+    <a href="{% url 'dashboard:admin_equipment' %}" class="summary-card active summary-card-link" aria-label="View equipment registry">
         <div class="summary-card-icon">🚛</div>
         <div class="summary-card-content">
             <div class="summary-card-title">Field Units Active</div>
@@ -59,7 +59,7 @@
                 {% endif %}
             </div>
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- System Information -->

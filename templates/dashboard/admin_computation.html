@@ -81,10 +81,15 @@
                         {% endif %}
                         <div class="charge-row"><span>Wear (20%)</span><span>₱{{ computation_result.wear_charge|floatformat:2 }}</span></div>
                         <div class="charge-row"><span>Meals (×{{ computation_result.personnel_count }})</span><span>₱{{ computation_result.meals_transport_charge|floatformat:2 }}</span></div>
-                        {% if computation_result.free_reason %}
+                        {% if computation_result.partial_waiver %}
+                        <div class="charge-row waive">
+                            <span>Waiver (public / BAWAD — trucking &amp; septage)</span>
+                            <span>−₱{{ computation_result.waived_base_amount|floatformat:2 }}</span>
+                        </div>
+                        {% elif computation_result.free_reason %}
                         <div class="charge-row strong"><span>Subtotal</span><span>₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span></div>
                         <div class="charge-row waive">
-                            <span>{% if computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
+                            <span>{% if computation_result.free_reason == 'public_bawad_inside_under_10km' %}{% if computation_result.is_public %}Waiver (public){% else %}Waiver (BAWAD){% endif %}{% elif computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
                             <span>−₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span>
                         </div>
                         {% endif %}

@@ -8,7 +8,8 @@ from django.utils import timezone
 
 User = settings.AUTH_USER_MODEL
 
-# Admin / audit: public-property requests within Bayawan skip inspection fee and get ₱0 computation (see ServiceComputation.calculate_charges).
+# Admin / audit: public-property requests within Bayawan skip inspection fee; declogging computation may still
+# charge distance, wear & tear, and meals when the site is farther than the CENRO free-km threshold (see ServiceComputation).
 PUBLIC_BAYAWAN_NO_FEES_FLAG = "[PUBLIC_BAYAWAN_NO_FEES]"
 
 
@@ -277,7 +278,7 @@ class ServiceRequest(models.Model):
 
     @property
     def qualifies_public_bayawan_no_fees(self) -> bool:
-        """Public septage requests with location in Bayawan City: no inspection fee; computation is ₱0."""
+        """Public septage in Bayawan City: no inspection fee; declogging computation may still apply distance-related charges."""
         if self.service_type not in (
             self.ServiceType.RESIDENTIAL_DESLUDGING,
             self.ServiceType.COMMERCIAL_DESLUDGING,
@@ -303,7 +304,8 @@ class ServiceRequest(models.Model):
         self.inspection_fee_paid = True
         line = (
             f"{PUBLIC_BAYAWAN_NO_FEES_FLAG} Inspection fee waived — public property within Bayawan City "
-            "(no treasurer inspection fee; computation charges are ₱0 per policy)."
+            "(no treasurer inspection fee; declogging computation waives trucking and tipping/septage when applicable, "
+            "but distance travel, wear & tear, and meals may still apply if the site is beyond the CENRO free-km threshold)."
         )
         self.notes = (notes + "\n" if notes else "") + line
         self.save(update_fields=["inspection_fee_paid", "notes"])

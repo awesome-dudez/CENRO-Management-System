@@ -2860,7 +2860,13 @@ def edit_computation(request, pk):
         sr = service_request
         fk = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
         km_free = int(fk) if fk == fk.to_integral_value() else fk
-        if (
+        if computation.qualifies_inside_public_bawad_program:
+            f.fields["distance_km"].help_text = (
+                f"Public / BAWAD (inside Bayawan): first {km_free} km from CENRO office are not charged for travel. "
+                "Beyond that, distance travel (billable km × ₱20 × 2), wear & tear (20% of trucking + travel), and meals still apply; "
+                "trucking and tipping/septage stay waived."
+            )
+        elif (
             sr.is_within_bayawan
             and not computation.is_outside_bayawan
             and sr.consumer_is_bayawan_city_resident
@@ -2871,8 +2877,9 @@ def edit_computation(request, pk):
             )
         else:
             f.fields["distance_km"].help_text = (
-                "Distance from CENRO (whole km). First 10 km free only when the customer is a "
-                "Bayawan City resident (profile municipality) and the service location is within Bayawan."
+                "Distance from CENRO (whole km). Outside Bayawan: all kilometers are billable. "
+                "Inside Bayawan (private, not public/BAWAD waiver): first 10 km free only for Bayawan City residents "
+                "(profile municipality)."
             )
 
     form = ServiceComputationForm(instance=computation)

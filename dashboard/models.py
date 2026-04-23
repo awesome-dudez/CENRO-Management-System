@@ -60,6 +60,63 @@ class ConfigurableRate(models.Model):
             cls.objects.get_or_create(key=key, defaults={"value": value, "description": description})
 
 
+def _billable_travel_km_core(
+    *,
+    is_within_bayawan: bool,
+    is_outside_bayawan: bool,
+    is_public: bool,
+    bawad_free_eligible: bool,
+    consumer_is_bayawan_city_resident: bool,
+    distance_whole_km: Decimal,
+) -> Decimal:
+    """
+    Whole-km distance billed at (km × ₱20 × 2).
+
+    First N km from CENRO (bayawan_resident_free_km, default 10) are not charged when:
+    - public or BAWAD-cycle-eligible inside Bayawan, or
+    - Bayawan City resident (private) inside Bayawan.
+    Otherwise all whole kilometers are billable (e.g. outside Bayawan: full route).
+    """
+    free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+    dist = distance_whole_km or Decimal("0")
+    within = is_within_bayawan and not is_outside_bayawan
+    if within and (is_public or bawad_free_eligible):
+        return max(Decimal("0"), dist - free_km)
+    if within and consumer_is_bayawan_city_resident:
+        return max(Decimal("0"), dist - free_km)
+    return dist
+
+
+def _billable_travel_km(
+    sr: "ServiceRequest",
+    *,
+    is_outside_bayawan: bool,
+    distance_whole_km: Decimal,
+) -> Decimal:
+    from services.models import ServiceRequest
+
+    is_desludging = sr.service_type in (
+        ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+    )
+    try:
+        is_public = sr.public_private == ServiceRequest.PublicPrivate.PUBLIC
+    except Exception:
+        is_public = False
+    bawad_ok = sr.connected_to_bawad and sr.bawad_free_eligible
+    if not is_desludging:
+        is_public = False
+        bawad_ok = False
+    return _billable_travel_km_core(
+        is_within_bayawan=sr.is_within_bayawan,
+        is_outside_bayawan=is_outside_bayawan,
+        is_public=is_public,
+        bawad_free_eligible=bawad_ok,
+        consumer_is_bayawan_city_resident=sr.consumer_is_bayawan_city_resident,
+        distance_whole_km=distance_whole_km,
+    )
+
+
 class ChargeCategory(models.Model):
     """Categories for service charges"""
 
@@ -188,6 +245,52 @@ class ServiceComputation(models.Model):
             + (self.meals_transport_charge or Decimal("0"))
         )
 
+    @property
+    def cenro_free_travel_km(self) -> Decimal:
+        """First N whole km from CENRO office not charged when inside-Bayawan rules apply."""
+        return ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+
+    @property
+    def billable_travel_km(self) -> Decimal:
+        """Whole km billed for distance travel fee (after CENRO free km when applicable)."""
+        sr = self.service_request
+        dist = (self.distance_km or Decimal("0")).quantize(Decimal("1"), rounding=ROUND_DOWN)
+        return _billable_travel_km(sr, is_outside_bayawan=self.is_outside_bayawan, distance_whole_km=dist)
+
+    @property
+    def qualifies_inside_public_bawad_program(self) -> bool:
+        """Declogging only: public property or BAWAD cycle-eligible, inside Bayawan (not forced outside)."""
+        sr = self.service_request
+        from services.models import ServiceRequest
+
+        if sr.service_type not in (
+            ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+        ):
+            return False
+        if not sr.is_within_bayawan or self.is_outside_bayawan:
+            return False
+        try:
+            is_public = sr.public_private == ServiceRequest.PublicPrivate.PUBLIC
+        except Exception:
+            is_public = False
+        return bool(is_public or (sr.connected_to_bawad and sr.bawad_free_eligible))
+
+    @property
+    def uses_inside_public_bawad_partial_waiver(self) -> bool:
+        """Inside public/BAWAD: site farther than free km — trucking & septage waived, travel/wear/meals still apply."""
+        if not self.qualifies_inside_public_bawad_program:
+            return False
+        dist = (self.distance_km or Decimal("0")).quantize(Decimal("1"), rounding=ROUND_DOWN)
+        free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+        return dist > free_km
+
+    @property
+    def waived_inside_base_service_amount(self) -> Decimal:
+        if not self.uses_inside_public_bawad_partial_waiver:
+            return Decimal("0")
+        return (self.fixed_trucking or Decimal("0")) + (self.desludging_fee or Decimal("0"))
+
     def calculate_charges(self):
         """Calculate all charges based on the correct business rules."""
         from services.models import ServiceRequest
@@ -229,20 +332,13 @@ class ServiceComputation(models.Model):
             rate = desludging_per_m3 if t == 0 else (desludging_per_m3 + second_trip_surcharge)
             self.desludging_fee += vol_this_trip * rate
 
-        # Distance Travel Fee: distance_km × 20 × 2 on billable km (rounded down to whole km).
-        # Bayawan City residents: first N km free when service location is within Bayawan
-        # and computation is not forced "outside Bayawan".
+        # Distance Travel Fee: billable whole km × ₱20 × 2 (see _billable_travel_km).
         raw_dist = self.distance_km or Decimal("0")
         dist = raw_dist.quantize(Decimal("1"), rounding=ROUND_DOWN)
         self.distance_km = dist
-        billable_dist = dist
-        resident_free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
-        if (
-            sr.is_within_bayawan
-            and not self.is_outside_bayawan
-            and sr.consumer_is_bayawan_city_resident
-        ):
-            billable_dist = max(Decimal("0"), dist - resident_free_km)
+        billable_dist = _billable_travel_km(
+            sr, is_outside_bayawan=self.is_outside_bayawan, distance_whole_km=dist
+        )
         self.distance_travel_fee = billable_dist * Decimal("20") * 2
         self.distance_charge = Decimal("0")  # no longer used in breakdown
 
@@ -261,28 +357,42 @@ class ServiceComputation(models.Model):
         if self.waive_meals_transport_charge:
             self.meals_transport_charge = Decimal("0")
 
-        # Total (no inspection_charge)
-        self.total_charge = (
+        # Total (no inspection_charge) before inside public/BAWAD rules
+        full_total = (
             self.fixed_trucking
             + self.desludging_fee
             + self.distance_travel_fee
             + self.wear_charge
             + self.meals_transport_charge
         )
+        self.total_charge = full_total
 
-        # Public area within Bayawan City: wave off payment
-        try:
-            is_public = sr.public_private == ServiceRequest.PublicPrivate.PUBLIC
-        except Exception:
-            is_public = False
+        free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+        qualifies_inside = self.qualifies_inside_public_bawad_program
 
-        if is_public and sr.is_within_bayawan:
-            self.total_charge = Decimal("0")
-            self.payment_status = self.PaymentStatus.FREE
-        # BAWAD discount (applies only if not already free above)
-        elif sr.connected_to_bawad and sr.bawad_free_eligible:
-            self.total_charge = Decimal("0")
-            self.payment_status = self.PaymentStatus.FREE
+        if qualifies_inside:
+            if dist <= free_km:
+                # Fully free: total ₱0 (first N km from CENRO; no billable travel).
+                self.total_charge = Decimal("0")
+                if self.payment_status not in (
+                    self.PaymentStatus.PAID,
+                    self.PaymentStatus.AWAITING_VERIFICATION,
+                ):
+                    self.payment_status = self.PaymentStatus.FREE
+            else:
+                # Waive fixed trucking + tipping/septage only; charge distance, wear, meals.
+                self.total_charge = (
+                    self.distance_travel_fee
+                    + self.wear_charge
+                    + self.meals_transport_charge
+                )
+                if self.payment_status not in (
+                    self.PaymentStatus.PAID,
+                    self.PaymentStatus.AWAITING_VERIFICATION,
+                ):
+                    self.payment_status = self.PaymentStatus.PENDING
+        elif not qualifies_inside and self.payment_status == self.PaymentStatus.FREE and self.total_charge > 0:
+            self.payment_status = self.PaymentStatus.PENDING
 
     def save(self, *args, **kwargs):
         self.calculate_charges()
@@ -349,10 +459,16 @@ def compute_quick_desludging_estimate(
 
     raw_dist = distance_km or Decimal("0")
     dist = raw_dist.quantize(Decimal("1"), rounding=ROUND_DOWN)
-    billable_dist = dist
-    if is_within_bayawan and not is_outside and bayawan_city_resident:
-        resident_free_km = R("bayawan_resident_free_km", Decimal("10"))
-        billable_dist = max(Decimal("0"), dist - resident_free_km)
+    is_public = public_private == ServiceRequest.PublicPrivate.PUBLIC
+    bawad_eligible = connected_to_bawad and bawad_prior_used_m3 < bawad_limit
+    billable_dist = _billable_travel_km_core(
+        is_within_bayawan=is_within_bayawan,
+        is_outside_bayawan=is_outside,
+        is_public=is_public,
+        bawad_free_eligible=bawad_eligible,
+        consumer_is_bayawan_city_resident=bayawan_city_resident,
+        distance_whole_km=dist,
+    )
     distance_travel_fee = billable_dist * Decimal("20") * 2
 
     if meals_transport_override is not None and meals_transport_override > 0:
@@ -390,17 +506,21 @@ def compute_quick_desludging_estimate(
             "amount": remaining_volume * rate_extra,
         })
 
-    is_public = public_private == ServiceRequest.PublicPrivate.PUBLIC
-    bawad_eligible = connected_to_bawad and bawad_prior_used_m3 < bawad_limit
+    free_km = R("bayawan_resident_free_km", Decimal("10"))
+    qualifies_inside = is_within_bayawan and not is_outside and (is_public or bawad_eligible)
 
     free_reason = None
+    partial_waiver = False
+    waived_base = Decimal("0")
     total_charge = subtotal
-    if is_public and is_within_bayawan:
-        total_charge = Decimal("0")
-        free_reason = "public_area"
-    elif connected_to_bawad and bawad_eligible:
-        total_charge = Decimal("0")
-        free_reason = "bawad"
+    if qualifies_inside:
+        if dist <= free_km:
+            total_charge = Decimal("0")
+            free_reason = "public_bawad_inside_under_10km"
+        else:
+            total_charge = distance_travel_fee + wear_charge + meals_transport_charge
+            partial_waiver = True
+            waived_base = fixed_trucking + desludging_fee
 
     return {
         "trips": trips,
@@ -416,6 +536,8 @@ def compute_quick_desludging_estimate(
         "subtotal_before_waiver": subtotal,
         "total_charge": total_charge,
         "free_reason": free_reason,
+        "partial_waiver": partial_waiver,
+        "waived_base_amount": waived_base,
         "is_public": is_public,
         "is_within_bayawan": is_within_bayawan,
         "connected_to_bawad": connected_to_bawad,

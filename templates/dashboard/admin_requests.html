@@ -63,6 +63,8 @@
 
     {% if user.is_admin %}
     <div class="sub-tabs">
+        <a href="?tab=all{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'all' %}active{% endif %}">All</a>
+        <a href="?tab=open{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'open' %}active{% endif %}">Open</a>
         <a href="?tab=pending{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'pending' %}active{% endif %}">Pending</a>
         <a href="?tab=inspection{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'inspection' %}active{% endif %}">Inspection</a>
         <a href="?tab=computation{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'computation' %}active{% endif %}">Computation</a>
