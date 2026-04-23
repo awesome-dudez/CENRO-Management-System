@@ -21,7 +21,10 @@ env/
 .venv/
 .env/
 
-# Django
+# Local MariaDB Connector/C tree (used to build mysqlclient on Windows)
+_mariadb_extract/
+
+# Django — db.sqlite3 is versioned for shared local/dev data after clone; do not add it here.
 db.sqlite3-journal
 *.log
 media/
