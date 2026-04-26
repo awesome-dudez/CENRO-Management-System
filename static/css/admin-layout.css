@@ -176,6 +176,99 @@ body.admin-view {
     border-left-color: var(--primary-green);
 }
 
+/* Sidebar: nested "Users" group (Members, Contact updates, Staff) */
+.admin-sidebar-group {
+    border: none;
+}
+
+.admin-sidebar-group-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    list-style: none;
+    cursor: pointer;
+    color: var(--text-gray);
+    font-weight: 500;
+    font-size: 0.95rem;
+    border-left: 3px solid transparent;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    user-select: none;
+}
+
+.admin-sidebar-group-summary::-webkit-details-marker {
+    display: none;
+}
+
+.admin-sidebar-group-summary::marker {
+    content: "";
+}
+
+.admin-sidebar-group-chevron {
+    margin-left: auto;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--text-gray);
+    flex-shrink: 0;
+    transition: transform 0.2s, border-top-color 0.2s;
+}
+
+.admin-sidebar-group[open] .admin-sidebar-group-chevron {
+    transform: rotate(180deg);
+}
+
+.admin-sidebar-group--child-active .admin-sidebar-group-summary {
+    color: var(--primary-green);
+    border-left-color: var(--primary-green);
+    background: rgba(30, 122, 77, 0.06);
+}
+
+.admin-sidebar-group-summary:hover {
+    background: var(--off-white);
+    color: var(--primary-green);
+}
+
+.admin-sidebar-group-summary:hover .admin-sidebar-group-chevron {
+    border-top-color: var(--primary-green);
+}
+
+.admin-sidebar-subnav {
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 8px;
+}
+
+.admin-sidebar-sublink {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px 10px 48px;
+    color: var(--text-gray);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.88rem;
+    border-left: 3px solid transparent;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.admin-sidebar-sublink:hover {
+    background: var(--off-white);
+    color: var(--primary-green);
+}
+
+.admin-sidebar-sublink.active {
+    background: rgba(30, 122, 77, 0.08);
+    color: var(--primary-green);
+    border-left-color: var(--primary-green);
+}
+
+.admin-sidebar-sublink .admin-sidebar-icon {
+    font-size: 1.05rem;
+    width: 22px;
+}
+
 .admin-sidebar-icon {
     font-size: 1.2rem;
     width: 24px;

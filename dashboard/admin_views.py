@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 
 from accounts.constants import CONSUMER_DEFAULT_RESET_PASSWORD
 from accounts.decorators import role_required
-from accounts.models import ConsumerProfile, User
+from accounts.models import ConsumerProfile, ProfileContactChangeRequest, ProfileContactChangeToken, User
 from services.models import ServiceEquipment, ServiceRequest, Notification
 from scheduling.models import Schedule
 
@@ -1960,3 +1960,100 @@ def admin_declogging_app(request):
         messages.success(request, "Application form generated successfully.")
         return redirect("dashboard:admin_declogging_app")
     return render(request, "dashboard/admin_declogging_app.html")
+
+
+@login_required
+@role_required("ADMIN")
+def admin_profile_contact_requests(request):
+    """Consumers who could not verify by email and asked for a manual contact update."""
+    pending = ProfileContactChangeRequest.objects.filter(
+        status=ProfileContactChangeRequest.Status.PENDING
+    ).select_related("user")
+    recent = (
+        ProfileContactChangeRequest.objects.exclude(status=ProfileContactChangeRequest.Status.PENDING)
+        .select_related("user", "decided_by")[:30]
+    )
+    return render(
+        request,
+        "dashboard/admin_profile_contact_requests.html",
+        {"pending": pending, "recent": recent},
+    )
+
+
+@login_required
+@role_required("ADMIN")
+@require_POST
+def admin_profile_contact_approve(request, pk):
+    req_obj = get_object_or_404(
+        ProfileContactChangeRequest,
+        pk=pk,
+        status=ProfileContactChangeRequest.Status.PENDING,
+    )
+    member = req_obj.user
+    prof, _ = ConsumerProfile.objects.get_or_create(user=member)
+    email = req_obj.proposed_email.strip()
+    mobile = req_obj.proposed_mobile.strip()
+
+    if User.objects.filter(email__iexact=email).exclude(pk=member.pk).exists():
+        messages.error(
+            request,
+            "That email is already used by another account. Reject this request or ask the resident to use a different email.",
+        )
+        return redirect("dashboard:admin_profile_contact_requests")
+
+    if ConsumerProfile.objects.filter(mobile_number=mobile).exclude(pk=prof.pk).exists():
+        messages.error(
+            request,
+            "That mobile number is already registered. Reject this request or ask the resident to use a different number.",
+        )
+        return redirect("dashboard:admin_profile_contact_requests")
+
+    with transaction.atomic():
+        member.email = email
+        member.save(update_fields=["email"])
+        prof.mobile_number = mobile
+        prof.save(update_fields=["mobile_number"])
+        req_obj.status = ProfileContactChangeRequest.Status.APPROVED
+        req_obj.decided_by = request.user
+        req_obj.decided_at = timezone.now()
+        req_obj.save()
+        ProfileContactChangeToken.objects.filter(user=member, is_used=False).update(is_used=True)
+        Notification.objects.create(
+            user=member,
+            message=(
+                "Your contact update request was approved. Your email and mobile number on file have been updated."
+            ),
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            link=reverse("accounts:profile"),
+        )
+
+    messages.success(
+        request,
+        f"Contact details updated for {member.get_full_name() or member.username}.",
+    )
+    return redirect("dashboard:admin_profile_contact_requests")
+
+
+@login_required
+@role_required("ADMIN")
+@require_POST
+def admin_profile_contact_reject(request, pk):
+    req_obj = get_object_or_404(
+        ProfileContactChangeRequest,
+        pk=pk,
+        status=ProfileContactChangeRequest.Status.PENDING,
+    )
+    req_obj.status = ProfileContactChangeRequest.Status.REJECTED
+    req_obj.decided_by = request.user
+    req_obj.decided_at = timezone.now()
+    req_obj.save()
+    Notification.objects.create(
+        user=req_obj.user,
+        message=(
+            "Your contact update request was not approved. Visit or call CENRO if you still need to change your email or mobile number."
+        ),
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        link=reverse("accounts:profile"),
+    )
+    messages.success(request, "The request was rejected and the resident was notified in the app.")
+    return redirect("dashboard:admin_profile_contact_requests")

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Contact update requests{% endblock %}
+{% block admin_subtitle %}Contact updates{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <h3 class="card-title">Pending contact updates</h3>
+        <p class="card-subtitle">Residents who could not verify by email and asked for manual approval</p>
+    </div>
+    {% if pending %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Resident</th>
+                    <th>Previous email</th>
+                    <th>Proposed email</th>
+                    <th>Previous mobile</th>
+                    <th>Proposed mobile</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in pending %}
+                <tr>
+                    <td>{{ row.user.get_full_name|default:row.user.username }}</td>
+                    <td>{{ row.previous_email|default:"—" }}</td>
+                    <td>{{ row.proposed_email }}</td>
+                    <td>{{ row.previous_mobile|default:"—" }}</td>
+                    <td>{{ row.proposed_mobile }}</td>
+                    <td style="max-width:280px;white-space:normal;font-size:0.9rem;">{{ row.customer_reason }}</td>
+                    <td>
+                        <form method="post" action="{% url 'dashboard:admin_profile_contact_approve' row.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+                        </form>
+                        <form method="post" action="{% url 'dashboard:admin_profile_contact_reject' row.pk %}" style="display:inline;margin-left:6px;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Reject this request? The resident will be notified.');">Reject</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="card-subtitle" style="padding: 0 1rem 1rem;">No pending requests.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Recent decisions</h3>
+    </div>
+    {% if recent %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Resident</th>
+                    <th>Status</th>
+                    <th>Proposed email</th>
+                    <th>Decided by</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in recent %}
+                <tr>
+                    <td>{{ row.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>{{ row.user.get_full_name|default:row.user.username }}</td>
+                    <td>{{ row.get_status_display }}</td>
+                    <td>{{ row.proposed_email }}</td>
+                    <td>{% if row.decided_by %}{{ row.decided_by.get_full_name|default:row.decided_by.username }}{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="card-subtitle" style="padding: 0 1rem 1rem;">No history yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,5 +1,6 @@
 import logging
 import random
+import re
 
 from django.conf import settings as django_settings
 from django.contrib import messages
@@ -9,6 +10,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from django.db import DatabaseError, transaction
+from django.db.models import Q
 from django.db.utils import IntegrityError, OperationalError, ProgrammingError
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -18,14 +20,115 @@ from .forms import (
     ConsumerRegistrationForm,
     ForgotPasswordForm,
     LoginForm,
+    ProfileContactLostAccessForm,
+    ProfileContactVerifyForm,
     ProfileUpdateForm,
     SetNewPasswordForm,
     StaffRegistrationForm,
     VerifyCodeForm,
 )
-from .models import ConsumerProfile, PasswordResetToken, User
+from .models import (
+    ConsumerProfile,
+    PasswordResetToken,
+    ProfileContactChangeRequest,
+    ProfileContactChangeToken,
+    User,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _consumer_contact_changed(user, prof, new_email: str, new_mobile: str) -> bool:
+    old_e = (user.email or "").strip().casefold()
+    new_e = (new_email or "").strip().casefold()
+    old_m = re.sub(r"[\s\-()]", "", prof.mobile_number or "")
+    return old_e != new_e or old_m != new_mobile
+
+
+def _mask_email_for_display(email: str) -> str:
+    email = (email or "").strip()
+    if "@" not in email:
+        return "your email on file"
+    local, _, domain = email.partition("@")
+    if len(local) <= 1:
+        masked = f"{local}***" if local else "***"
+    else:
+        masked = f"{local[0]}***{local[-1]}"
+    return f"{masked}@{domain}"
+
+
+def _save_profile_excluding_contact(user, prof, form, request):
+    user.first_name = form.cleaned_data["first_name"]
+    user.last_name = form.cleaned_data["last_name"]
+    user.save(update_fields=["first_name", "last_name"])
+
+    uploaded_pic = form.cleaned_data.get("profile_picture") or request.FILES.get("profile_picture")
+    if uploaded_pic:
+        prof.profile_picture = uploaded_pic
+    prof.gender = form.cleaned_data.get("gender") or "MALE"
+    prof.birthdate = form.cleaned_data.get("birthdate")
+    prof.street_address = form.cleaned_data.get("street_address") or ""
+    prof.barangay = form.cleaned_data["barangay"]
+    prof.municipality = form.cleaned_data["municipality"]
+    prof.province = form.cleaned_data["province"]
+    prof.save()
+
+
+def _apply_verified_contact_change(user, token: ProfileContactChangeToken):
+    prof, _ = ConsumerProfile.objects.get_or_create(user=user)
+    user.email = token.new_email
+    user.save(update_fields=["email"])
+    prof.mobile_number = token.new_mobile
+    prof.save(update_fields=["mobile_number"])
+    token.invalidate()
+
+
+def _send_profile_contact_verification_email(request, user, token: ProfileContactChangeToken) -> bool:
+    verify_url = request.build_absolute_uri(reverse("accounts:profile_verify_contact"))
+    try:
+        send_mail(
+            subject="CENRO Sanitary Management System — Verify contact change",
+            message=(
+                f"Hello {user.get_full_name() or user.username},\n\n"
+                f"You are updating the email and/or mobile number on your CENRO profile. "
+                f"To confirm you still have access to this email address ({token.sent_to_email}), "
+                f"enter this verification code on the website:\n\n"
+                f"  {token.code}\n\n"
+                f"Verification page:\n  {verify_url}\n\n"
+                f"This code expires in 15 minutes.\n\n"
+                f"If you did not request this change, contact CENRO immediately.\n\n"
+                f"— CENRO Sanitary Management System, Bayawan City"
+            ),
+            from_email=django_settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[token.sent_to_email],
+            fail_silently=False,
+        )
+        return True
+    except Exception as e:
+        logger.exception("Failed to send profile contact verification email: %s", e)
+        return False
+
+
+def _notify_admins_contact_change_request(req: ProfileContactChangeRequest):
+    from services.models import Notification
+
+    link = reverse("dashboard:admin_profile_contact_requests")
+    body = (
+        f"{req.user.get_full_name() or req.user.username} could not verify by email and asked for a contact update. "
+        f"Proposed email: {req.proposed_email}. Review the request in the admin portal."
+    )
+    admins = User.objects.filter(Q(role=User.Role.ADMIN) | Q(is_superuser=True)).filter(is_active=True).distinct()
+    Notification.objects.bulk_create(
+        [
+            Notification(
+                user=admin,
+                message=body[:500],
+                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                link=link,
+            )
+            for admin in admins
+        ]
+    )
 
 
 def _safe_is_admin(user):
@@ -416,13 +519,47 @@ def profile(request):
     if request.method == "POST":
         form = ProfileUpdateForm(request.POST, request.FILES, user=user, consumer_profile=prof)
         if form.is_valid():
+            new_email = form.cleaned_data["email"]
+            new_mobile = form.cleaned_data["mobile_number"]
+            contact_changed = _consumer_contact_changed(user, prof, new_email, new_mobile)
+
+            if user.is_consumer() and contact_changed:
+                if not (user.email or "").strip():
+                    form.add_error(
+                        None,
+                        "Your account has no email address on file, so we cannot send a verification code. "
+                        "Please contact CENRO staff to update your email or mobile number.",
+                    )
+                elif ProfileContactChangeRequest.objects.filter(
+                    user=user, status=ProfileContactChangeRequest.Status.PENDING
+                ).exists():
+                    form.add_error(
+                        None,
+                        "You already have a contact update waiting for administrator approval. "
+                        "Please wait for a decision before submitting again.",
+                    )
+                else:
+                    _save_profile_excluding_contact(user, prof, form, request)
+                    token = ProfileContactChangeToken.create_for_user(user, new_email, new_mobile)
+                    if not _send_profile_contact_verification_email(request, user, token):
+                        token.invalidate()
+                        messages.error(
+                            request,
+                            "We could not send the verification email. Check server mail settings or try again shortly.",
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            "We sent a verification code to your current email address. Enter it on the next screen to finish updating your contact details.",
+                        )
+                        return redirect("accounts:profile_verify_contact")
+                return render(request, "accounts/profile.html", {"form": form, "profile": prof})
+
             user.first_name = form.cleaned_data["first_name"]
             user.last_name = form.cleaned_data["last_name"]
             user.email = form.cleaned_data["email"]
             user.save()
 
-            # File may be in cleaned_data or FILES (avoid relying only on cleaned_data).
-            # Note: file inputs inside display:none are often omitted by browsers from POST.
             uploaded_pic = form.cleaned_data.get("profile_picture") or request.FILES.get(
                 "profile_picture"
             )
@@ -438,7 +575,11 @@ def profile(request):
             prof.save()
 
             messages.success(request, "Your profile has been updated.")
-            return redirect("accounts:profile")
+            if _safe_is_admin(user):
+                return redirect("dashboard:admin_dashboard")
+            if user.is_staff_member():
+                return redirect("dashboard:admin_requests")
+            return redirect("dashboard:home")
     else:
         form = ProfileUpdateForm(
             initial={
@@ -458,6 +599,139 @@ def profile(request):
         )
 
     return render(request, "accounts/profile.html", {"form": form, "profile": prof})
+
+
+@login_required
+def profile_verify_contact(request):
+    """Confirm email/mobile change using a code sent to the user's previous email (consumers only)."""
+    if not request.user.is_consumer():
+        messages.info(request, "This verification step applies to resident accounts only.")
+        return redirect("accounts:profile")
+
+    user = request.user
+    prof, _ = ConsumerProfile.objects.get_or_create(user=user)
+
+    def _active_token():
+        return (
+            ProfileContactChangeToken.objects.filter(
+                user=user,
+                is_used=False,
+                expires_at__gte=timezone.now(),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        token = _active_token()
+
+        if action == "resend":
+            if not token:
+                messages.error(request, "No active verification. Start again from your profile.")
+                return redirect("accounts:profile")
+            if (timezone.now() - token.created_at).total_seconds() < 60:
+                messages.warning(
+                    request,
+                    "A code was sent recently. Please wait a moment before requesting another.",
+                )
+            else:
+                new_email, new_mobile = token.new_email, token.new_mobile
+                token.invalidate()
+                user.refresh_from_db()
+                new_tok = ProfileContactChangeToken.create_for_user(user, new_email, new_mobile)
+                if not _send_profile_contact_verification_email(request, user, new_tok):
+                    new_tok.invalidate()
+                    messages.error(
+                        request,
+                        "Could not resend the verification email. Try again later or contact support.",
+                    )
+                else:
+                    messages.success(request, "A new verification code was sent to your email.")
+            return redirect("accounts:profile_verify_contact")
+
+        if action == "lost_access":
+            lost_form = ProfileContactLostAccessForm(request.POST)
+            verify_form = ProfileContactVerifyForm()
+            if lost_form.is_valid() and token and token.is_valid():
+                if ProfileContactChangeRequest.objects.filter(
+                    user=user, status=ProfileContactChangeRequest.Status.PENDING
+                ).exists():
+                    messages.error(
+                        request,
+                        "You already have a contact update waiting for administrator approval.",
+                    )
+                else:
+                    req_obj = ProfileContactChangeRequest.objects.create(
+                        user=user,
+                        proposed_email=token.new_email,
+                        proposed_mobile=token.new_mobile,
+                        previous_email=(user.email or "")[:254],
+                        previous_mobile=(prof.mobile_number or "")[:20],
+                        customer_reason=lost_form.cleaned_data["reason"],
+                    )
+                    ProfileContactChangeToken.objects.filter(user=user, is_used=False).update(is_used=True)
+                    _notify_admins_contact_change_request(req_obj)
+                    messages.success(
+                        request,
+                        "Your request was sent to an administrator. You will be notified after it is reviewed.",
+                    )
+                    return redirect("accounts:profile")
+            return render(
+                request,
+                "accounts/profile_verify_contact.html",
+                {
+                    "verify_form": verify_form,
+                    "lost_form": lost_form,
+                    "masked_email": _mask_email_for_display(token.sent_to_email) if token else "",
+                    "token": token,
+                },
+            )
+
+        verify_form = ProfileContactVerifyForm(request.POST)
+        lost_form = ProfileContactLostAccessForm()
+        if verify_form.is_valid() and token and token.is_valid():
+            if verify_form.cleaned_data["code"] == token.code:
+                _apply_verified_contact_change(user, token)
+                messages.success(request, "Your email and mobile number have been updated.")
+                return redirect("dashboard:home")
+            verify_form.add_error("code", "That code is incorrect. Check the email and try again.")
+        elif not token or not token.is_valid():
+            verify_form.add_error(
+                None,
+                "This verification code has expired or was already used. Save your profile again to start over.",
+            )
+        return render(
+            request,
+            "accounts/profile_verify_contact.html",
+            {
+                "verify_form": verify_form,
+                "lost_form": lost_form,
+                "masked_email": _mask_email_for_display(token.sent_to_email) if token else "",
+                "token": token if token and token.is_valid() else None,
+            },
+        )
+
+    token = _active_token()
+    if not token:
+        messages.info(
+            request,
+            "There is no pending contact verification. Change your email or mobile on your profile to start.",
+        )
+        return redirect("accounts:profile")
+
+    verify_form = ProfileContactVerifyForm()
+    lost_form = ProfileContactLostAccessForm()
+    return render(
+        request,
+        "accounts/profile_verify_contact.html",
+        {
+            "verify_form": verify_form,
+            "lost_form": lost_form,
+            "masked_email": _mask_email_for_display(token.sent_to_email),
+            "token": token,
+        },
+    )
 
 
 @login_required

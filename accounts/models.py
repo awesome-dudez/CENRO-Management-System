@@ -151,3 +151,87 @@ class PasswordResetToken(models.Model):
     def __str__(self) -> str:
         return f"ResetToken({self.user.username}, expires={self.expires_at:%Y-%m-%d %H:%M})"
 
+
+class ProfileContactChangeToken(models.Model):
+    """OTP sent to the user's current email before applying new email/mobile on the profile."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="profile_contact_change_tokens",
+    )
+    new_email = models.EmailField()
+    new_mobile = models.CharField(max_length=20)
+    sent_to_email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @classmethod
+    def create_for_user(cls, user: "User", new_email: str, new_mobile: str, minutes: int = 15):
+        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+        otp = "".join(str(random.randint(0, 9)) for _ in range(6))
+        return cls.objects.create(
+            user=user,
+            new_email=new_email.strip(),
+            new_mobile=new_mobile,
+            sent_to_email=(user.email or "").strip(),
+            code=otp,
+            expires_at=timezone.now() + timezone.timedelta(minutes=minutes),
+        )
+
+    def is_valid(self) -> bool:
+        return not self.is_used and timezone.now() <= self.expires_at
+
+    def invalidate(self) -> None:
+        self.is_used = True
+        self.save(update_fields=["is_used"])
+
+    def __str__(self) -> str:
+        return f"ContactChangeToken({self.user.username}, expires={self.expires_at:%Y-%m-%d %H:%M})"
+
+
+class ProfileContactChangeRequest(models.Model):
+    """Consumer could not access the old inbox; admin reviews and applies new contact details."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="profile_contact_change_requests",
+    )
+    proposed_email = models.EmailField()
+    proposed_mobile = models.CharField(max_length=20)
+    previous_email = models.EmailField(blank=True)
+    previous_mobile = models.CharField(max_length=20, blank=True)
+    customer_reason = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="profile_contact_change_decisions",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"ContactChangeRequest({self.user.username}, {self.status})"
+

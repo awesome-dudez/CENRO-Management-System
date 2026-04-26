@@ -110,6 +110,11 @@
                     {% if form.mobile_number.errors %}<small class="text-danger">{{ form.mobile_number.errors.0 }}</small>{% endif %}
                 </div>
             </div>
+            {% if user.is_consumer %}
+            <p style="font-size:13px;color:#666;margin:-4px 0 16px;line-height:1.45;">
+                Changing your email or mobile number sends a <strong>verification code</strong> to your current email. If you no longer have access to that inbox, you can request help from an administrator on the next step.
+            </p>
+            {% endif %}
 
             <div class="section-label" style="margin-top:20px;">Address</div>
 

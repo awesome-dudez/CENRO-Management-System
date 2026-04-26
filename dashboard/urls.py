@@ -40,6 +40,21 @@ urlpatterns = [
     ),
     path("admin/requests/schedule/", admin_views.admin_schedule_by_barangay, name="admin_schedule"),
     path("admin/membership/", admin_views.admin_membership, name="admin_membership"),
+    path(
+        "admin/contact-change-requests/",
+        admin_views.admin_profile_contact_requests,
+        name="admin_profile_contact_requests",
+    ),
+    path(
+        "admin/contact-change-requests/<int:pk>/approve/",
+        admin_views.admin_profile_contact_approve,
+        name="admin_profile_contact_approve",
+    ),
+    path(
+        "admin/contact-change-requests/<int:pk>/reject/",
+        admin_views.admin_profile_contact_reject,
+        name="admin_profile_contact_reject",
+    ),
     path("admin/equipment/", admin_views.admin_equipment, name="admin_equipment"),
     path(
         "admin/membership/reset-password/<int:user_id>/",

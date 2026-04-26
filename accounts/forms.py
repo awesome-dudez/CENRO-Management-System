@@ -249,6 +249,44 @@ class ProfileUpdateForm(forms.Form):
         return cleaned
 
 
+class ProfileContactVerifyForm(forms.Form):
+    code = forms.CharField(
+        label="Verification code",
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "6-digit code",
+                "autocomplete": "one-time-code",
+                "inputmode": "numeric",
+                "pattern": "[0-9]{6}",
+            }
+        ),
+    )
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip()
+        if not code.isdigit() or len(code) != 6:
+            raise forms.ValidationError("Enter the 6-digit code from your email.")
+        return code
+
+
+class ProfileContactLostAccessForm(forms.Form):
+    reason = forms.CharField(
+        label="Why you cannot access your previous email",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "e.g. I no longer have access to that inbox…",
+            }
+        ),
+        min_length=20,
+        error_messages={"min_length": "Please provide at least a short explanation (20 characters or more)."},
+    )
+
+
 class ForgotPasswordForm(forms.Form):
     username = forms.CharField(
         label="Username",
