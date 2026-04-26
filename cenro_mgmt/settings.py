@@ -228,6 +228,23 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Computation letter — formal block (logos + fee table stay in templates; edit via env if needed)
+COMPUTATION_LETTER_TREASURER_NAME = config(
+    "COMPUTATION_LETTER_TREASURER_NAME", default="MARIA RAYZA E. VILLARIN"
+)
+COMPUTATION_LETTER_TREASURER_TITLE = config(
+    "COMPUTATION_LETTER_TREASURER_TITLE", default="City Treasurer"
+)
+COMPUTATION_LETTER_SIGNATORY_NAME = config(
+    "COMPUTATION_LETTER_SIGNATORY_NAME", default="NEFREDO CAMILO A. VILLARUBIA"
+)
+COMPUTATION_LETTER_SIGNATORY_TITLE = config(
+    "COMPUTATION_LETTER_SIGNATORY_TITLE", default="City ENRO"
+)
+COMPUTATION_LETTER_PREPARED_BY_TITLE = config(
+    "COMPUTATION_LETTER_PREPARED_BY_TITLE", default="Septage Management Coordinator"
+)
+
 # Let WhiteNoise find files from STATICFILES_DIRS without needing collectstatic first.
 # Safe for both DEBUG and non-DEBUG — collected files are still used when present.
 WHITENOISE_USE_FINDERS = True

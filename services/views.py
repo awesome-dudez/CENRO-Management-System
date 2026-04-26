@@ -42,8 +42,13 @@ from .forms import (
     validate_customer_receipt,
     validate_location_photo,
 )
-from .location import detect_barangay_for_point
-from .geocode import address_in_bayawan, extract_barangay, reverse_geocode_osm
+from .location import detect_barangay_for_point, within_service_bounds
+from .geocode import (
+    address_in_service_area,
+    address_names_forbidden_municipality,
+    extract_barangay,
+    reverse_geocode_osm,
+)
 from .models import (
     CompletionInfo,
     InspectionDetail,
@@ -593,22 +598,10 @@ def offline_create_request(request):
     except Exception:
         pass
 
-    existing_open = ServiceRequest.objects.filter(
-        consumer=target_consumer,
-        service_type=service_type or ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
-        status__in=[
-            ServiceRequest.Status.SUBMITTED,
-            ServiceRequest.Status.INSPECTION_FEE_DUE,
-            ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
-            ServiceRequest.Status.UNDER_REVIEW,
-            ServiceRequest.Status.INSPECTION_SCHEDULED,
-            ServiceRequest.Status.INSPECTED,
-            ServiceRequest.Status.COMPUTATION_SENT,
-            ServiceRequest.Status.AWAITING_PAYMENT,
-            ServiceRequest.Status.DESLUDGING_SCHEDULED,
-        ],
-    ).exists()
-    if existing_open:
+    if ServiceRequest.consumer_has_open_request_same_type(
+        target_consumer,
+        service_type or ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+    ):
         return JsonResponse(
             {"ok": False, "message": "An ongoing request already exists for this owner and service type."},
             status=409,
@@ -949,22 +942,10 @@ def create_request(request):
                     ServiceRequest.expire_stale_requests()
                 except Exception:
                     pass
-                existing_open = ServiceRequest.objects.filter(
-                    consumer=target_consumer,
-                    service_type=form_data.get("service_type", "RESIDENTIAL_DESLUDGING"),
-                    status__in=[
-                        ServiceRequest.Status.SUBMITTED,
-                        ServiceRequest.Status.INSPECTION_FEE_DUE,
-                        ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
-                        ServiceRequest.Status.UNDER_REVIEW,
-                        ServiceRequest.Status.INSPECTION_SCHEDULED,
-                        ServiceRequest.Status.INSPECTED,
-                        ServiceRequest.Status.COMPUTATION_SENT,
-                        ServiceRequest.Status.AWAITING_PAYMENT,
-                        ServiceRequest.Status.DESLUDGING_SCHEDULED,
-                    ],
-                ).exists()
-                if existing_open:
+                if ServiceRequest.consumer_has_open_request_same_type(
+                    target_consumer,
+                    form_data.get("service_type", "RESIDENTIAL_DESLUDGING"),
+                ):
                     messages.error(
                         request,
                         "You already have an ongoing request of this service type for this owner. "
@@ -1278,24 +1259,10 @@ def grasscutting_application(request):
             except Exception:
                 pass
 
-            existing_open = ServiceRequest.objects.filter(
-                consumer=target_consumer,
-                service_type=ServiceRequest.ServiceType.GRASS_CUTTING,
-                status__in=[
-                    ServiceRequest.Status.GRASS_PENDING_PAYMENT,
-                    ServiceRequest.Status.GRASS_PAYMENT_AWAITING_VERIFICATION,
-                    ServiceRequest.Status.SUBMITTED,
-                    ServiceRequest.Status.INSPECTION_FEE_DUE,
-                    ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
-                    ServiceRequest.Status.UNDER_REVIEW,
-                    ServiceRequest.Status.INSPECTION_SCHEDULED,
-                    ServiceRequest.Status.INSPECTED,
-                    ServiceRequest.Status.COMPUTATION_SENT,
-                    ServiceRequest.Status.AWAITING_PAYMENT,
-                    ServiceRequest.Status.DESLUDGING_SCHEDULED,
-                ],
-            ).exists()
-            if existing_open:
+            if ServiceRequest.consumer_has_open_request_same_type(
+                target_consumer,
+                ServiceRequest.ServiceType.GRASS_CUTTING,
+            ):
                 messages.error(
                     request,
                     "There is already an open Grass Cutting request for this owner. "
@@ -1813,7 +1780,12 @@ def reverse_geocode(request):
     cached = _rg_cache_get(cache_key)
     if cached:
         display_name = cached.get("display_name")
-        within_bayawan = bool(detected) or bool(cached.get("within_bayawan"))
+        address = cached.get("address") or {}
+        within_bayawan = within_service_bounds(lat_f, lon_f) or address_in_service_area(
+            address, display_name
+        )
+        if within_bayawan and address_names_forbidden_municipality(address, display_name):
+            within_bayawan = False
 
         # Start from freshest detected / previously stored barangay
         barangay_base = detected or cached.get("barangay")
@@ -1841,7 +1813,11 @@ def reverse_geocode(request):
     address = data.get("address") or {}
     display_name = data.get("display_name")
 
-    within_bayawan = bool(detected) or address_in_bayawan(address, display_name)
+    within_bayawan = within_service_bounds(lat_f, lon_f) or address_in_service_area(
+        address, display_name
+    )
+    if within_bayawan and address_names_forbidden_municipality(address, display_name):
+        within_bayawan = False
     barangay_base = detected or extract_barangay(address)
     inferred = _infer_barangay_from_display_name(display_name)
     barangay = inferred or barangay_base
@@ -2609,6 +2585,42 @@ def _match_other_consumer_account(form_data):
 # Computation letter view
 # ---------------------------------------------------------------------------
 
+def _computation_letter_formal_context():
+    """Treasurer / signatory lines for the printed computation letter (see settings)."""
+    return {
+        "letter_treasurer_name": settings.COMPUTATION_LETTER_TREASURER_NAME,
+        "letter_treasurer_title": settings.COMPUTATION_LETTER_TREASURER_TITLE,
+        "letter_signatory_name": settings.COMPUTATION_LETTER_SIGNATORY_NAME,
+        "letter_signatory_title": settings.COMPUTATION_LETTER_SIGNATORY_TITLE,
+        "letter_prepared_by_title": settings.COMPUTATION_LETTER_PREPARED_BY_TITLE,
+    }
+
+
+def _prepared_by_signature_absolute_url(request, computation):
+    """Public URL for the letter/PDF only if the signature file exists in storage."""
+    from .computation_flow import stored_filefield_exists
+
+    f = getattr(computation, "prepared_by_signature", None)
+    if not stored_filefield_exists(f):
+        return None
+    return request.build_absolute_uri(f.url)
+
+
+def _prepared_by_signature_fs_path(computation):
+    """Local filesystem path for PDF embedding, or None if unavailable."""
+    from .computation_flow import stored_filefield_exists
+
+    if not stored_filefield_exists(getattr(computation, "prepared_by_signature", None)):
+        return None
+    try:
+        p = computation.prepared_by_signature.path
+    except (ValueError, NotImplementedError):
+        return None
+    if os.path.isfile(p):
+        return p
+    return None
+
+
 def _user_can_access_computation_letter(user, service_request) -> bool:
     """Who may open the computation letter URL (admin, owner consumer, or submitter). Staff use inspection only."""
     if user.is_admin():
@@ -2736,10 +2748,7 @@ def view_computation(request, pk):
     else:
         address_display = f"{addr}, {brgy}" if brgy else addr
 
-    # Absolute URL for signature image so it displays reliably on the letter (and when printing)
-    prepared_by_signature_url = None
-    if computation.prepared_by_signature:
-        prepared_by_signature_url = request.build_absolute_uri(computation.prepared_by_signature.url)
+    prepared_by_signature_url = _prepared_by_signature_absolute_url(request, computation)
 
     can_finalize_letter = (
         _user_can_finalize_computation(request.user)
@@ -2747,13 +2756,15 @@ def view_computation(request, pk):
         and computation.ready_to_finalize
     )
 
-    return render(request, "services/computation_letter.html", {
+    ctx = {
         "sr": service_request,
         "comp": computation,
         "address_display": address_display,
         "prepared_by_signature_url": prepared_by_signature_url,
         "can_finalize_letter": can_finalize_letter,
-    })
+    }
+    ctx.update(_computation_letter_formal_context())
+    return render(request, "services/computation_letter.html", ctx)
 
 
 @login_required
@@ -2795,10 +2806,7 @@ def download_computation_pdf(request, pk):
     brgy = (service_request.barangay or "").strip()
     address_display = addr if (brgy and addr.endswith(brgy)) else (f"{addr}, {brgy}" if brgy else addr)
 
-    # Filesystem path for signature so xhtml2pdf can embed the image reliably
-    prepared_by_signature_path = None
-    if computation.prepared_by_signature and hasattr(computation.prepared_by_signature, "path"):
-        prepared_by_signature_path = computation.prepared_by_signature.path
+    prepared_by_signature_path = _prepared_by_signature_fs_path(computation)
 
     pdf_font_family = _register_xhtml2pdf_unicode_font()
     pdf_body_font_stack = (
@@ -2812,7 +2820,7 @@ def download_computation_pdf(request, pk):
     bagong_pilipinas_logo_url = request.build_absolute_uri(static("img/bagong_pilipinas_logo.png"))
 
     template = get_template("services/computation_letter_pdf.html")
-    html = template.render({
+    pdf_ctx = {
         "sr": service_request,
         "comp": computation,
         "address_display": address_display,
@@ -2821,7 +2829,9 @@ def download_computation_pdf(request, pk):
         "bayawan_logo_url": bayawan_logo_url,
         "cenro_logo_url": cenro_logo_url,
         "bagong_pilipinas_logo_url": bagong_pilipinas_logo_url,
-    })
+    }
+    pdf_ctx.update(_computation_letter_formal_context())
+    html = template.render(pdf_ctx)
     result = io.BytesIO()
     pdf = pisa.pisaDocument(
         io.BytesIO(html.encode("utf-8")),
@@ -2923,9 +2933,7 @@ def edit_computation(request, pk):
             ServiceComputation.objects.filter(pk=computation.pk).update(ready_to_finalize=True)
             return redirect("services:view_computation", pk=pk)
 
-    prepared_by_signature_url = None
-    if computation.prepared_by_signature:
-        prepared_by_signature_url = request.build_absolute_uri(computation.prepared_by_signature.url)
+    prepared_by_signature_url = _prepared_by_signature_absolute_url(request, computation)
 
     return render(request, "services/computation_edit.html", {
         "form": form,
@@ -3282,15 +3290,34 @@ def print_application(request, pk):
 # ---------------------------------------------------------------------------
 
 @login_required
-@role_required("ADMIN", "STAFF")
 def complete_request(request, pk):
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    user = request.user
+
     if service_request.service_type == ServiceRequest.ServiceType.GRASS_CUTTING:
         messages.error(
             request,
             "Grass Cutting requests are marked completed only after payment verification by an administrator.",
         )
         return redirect("services:request_detail", pk=pk)
+
+    is_office = user.is_admin() or user.is_staff_member()
+    is_customer_party = service_request.consumer_id == user.id or (
+        service_request.requested_by_id and service_request.requested_by_id == user.id
+    )
+
+    if not is_office and not is_customer_party:
+        messages.error(request, "You do not have permission to mark this request as completed.")
+        return redirect("services:request_detail", pk=pk)
+
+    if not is_office:
+        if service_request.status != ServiceRequest.Status.DESLUDGING_SCHEDULED:
+            messages.error(
+                request,
+                "You can mark this request as completed only after desludging has been scheduled.",
+            )
+            return redirect("services:request_detail", pk=pk)
+
     service_request.status = ServiceRequest.Status.COMPLETED
     service_request.save()
     Notification.objects.create(

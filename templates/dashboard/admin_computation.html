@@ -1,157 +1,450 @@
 {% extends "base.html" %}
 {% block title %}Computation{% endblock %}
-{% block admin_subtitle %}Computation{% endblock %}
 {% block content %}
-<div class="container mt-4 admin-computation-page">
-    <div class="row g-4">
-        <div class="col-lg-7">
-            <div class="card shadow-sm">
-                <div class="card-header py-2">
-                    <h5 class="mb-0">Estimate charges</h5>
+<div class="admin-computation-page comp-page">
+    <div class="comp-layout{% if not computation_result %} comp-layout--single{% endif %}">
+        <article class="comp-panel comp-panel--form" aria-labelledby="comp-form-heading">
+            <header class="comp-panel-header">
+                <div class="comp-panel-heading">
+                    <h1 id="comp-form-heading" class="comp-panel-title">Estimate charges</h1>
+                    <p class="comp-panel-lead">Enter property details and volumes to preview trucking, septage, and ancillary fees using the same rules as official computations.</p>
                 </div>
-                <div class="card-body py-3">
-                    <form method="post" class="comp-form">
-                        {% csrf_token %}
-                        <div class="row g-2 mb-2">
-                            <div class="col-md-6">
-                                <label class="form-label small mb-0" for="id_category">Category</label>
+            </header>
+            <div class="comp-panel-body">
+                <form method="post" class="comp-form" novalidate>
+                    {% csrf_token %}
+                    <section class="comp-section" aria-labelledby="comp-sec-classification">
+                        <h2 id="comp-sec-classification" class="comp-section-title">Property &amp; location</h2>
+                        <div class="comp-grid comp-grid--2">
+                            <div class="comp-field">
+                                <label class="form-label" for="id_category">Category</label>
                                 {{ form.category }}
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label small mb-0" for="id_location">Location</label>
+                            <div class="comp-field">
+                                <label class="form-label" for="id_location">Location</label>
                                 {{ form.location }}
                             </div>
-                        </div>
-                        <div class="row g-2 mb-2">
-                            <div class="col-md-6">
-                                <label class="form-label small mb-0" for="id_public_private">{{ form.public_private.label }}</label>
+                            <div class="comp-field">
+                                <label class="form-label" for="id_public_private">{{ form.public_private.label }}</label>
                                 {{ form.public_private }}
                             </div>
-                            <div class="col-md-6" id="bawadMemberGroup">
-                                <label class="form-label small mb-0" for="id_connected_to_bawad">{{ form.connected_to_bawad.label }}</label>
+                            <div class="comp-field" id="bawadMemberGroup">
+                                <label class="form-label" for="id_connected_to_bawad">{{ form.connected_to_bawad.label }}</label>
                                 {{ form.connected_to_bawad }}
                             </div>
                         </div>
-                        <div class="mb-2" id="bawadPriorGroup">
-                            <label class="form-label small mb-0" for="id_bawad_prior_used_m3">{{ form.bawad_prior_used_m3.label }}</label>
+                        <div class="comp-field comp-field--full comp-field--tight-top" id="bawadPriorGroup">
+                            <label class="form-label" for="id_bawad_prior_used_m3">{{ form.bawad_prior_used_m3.label }}</label>
                             {{ form.bawad_prior_used_m3 }}
                         </div>
-                        <div class="row g-2 mb-2">
-                            <div class="col-md-4">
-                                <label class="form-label small mb-0" for="id_cubic_meters">m³</label>
+                    </section>
+
+                    <section class="comp-section" aria-labelledby="comp-sec-measures">
+                        <h2 id="comp-sec-measures" class="comp-section-title">Volume, distance &amp; crew</h2>
+                        <div class="comp-grid comp-grid--3">
+                            <div class="comp-field">
+                                <label class="form-label" for="id_cubic_meters">m³ (septage)</label>
                                 {{ form.cubic_meters }}
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small mb-0" for="id_distance_km">Distance (km)</label>
+                            <div class="comp-field">
+                                <label class="form-label" for="id_distance_km">Distance (km)</label>
                                 {{ form.distance_km }}
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small mb-0" for="id_personnel_count">Personnel</label>
+                            <div class="comp-field">
+                                <label class="form-label" for="id_personnel_count">Personnel</label>
                                 {{ form.personnel_count }}
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-success btn-sm">Calculate</button>
-                        <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-outline-secondary btn-sm">Back</a>
-                    </form>
-                </div>
+                    </section>
+
+                    <div class="comp-actions">
+                        <button type="submit" class="btn btn-success comp-btn-primary">
+                            Calculate estimate
+                        </button>
+                        <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-outline comp-back-btn">Back to dashboard</a>
+                    </div>
+                </form>
             </div>
-        </div>
+        </article>
 
         {% if computation_result %}
-        <div class="col-lg-5">
-            <div class="card shadow-sm border-0 bg-light">
-                <div class="card-header py-2 bg-transparent border-0">
-                    <h5 class="mb-0">Breakdown</h5>
-                </div>
-                <div class="card-body pt-0">
-                    <p class="comp-summary-line small text-muted mb-2">
-                        {{ computation_result.category }} · {% if computation_result.location == 'inside' %}Inside{% else %}Outside{% endif %}
-                        · {% if computation_result.public_private == 'PUBLIC' %}Public{% else %}Private{% endif %}
-                        · BAWAD {% if computation_result.connected_to_bawad %}Y{% else %}N{% endif %}{% if computation_result.connected_to_bawad %} · {{ computation_result.bawad_prior_used_m3|floatformat:1 }}/{{ computation_result.bawad_limit_m3|floatformat:0 }} m³{% endif %}
-                        · {{ computation_result.trips }} trip{{ computation_result.trips|pluralize }}
-                    </p>
-                    <div class="charges-summary">
-                        <div class="charge-row"><span>Trucking</span><span>₱{{ computation_result.fixed_trucking|floatformat:2 }}</span></div>
-                        {% for line in computation_result.desludging_breakdown %}
-                        <div class="charge-row sub"><span>{{ line.label }}</span><span>₱{{ line.amount|floatformat:2 }}</span></div>
-                        {% endfor %}
-                        <div class="charge-row"><span>Septage</span><span>₱{{ computation_result.desludging_fee|floatformat:2 }}</span></div>
-                        {% if computation_result.distance_km %}
-                        <div class="charge-row"><span>Distance ({{ computation_result.distance_km|floatformat:0 }} km)</span><span>₱{{ computation_result.distance_travel_fee|floatformat:2 }}</span></div>
-                        {% endif %}
-                        <div class="charge-row"><span>Wear (20%)</span><span>₱{{ computation_result.wear_charge|floatformat:2 }}</span></div>
-                        <div class="charge-row"><span>Meals (×{{ computation_result.personnel_count }})</span><span>₱{{ computation_result.meals_transport_charge|floatformat:2 }}</span></div>
-                        {% if computation_result.partial_waiver %}
-                        <div class="charge-row waive">
-                            <span>Waiver (public / BAWAD — trucking &amp; septage)</span>
-                            <span>−₱{{ computation_result.waived_base_amount|floatformat:2 }}</span>
-                        </div>
-                        {% elif computation_result.free_reason %}
-                        <div class="charge-row strong"><span>Subtotal</span><span>₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span></div>
-                        <div class="charge-row waive">
-                            <span>{% if computation_result.free_reason == 'public_bawad_inside_under_10km' %}{% if computation_result.is_public %}Waiver (public){% else %}Waiver (BAWAD){% endif %}{% elif computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
-                            <span>−₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span>
-                        </div>
-                        {% endif %}
-                        <div class="charge-row total"><span>Total</span><span>₱{{ computation_result.total_charge|floatformat:2 }}</span></div>
+        <aside class="comp-panel comp-panel--result" aria-labelledby="comp-result-heading">
+            <header class="comp-panel-header comp-panel-header--accent">
+                <h2 id="comp-result-heading" class="comp-panel-title comp-panel-title--sm">Fee breakdown</h2>
+                <p class="comp-panel-lead comp-panel-lead--tight">Line items after your inputs</p>
+            </header>
+            <div class="comp-panel-body comp-panel-body--result">
+                <p class="comp-summary-line">
+                    {{ computation_result.category }} · {% if computation_result.location == 'inside' %}Inside{% else %}Outside{% endif %}
+                    · {% if computation_result.public_private == 'PUBLIC' %}Public{% else %}Private{% endif %}
+                    · BAWAD {% if computation_result.connected_to_bawad %}Y{% else %}N{% endif %}{% if computation_result.connected_to_bawad %} · {{ computation_result.bawad_prior_used_m3|floatformat:1 }}/{{ computation_result.bawad_limit_m3|floatformat:0 }} m³{% endif %}
+                    · {{ computation_result.trips }} trip{{ computation_result.trips|pluralize }}
+                </p>
+                <div class="charges-summary">
+                    <div class="charge-row"><span>Trucking</span><span class="charge-amt">₱{{ computation_result.fixed_trucking|floatformat:2 }}</span></div>
+                    {% for line in computation_result.desludging_breakdown %}
+                    <div class="charge-row sub"><span>{{ line.label }}</span><span class="charge-amt">₱{{ line.amount|floatformat:2 }}</span></div>
+                    {% endfor %}
+                    <div class="charge-row"><span>Septage</span><span class="charge-amt">₱{{ computation_result.desludging_fee|floatformat:2 }}</span></div>
+                    {% if computation_result.distance_km %}
+                    <div class="charge-row"><span>Distance ({{ computation_result.distance_km|floatformat:0 }} km)</span><span class="charge-amt">₱{{ computation_result.distance_travel_fee|floatformat:2 }}</span></div>
+                    {% endif %}
+                    <div class="charge-row"><span>Wear (20%)</span><span class="charge-amt">₱{{ computation_result.wear_charge|floatformat:2 }}</span></div>
+                    <div class="charge-row"><span>Meals (×{{ computation_result.personnel_count }})</span><span class="charge-amt">₱{{ computation_result.meals_transport_charge|floatformat:2 }}</span></div>
+                    {% if computation_result.partial_waiver %}
+                    <div class="charge-row waive">
+                        <span>Waiver (public / BAWAD — trucking &amp; septage)</span>
+                        <span class="charge-amt">−₱{{ computation_result.waived_base_amount|floatformat:2 }}</span>
                     </div>
-                    <p class="small text-muted text-center mb-2 mt-2">{{ computation_result.prepared_by }}</p>
-                    <button type="button" class="btn btn-success btn-sm w-100" onclick="window.print()">Print</button>
+                    {% elif computation_result.free_reason %}
+                    <div class="charge-row strong"><span>Subtotal</span><span class="charge-amt">₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span></div>
+                    <div class="charge-row waive">
+                        <span>{% if computation_result.free_reason == 'public_bawad_inside_under_10km' %}{% if computation_result.is_public %}Waiver (public){% else %}Waiver (BAWAD){% endif %}{% elif computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
+                        <span class="charge-amt">−₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="charge-row total"><span>Total</span><span class="charge-amt">₱{{ computation_result.total_charge|floatformat:2 }}</span></div>
                 </div>
+                <p class="comp-prepared-by">{{ computation_result.prepared_by }}</p>
+                <button type="button" class="btn btn-success comp-btn-print" onclick="window.print()">Print breakdown</button>
             </div>
-        </div>
+        </aside>
         {% endif %}
     </div>
 </div>
 
 <style>
-.admin-computation-page .form-label { font-weight: 600; color: #444; }
-.admin-computation-page .form-control, .admin-computation-page select.form-control {
-    font-size: 14px;
-    padding: 6px 10px;
+/* ---- Computation estimator (admin): layout & responsive ---- */
+.admin-computation-page.comp-page {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 4px;
+    box-sizing: border-box;
 }
-.comp-form .mb-2 { margin-bottom: 0.5rem !important; }
-.charges-summary {
-    font-size: 13px;
+
+.comp-layout {
+    display: grid;
+    gap: 1.5rem;
+    align-items: start;
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+    .comp-layout:not(.comp-layout--single) {
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+        gap: 1.75rem;
+    }
+}
+
+.comp-layout--single {
+    justify-items: stretch;
+}
+
+@media (min-width: 720px) {
+    .comp-layout--single .comp-panel--form {
+        max-width: 720px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+.comp-panel {
+    background: var(--white, #fff);
+    border-radius: 14px;
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(30, 122, 77, 0.15));
+    border: 1px solid rgba(30, 122, 77, 0.1);
+    overflow: hidden;
+}
+
+.comp-panel-header {
+    padding: 1.25rem 1.35rem;
+    border-bottom: 1px solid var(--light-gray, #f1f3f2);
+    background: linear-gradient(180deg, var(--white, #fff) 0%, var(--off-white, #f8faf9) 100%);
+}
+
+.comp-panel-header--accent {
+    border-bottom-color: rgba(30, 122, 77, 0.2);
+    box-shadow: inset 0 -1px 0 rgba(30, 122, 77, 0.06);
+}
+
+.comp-panel-heading {
+    max-width: 42rem;
+}
+
+.comp-panel-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--dark-gray, #2c3e50);
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    margin: 0;
+}
+
+.comp-panel-title--sm {
+    font-size: 1.1rem;
+}
+
+.comp-panel-lead {
+    margin: 0.5rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-gray, #5a6c6d);
+    line-height: 1.5;
+    max-width: 40rem;
+}
+
+.comp-panel-lead--tight {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+}
+
+.comp-panel-body {
+    padding: 1.35rem 1.35rem 1.5rem;
+}
+
+.comp-panel-body--result {
+    padding-top: 1rem;
+}
+
+@media (min-width: 1024px) {
+    .comp-panel--result {
+        position: sticky;
+        top: 86px;
+    }
+}
+
+.comp-section {
+    margin-bottom: 1.5rem;
+}
+
+.comp-section:last-of-type {
+    margin-bottom: 1.25rem;
+}
+
+.comp-section-title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-gray, #5a6c6d);
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--light-gray, #f1f3f2);
+}
+
+.comp-grid {
+    display: grid;
+    gap: 1rem 1.25rem;
+}
+
+.comp-grid--2 {
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+    .comp-grid--2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.comp-grid--3 {
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+    .comp-grid--3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.comp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.comp-field--full {
+    grid-column: 1 / -1;
+}
+
+.comp-field--tight-top {
+    margin-top: 0.25rem;
+}
+
+.admin-computation-page .form-label {
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: var(--dark-gray, #2c3e50);
+    margin: 0;
+}
+
+.admin-computation-page .form-control,
+.admin-computation-page select.form-control {
+    width: 100%;
+    max-width: 100%;
+    font-size: 0.9375rem;
+    padding: 0.6rem 0.75rem;
     border-radius: 8px;
-    background: #fff;
-    padding: 10px 12px;
-    border: 1px solid #e8e8e8;
+    min-height: 44px;
+    box-sizing: border-box;
 }
+
+.comp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    padding-top: 0.25rem;
+    margin-top: 0.25rem;
+}
+
+.comp-btn-primary {
+    padding: 0.65rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    border-radius: 8px;
+    min-height: 44px;
+}
+
+.comp-back-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.65rem 1.1rem;
+    font-size: 0.875rem;
+    border-radius: 8px;
+}
+
+.comp-btn-print {
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 0.65rem 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    min-height: 44px;
+}
+
+.comp-form .field-disabled-muted {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.comp-summary-line {
+    font-size: 0.8125rem;
+    color: var(--text-gray, #5a6c6d);
+    line-height: 1.45;
+    margin: 0 0 1rem;
+    padding: 0.65rem 0.75rem;
+    background: var(--off-white, #f8faf9);
+    border-radius: 8px;
+    border: 1px solid var(--light-gray, #f1f3f2);
+}
+
+.charges-summary {
+    font-size: 0.875rem;
+    border-radius: 10px;
+    background: var(--white, #fff);
+    padding: 0.35rem 0.85rem 0.5rem;
+    border: 1px solid var(--medium-gray, #d9dcd9);
+}
+
 .charge-row {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
-    padding: 6px 0;
-    border-bottom: 1px solid #eee;
+    align-items: baseline;
+    gap: 12px;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--light-gray, #f1f3f2);
 }
+
+.charge-row .charge-amt {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--dark-gray, #2c3e50);
+}
+
 .charge-row.sub {
-    font-size: 11px;
-    color: #666;
-    padding-left: 8px;
+    font-size: 0.75rem;
+    color: var(--text-gray, #5a6c6d);
+    padding-left: 0.5rem;
     border-bottom: none;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
 }
-.charge-row.sub span:first-child { line-height: 1.25; }
-.charge-row.strong { font-weight: 600; color: #444; }
-.charge-row.waive { color: #1e8449; font-weight: 600; border-bottom: none; }
+
+.charge-row.sub .charge-amt {
+    font-weight: 500;
+}
+
+.charge-row.sub span:first-child {
+    line-height: 1.3;
+}
+
+.charge-row.strong {
+    font-weight: 600;
+    color: var(--dark-gray, #2c3e50);
+}
+
+.charge-row.waive {
+    color: var(--primary-green, #1e7a4d);
+    font-weight: 600;
+    border-bottom: none;
+}
+
 .charge-row.total {
     font-weight: 700;
-    font-size: 15px;
-    border-top: 2px solid #2d8659;
+    font-size: 1.05rem;
+    border-top: 2px solid var(--primary-green, #1e7a4d);
     border-bottom: none;
-    margin-top: 4px;
-    padding-top: 10px;
+    margin-top: 0.35rem;
+    padding-top: 0.75rem;
 }
-.comp-summary-line { line-height: 1.35; }
-.comp-form .field-disabled-muted {
-    opacity: 0.5;
-    pointer-events: none;
+
+.charge-row.total .charge-amt {
+    font-size: 1.15rem;
+    color: var(--primary-green, #1e7a4d);
 }
+
+.comp-prepared-by {
+    font-size: 0.75rem;
+    color: var(--text-gray, #5a6c6d);
+    text-align: center;
+    margin: 1rem 0 0;
+    line-height: 1.4;
+}
+
+@media (max-width: 559px) {
+    .comp-panel-header,
+    .comp-panel-body {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .comp-panel-title {
+        font-size: 1.2rem;
+    }
+}
+
 @media print {
-    .admin-computation-page .col-lg-7, .admin-computation-page .btn-outline-secondary { display: none !important; }
-    .admin-computation-page .col-lg-5 { width: 100%; max-width: 100%; }
+    .admin-computation-page .comp-panel--form,
+    .admin-computation-page .comp-back-btn {
+        display: none !important;
+    }
+
+    .admin-computation-page .comp-layout,
+    .admin-computation-page .comp-panel--result {
+        width: 100% !important;
+        max-width: 100% !important;
+        position: static !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    .admin-computation-page .comp-btn-print {
+        display: none !important;
+    }
 }
 </style>
 <script>

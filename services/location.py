@@ -15,6 +15,47 @@ BAYAWAN_CENTER_LON = 122.821
 CENRO_OFFICE_LAT = 9.3630
 CENRO_OFFICE_LON = 122.8013
 
+# ---------------------------------------------------------------------------
+# CENRO service territory (map pin / distance checks)
+# Bayawan City uses the official polygon in barangay-boundaries.geojson.
+# Basay and Santa Catalina use WGS84 bounding boxes; neighboring municipalities
+# that share similar coordinates use EXCLUSION boxes so loose rectangles do not
+# admit Siaton, etc. (see is_inside_service_exclusion_zone).
+# ---------------------------------------------------------------------------
+# (min_lat, min_lon, max_lat, max_lon)
+BASAY_SERVICE_BBOX = (9.30, 122.42, 9.52, 122.70)
+# Tighter than an OSM-wide envelope so southern coastal Siaton is not included.
+SANTA_CATALINA_SERVICE_BBOX = (9.175, 122.72, 9.44, 123.10)
+
+# Areas explicitly NOT served (bbox bleed / OSM ambiguity). Checked after Bayawan polygon.
+_SERVICE_AREA_EXCLUSION_BBOXES: tuple[tuple[float, float, float, float], ...] = (
+    # Siaton (e.g. Bonawon / Catipon coastal band) — south of Santa Catalina.
+    (9.02, 122.80, 9.175, 123.08),
+    # Sibulan / south Dumaguete coast — east of Sta. Catalina core; tuned narrow so
+    # eastern Sta. Catalina (west of ~123.008°E) is not clipped.
+    (9.31, 123.008, 9.42, 123.22),
+)
+
+
+def _in_geographic_bbox(lat: float, lon: float, bbox: tuple[float, float, float, float]) -> bool:
+    min_lat, min_lon, max_lat, max_lon = bbox
+    return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
+
+
+def is_inside_service_exclusion_zone(lat: float, lon: float) -> bool:
+    """True if coordinates fall in a known non-service municipality envelope."""
+    return any(_in_geographic_bbox(lat, lon, b) for b in _SERVICE_AREA_EXCLUSION_BBOXES)
+
+
+def is_inside_basay_municipality_bbox(lat: float, lon: float) -> bool:
+    """Approximate land extent of the Municipality of Basay, Negros Oriental."""
+    return _in_geographic_bbox(lat, lon, BASAY_SERVICE_BBOX)
+
+
+def is_inside_santa_catalina_municipality_bbox(lat: float, lon: float) -> bool:
+    """Approximate land extent of the Municipality of Santa Catalina, Negros Oriental."""
+    return _in_geographic_bbox(lat, lon, SANTA_CATALINA_SERVICE_BBOX)
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in kilometres between two points."""
@@ -164,11 +205,29 @@ def detect_barangay_for_point(lat: float, lon: float) -> Optional[str]:
 
     if inside_city:
         return "Bayawan City"
+    if is_inside_service_exclusion_zone(lat, lon):
+        return None
+    if is_inside_basay_municipality_bbox(lat, lon):
+        return "Basay"
+    if is_inside_santa_catalina_municipality_bbox(lat, lon):
+        return "Santa Catalina"
     return None
 
 
 def within_service_bounds(lat: float, lon: float) -> bool:
-    return is_inside_bayawan_city(lat, lon)
+    """
+    True when coordinates fall inside CENRO's accepted service territory:
+    Bayawan City (polygon), Municipality of Basay, or Municipality of Santa Catalina.
+    """
+    if is_inside_bayawan_city(lat, lon):
+        return True
+    if is_inside_service_exclusion_zone(lat, lon):
+        return False
+    if is_inside_basay_municipality_bbox(lat, lon):
+        return True
+    if is_inside_santa_catalina_municipality_bbox(lat, lon):
+        return True
+    return False
 
 
 @lru_cache(maxsize=1)

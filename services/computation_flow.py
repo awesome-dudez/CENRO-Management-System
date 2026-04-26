@@ -5,6 +5,16 @@ from __future__ import annotations
 from services.models import ServiceRequest
 
 
+def stored_filefield_exists(filefield) -> bool:
+    """True if a FileField/ImageField points at a file that is present in storage."""
+    if not filefield or not getattr(filefield, "name", None):
+        return False
+    try:
+        return filefield.storage.exists(filefield.name)
+    except Exception:
+        return False
+
+
 def inspection_is_waived(service_request: ServiceRequest) -> bool:
     return "[NO_INSPECTION_FEE]" in (service_request.notes or "")
 
@@ -42,8 +52,8 @@ def computation_finalize_blockers(
     if cm is None or cm <= 0:
         blockers.append("Cubic meters must be greater than zero.")
 
-    has_sig = bool(uploaded_signature) or (
-        computation.prepared_by_signature and bool(computation.prepared_by_signature.name)
+    has_sig = bool(uploaded_signature) or stored_filefield_exists(
+        getattr(computation, "prepared_by_signature", None)
     )
     if not has_sig:
         blockers.append("Upload a prepared-by signature before sending the computation to the customer.")

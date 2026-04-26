@@ -116,14 +116,6 @@ body.auth-page-bayawan.admin-view .admin-main {
     background: transparent;
 }
 
-body.auth-page-bayawan.admin-view .admin-main-title,
-body.auth-page-bayawan.admin-view .admin-main-subtitle {
-    color: #f4faf7;
-    text-shadow:
-        0 2px 20px rgba(0, 0, 0, 0.55),
-        0 1px 3px rgba(0, 0, 0, 0.75);
-}
-
 @media (max-width: 575px) {
     body.auth-page-bayawan .auth-container {
         min-height: calc(100vh - 64px);

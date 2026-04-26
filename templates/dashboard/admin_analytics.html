@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Statistics - CENRO Sanitary Management System{% endblock %}
-{% block admin_subtitle %}Statistics{% endblock %}
 {% block content %}
 <div class="analytics-page">
     <div class="analytics-refresh-bar" id="analyticsRefreshBar" aria-hidden="true" role="presentation"></div>
@@ -678,9 +677,7 @@
     body.analytics-print-mode .admin-sidebar,
     body.analytics-print-mode .admin-sidebar-toggle,
     body.analytics-print-mode .admin-sidebar-overlay,
-    body.analytics-print-mode .footer,
-    body.analytics-print-mode .admin-main-title,
-    body.analytics-print-mode .admin-main-subtitle {
+    body.analytics-print-mode .footer {
         display: none !important;
     }
     body.analytics-print-mode .admin-layout-wrapper {

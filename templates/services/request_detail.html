@@ -478,6 +478,13 @@
             <a href="{% url 'services:upload_receipt' sr.pk %}" class="btn btn-green">Upload Payment Receipt</a>
             {% endif %}
 
+            {% if sr.status == "DESLUDGING_SCHEDULED" and sr.service_type != "GRASS_CUTTING" and not user.is_admin %}
+            <form method="post" action="{% url 'services:complete_request' sr.pk %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-green">Mark Completed</button>
+            </form>
+            {% endif %}
+
         {% endif %}
     </div>
 

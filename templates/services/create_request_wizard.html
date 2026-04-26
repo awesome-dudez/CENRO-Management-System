@@ -660,6 +660,7 @@
                         <span class="map-instructions-text">Tap or click the map to <strong>pinpoint</strong> the service location, or use <strong>Use my current location</strong> below. Drag the pin to fine-tune.</span>
                         <span class="map-status-badge" id="mapStatusBadge">Waiting for pin</span>
                     </div>
+                    <p class="map-territory-legend" style="font-size:12px;color:#5a6c6d;margin:8px 0 4px;line-height:1.45;">Map key: <strong style="color:#1abc9c;">solid teal</strong> = Bayawan City boundary; <strong style="color:#16a085;">dashed teal</strong> = Basay &amp; Santa Catalina envelopes; <strong style="color:#c0392b;">red hatched</strong> = not served (matches validation).</p>
                     <div class="map-location-actions">
                         <button type="button" class="btn-map-locate" id="btnUseMyLocation" aria-label="Place pin at my current GPS location">
                             Use my current location
@@ -672,17 +673,17 @@
                     <div id="map-container">
                         <div id="map" style="width:100%;height:100%;"></div>
                         <div id="gcOutsideOverlay">
-                            <div class="gc-outside-msg">&#128683; This location is outside Bayawan City.<br>Grass-cutting requests must be within city limits.</div>
+                            <div class="gc-outside-msg">&#128683; This location is outside the allowed service area.<br>Grass-cutting must be within Bayawan City, Santa Catalina, or Basay.</div>
                         </div>
                         <div id="pin-info-card" class="pin-info-card">
                             <div class="pin-info-title" id="pinInfoBarangay">Select a location</div>
                             <div class="pin-info-coords" id="pinInfoCoords">--</div>
                             <div class="pin-info-address" id="pinInfoAddress">Address will appear here</div>
-                            <div class="pin-info-status" id="pinInfoStatus">Place the pin inside Bayawan City</div>
+                            <div class="pin-info-status" id="pinInfoStatus">Place the pin inside the allowed service area</div>
                         </div>
                     </div>
                     <div class="location-validation" id="locationValidation">
-                        Place the pin inside Bayawan City to continue.
+                        Place the pin inside Bayawan City, Santa Catalina, or Basay to continue.
                     </div>
                     {{ form.gps_latitude }}
                     {{ form.gps_longitude }}
@@ -748,7 +749,7 @@
                     {% endfor %}
                 </div>
                 <div class="form-help-text" id="bawadOutsideNote" style="display:none;color:#e67e22;margin-top:6px;">
-                    Location is outside Bayawan City — automatically set to non-BAWAD.
+                    Pin is outside Bayawan City — BAWAD applies only to Bayawan City; selection is set to non-BAWAD.
                 </div>
                 {% if form.connected_to_bawad.errors %}<div class="form-error">{{ form.connected_to_bawad.errors.0 }}</div>{% endif %}
             </div>
@@ -1314,7 +1315,16 @@ document.addEventListener('DOMContentLoaded', function() {
         wizardFormOtherGuard.addEventListener('submit', function(evt) {
             if (requestForInput && requestForInput.value === 'other' && !otherVerified) {
                 evt.preventDefault();
-                alert('Please click “Verify client account” first. The client’s name and address must match a registered CENRO account. If they are not registered yet, use the registration link shown after verification.');
+                if (typeof window.cenroToast === 'function') {
+                    window.cenroToast(
+                        'Click “Verify client account” first. The client’s name, barangay, and street address must match their CENRO profile exactly. If they are not registered, use the registration link that appears after you try to verify.',
+                        'warning',
+                        9000,
+                        'Client verification required'
+                    );
+                } else {
+                    alert('Please click “Verify client account” first.');
+                }
                 if (btnVerifyOther) btnVerifyOther.focus();
             }
         });
@@ -1324,7 +1334,19 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
     const REVERSE_GEOCODE_URL = "{% url 'services:reverse_geocode' %}";
     const GEOJSON_URL = "{% static 'data/barangay-boundaries.geojson' %}";
+    const SERVICE_TERRITORY_OVERLAY_URL = "{% static 'data/service-territory-overlay.geojson' %}?v=20260424-territory";
     const BAYAWAN_CENTER = { lat: 9.470, lon: 122.821 };
+    /* Must match services/location.py (bboxes + _SERVICE_AREA_EXCLUSION_BBOXES) */
+    const SERVICE_AREA_BBOX = {
+        basay: { minLat: 9.30, maxLat: 9.52, minLon: 122.42, maxLon: 122.70 },
+        santaCatalina: { minLat: 9.175, maxLat: 9.44, minLon: 122.72, maxLon: 123.10 },
+    };
+    const SERVICE_AREA_EXCLUSION_BBOXES = [
+        { minLat: 9.02, maxLat: 9.175, minLon: 122.80, maxLon: 123.08 },
+        { minLat: 9.31, maxLat: 9.42, minLon: 123.008, maxLon: 123.22 },
+    ];
+    const SERVICE_AREA_HELP =
+        'Bayawan City, the Municipality of Santa Catalina, or the Municipality of Basay';
 
     let barangayGeoJSON = null;
     let cityBoundaryFeature = null;
@@ -1379,6 +1401,27 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
     }
 
+    function inServiceBBox(lat, lon, b) {
+        return lat >= b.minLat && lat <= b.maxLat && lon >= b.minLon && lon <= b.maxLon;
+    }
+
+    function isInServiceExclusionZone(lat, lon) {
+        return SERVICE_AREA_EXCLUSION_BBOXES.some(function(b) { return inServiceBBox(lat, lon, b); });
+    }
+
+    function municipalityFromServiceBBox(lat, lon) {
+        if (isInServiceExclusionZone(lat, lon)) return null;
+        if (inServiceBBox(lat, lon, SERVICE_AREA_BBOX.basay)) return 'Basay';
+        if (inServiceBBox(lat, lon, SERVICE_AREA_BBOX.santaCatalina)) return 'Santa Catalina';
+        return null;
+    }
+
+    function isInsideServiceArea(lat, lon) {
+        if (isInsideBayawanCity(lat, lon)) return true;
+        if (isInServiceExclusionZone(lat, lon)) return false;
+        return !!municipalityFromServiceBBox(lat, lon);
+    }
+
     function detectBarangayFromGeoJSON(lat, lon) {
         if (!barangayGeoJSON || !barangayGeoJSON.features) return null;
         for (const feature of barangayGeoJSON.features) {
@@ -1421,16 +1464,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const validation = document.getElementById('locationValidation');
         const instructions = document.getElementById('mapInstructions');
         if (badge) {
-            badge.textContent = valid ? 'Inside Bayawan City' : 'Outside Bayawan City';
+            badge.textContent = valid ? 'Inside service area' : 'Outside service area';
             badge.classList.toggle('valid', valid);
             badge.classList.toggle('invalid', !valid);
         }
         if (validation) {
             if (valid) {
-                validation.textContent = barangay ? `Detected barangay: ${barangay}` : 'Detected barangay: Unknown';
+                validation.textContent = barangay ? `Location: ${barangay}` : 'Location: (confirm on map)';
                 validation.classList.add('valid'); validation.classList.remove('invalid');
             } else {
-                validation.textContent = 'Location is outside Bayawan City. Additional travel fees may apply.';
+                validation.textContent =
+                    `Only ${SERVICE_AREA_HELP} are accepted. Pins outside this area cannot be submitted.`;
                 validation.classList.add('invalid'); validation.classList.remove('valid');
             }
         }
@@ -1443,11 +1487,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const coords = document.getElementById('pinInfoCoords');
         const addr = document.getElementById('pinInfoAddress');
         const status = document.getElementById('pinInfoStatus');
-        if (title) title.textContent = barangay || 'Outside Bayawan City';
+        if (title) title.textContent = barangay || 'Outside service area';
         if (coords) coords.textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
         if (addr) addr.textContent = address || 'Address will appear here';
         if (status) {
-            status.textContent = valid ? 'Within Bayawan City' : 'Outside Bayawan City';
+            status.textContent = valid ? 'Within allowed service area' : 'Outside allowed service area';
             status.classList.toggle('valid', valid);
             status.classList.toggle('invalid', !valid);
         }
@@ -1460,15 +1504,19 @@ document.addEventListener('DOMContentLoaded', function() {
         latField.value = lat.toFixed(6);
         lonField.value = lon.toFixed(6);
 
-        const withinCityBoundary = isInsideBayawanCity(lat, lon);
+        const withinBayawanPolygon = isInsideBayawanCity(lat, lon);
         const detectedBarangay = detectBarangayFromGeoJSON(lat, lon);
-        const quickLabel = withinCityBoundary ? (detectedBarangay || 'Bayawan City') : null;
+        const bboxMunicipality = municipalityFromServiceBBox(lat, lon);
+        const withinServiceByMap = withinBayawanPolygon || !!bboxMunicipality;
+        const quickLabel = withinBayawanPolygon
+            ? (detectedBarangay || 'Bayawan City')
+            : (bboxMunicipality || null);
 
         isLocationValid = true;
         if (barangayInput) { barangayInput.value = quickLabel || ''; barangayInput.dispatchEvent(new Event('change', { bubbles: true })); }
-        updateStatusUI(withinCityBoundary, quickLabel);
-        updatePinInfoCard(lat, lon, quickLabel, 'Detecting address...', withinCityBoundary);
-        if (typeof window.enforceBawadForLocation === 'function') window.enforceBawadForLocation(withinCityBoundary);
+        updateStatusUI(withinServiceByMap, quickLabel);
+        updatePinInfoCard(lat, lon, quickLabel, 'Detecting address...', withinServiceByMap);
+        if (typeof window.enforceBawadForLocation === 'function') window.enforceBawadForLocation(withinBayawanPolygon);
 
         const seq = ++geocodeSeq;
         const payload = await reverseGeocode(lat, lon);
@@ -1476,35 +1524,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const serverBarangay = payload && payload.barangay ? payload.barangay : null;
         const serverWithin = payload && typeof payload.within_bayawan === 'boolean' ? payload.within_bayawan : null;
-        const withinCity = withinCityBoundary || (serverWithin === true);
+        const withinServiceArea = withinServiceByMap || (serverWithin === true);
 
         // Prefer the more precise barangay coming from the server whenever
         // it is available. Front-end GeoJSON detection sometimes only knows
         // "Bayawan City" (city boundary), while the server can return a
         // specific barangay like "Napit-an".
         let finalBarangay;
-        if (withinCity) {
+        if (withinServiceArea) {
             if (serverBarangay && serverBarangay !== 'Bayawan City') {
                 finalBarangay = serverBarangay;
             } else {
-                finalBarangay = detectedBarangay || serverBarangay || 'Bayawan City';
+                finalBarangay = detectedBarangay || bboxMunicipality || serverBarangay || 'Bayawan City';
             }
         } else {
-            finalBarangay = serverBarangay || detectedBarangay || 'Outside Bayawan City';
+            finalBarangay = serverBarangay || detectedBarangay || bboxMunicipality || 'Outside service area';
         }
 
         isLocationValid = true;
         if (barangayInput) { barangayInput.value = finalBarangay || ''; barangayInput.dispatchEvent(new Event('change', { bubbles: true })); }
-        updateStatusUI(withinCity, finalBarangay);
-        if (typeof window.enforceBawadForLocation === 'function') window.enforceBawadForLocation(withinCity);
+        updateStatusUI(withinServiceArea, finalBarangay);
+        if (typeof window.enforceBawadForLocation === 'function') window.enforceBawadForLocation(withinBayawanPolygon);
         const formatted = formatAddressFromReverseGeocode(payload);
         if (formatted) {
             if (addressInput && (!addressTouched || !addressInput.value || addressInput.value === window.lastAutoAddress)) {
                 addressInput.value = formatted; window.lastAutoAddress = formatted;
             }
-            updatePinInfoCard(lat, lon, finalBarangay, formatted, withinCity);
+            updatePinInfoCard(lat, lon, finalBarangay, formatted, withinServiceArea);
         } else {
-            updatePinInfoCard(lat, lon, finalBarangay, null, withinCity);
+            updatePinInfoCard(lat, lon, finalBarangay, null, withinServiceArea);
         }
     }
 
@@ -1596,18 +1644,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }).addTo(mapInstance);
             }
+            fetch(SERVICE_TERRITORY_OVERLAY_URL).then(function(r) { return r.ok ? r.json() : null; }).then(function(territoryOverlay) {
+                if (!territoryOverlay || !territoryOverlay.features || !mapInstance) return;
+                L.geoJSON(territoryOverlay, {
+                    style: function(feature) {
+                        var t = feature.properties && feature.properties.type;
+                        if (t === 'service_exclusion') {
+                            return {
+                                color: '#c0392b', weight: 2, opacity: 0.9, dashArray: '6 5',
+                                fillColor: '#e74c3c', fillOpacity: 0.2, interactive: false,
+                            };
+                        }
+                        if (t === 'service_area_municipality') {
+                            return {
+                                color: '#16a085', weight: 2, opacity: 0.8, dashArray: '5 6',
+                                fillColor: '#1abc9c', fillOpacity: 0.07, interactive: false,
+                            };
+                        }
+                        return { weight: 1, opacity: 0.5, fillOpacity: 0.04, interactive: false };
+                    },
+                }).addTo(mapInstance);
+            }).catch(function() { /* optional layer */ });
             if (marker) {
                 var pos = marker.getLatLng();
                 // Now that the city boundary is loaded, validate any auto-placed pin.
                 // For grass-cutting: remove the pin if it landed outside city limits.
-                if (gcRestrictToCity && cityBoundaryFeature && !isInsideBayawanCity(pos.lat, pos.lng)) {
+                if (gcRestrictToCity && !isInsideServiceArea(pos.lat, pos.lng)) {
                     marker.remove();
                     marker = null;
                     lastValidLat = null; lastValidLon = null;
                     if (latField) latField.value = '';
                     if (lonField) lonField.value = '';
                     var hint = document.getElementById('mapLocateHint');
-                    if (hint) hint.textContent = 'Your saved location is outside Bayawan City. Please tap inside the city boundary on the map to set the grass-cutting location.';
+                    if (hint) hint.textContent = 'Your saved location is outside the allowed service area. Tap inside ' + SERVICE_AREA_HELP + ' on the map.';
                     showGcOutsideMsg();
                 } else {
                     handleLocationChange(pos.lat, pos.lng, { latField, lonField, barangayInput, addressInput });
@@ -1628,7 +1697,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show the red overlay and an optional hint message, then scroll the map to the rejected point.
             showGcOutsideMsg();
             var hint = document.getElementById('mapLocateHint');
-            if (hint) hint.textContent = hintMsg || 'That location is outside Bayawan City. Grass-cutting requests must be within city limits.';
+            if (hint) hint.textContent = hintMsg || ('That location is outside the allowed area. Grass-cutting must be within ' + SERVICE_AREA_HELP + '.');
             if (mapInstance) mapInstance.panTo([lat, lon]);
         }
 
@@ -1636,8 +1705,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // For grass-cutting: once the city-boundary GeoJSON is loaded, reject any
             // pin placement outside Bayawan City — regardless of how it was triggered
             // (map click, "Use my location" button, owner profile auto-place, etc.).
-            if (gcRestrictToCity && cityBoundaryFeature && !isInsideBayawanCity(lat, lon)) {
-                gcBlockOutside(lat, lon, 'That location is outside Bayawan City. Grass-cutting requests must be within city limits. Please choose a location inside the city boundary.');
+            if (gcRestrictToCity && !isInsideServiceArea(lat, lon)) {
+                gcBlockOutside(lat, lon, 'That location is outside the allowed area. Grass-cutting requests must be within ' + SERVICE_AREA_HELP + '.');
                 return;
             }
 
@@ -1652,9 +1721,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 marker.on('dragend', function() {
                     const pos = marker.getLatLng();
                     // For grass-cutting: snap the pin back if dragged outside city boundary
-                    if (gcRestrictToCity && cityBoundaryFeature && !isInsideBayawanCity(pos.lat, pos.lng)) {
+                    if (gcRestrictToCity && !isInsideServiceArea(pos.lat, pos.lng)) {
                         if (lastValidLat !== null) marker.setLatLng([lastValidLat, lastValidLon]);
-                        gcBlockOutside(pos.lat, pos.lng, 'You cannot drag the pin outside Bayawan City for grass-cutting requests.');
+                        gcBlockOutside(pos.lat, pos.lng, 'You cannot drag the pin outside the allowed area for grass-cutting requests.');
                         return;
                     }
                     lastValidLat = pos.lat; lastValidLon = pos.lng;
@@ -1686,7 +1755,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         mapInstance.on('click', function(e) {
             if (gcRestrictToCity) {
-                var inside = isInsideBayawanCity(e.latlng.lat, e.latlng.lng);
+                var inside = isInsideServiceArea(e.latlng.lat, e.latlng.lng);
                 if (!inside) { showGcOutsideMsg(); return; }
             }
             placeMarker(e.latlng.lat, e.latlng.lng, true);
@@ -1717,7 +1786,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 var badge = document.getElementById('mapStatusBadge');
                 if (badge) { badge.textContent = 'Waiting for pin'; badge.className = 'map-status-badge'; }
                 var validation = document.getElementById('locationValidation');
-                if (validation) { validation.textContent = 'Place the pin inside Bayawan City to continue.'; validation.className = 'location-validation'; }
+                if (validation) { validation.textContent = 'Place the pin inside ' + SERVICE_AREA_HELP + ' to continue.'; validation.className = 'location-validation'; }
                 var instructions = document.getElementById('mapInstructions');
                 if (instructions) instructions.classList.remove('success');
                 if (mapLocateHint) mapLocateHint.textContent = '';
@@ -1744,8 +1813,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     locateRequestInProgress = false;
                     setLocateButtonLoading(false);
                     // For grass cutting: reject the GPS position if it is outside Bayawan City
-                    if (gcRestrictToCity && !isInsideBayawanCity(e.latlng.lat, e.latlng.lng)) {
-                        if (mapLocateHint) mapLocateHint.textContent = 'Your current location is outside Bayawan City. Grass-cutting requests must be within city limits. Tap inside the city boundary on the map to pinpoint.';
+                    if (gcRestrictToCity && !isInsideServiceArea(e.latlng.lat, e.latlng.lng)) {
+                        if (mapLocateHint) mapLocateHint.textContent = 'Your current location is outside the allowed service area. Grass-cutting must be within ' + SERVICE_AREA_HELP + '. Tap the map inside that area to pinpoint.';
                         mapInstance.setView(e.latlng, 13);
                         return;
                     }
@@ -1780,24 +1849,66 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (evt.defaultPrevented) return;
                 var locMode = (document.getElementById('id_location_mode') || {}).value || 'PIN';
                 if (locMode === 'PIN') {
-                    if (!latField.value || !lonField.value) { evt.preventDefault(); alert('Please drop a pin on the map before continuing.'); return; }
-                    // Grass-cutting: enforce inside Bayawan City at submit time too
-                    if (gcRestrictToCity) {
-                        var pinLat = parseFloat(latField.value);
-                        var pinLon = parseFloat(lonField.value);
-                        if (!isInsideBayawanCity(pinLat, pinLon)) {
-                            evt.preventDefault();
-                            alert('The pinned location is outside Bayawan City. Grass-cutting requests can only be submitted for locations within the city. Please move the pin inside the city boundary.');
-                            showGcOutsideMsg();
-                            return;
-                        }
+                    if (!latField.value || !lonField.value) {
+                        evt.preventDefault();
+                        if (typeof window.cenroToast === 'function') {
+                            window.cenroToast(
+                                'Tap the map once to drop a pin on the service location, or use “Use my current location” if you are on site. You can drag the pin to adjust it before continuing.',
+                                'warning',
+                                7000,
+                                'Choose a location on the map'
+                            );
+                        } else { alert('Please drop a pin on the map before continuing.'); }
+                        return;
                     }
-                    if (!barangayInput.value || !barangayInput.value.trim()) barangayInput.value = 'Outside Bayawan City';
+                    var pinLat = parseFloat(latField.value);
+                    var pinLon = parseFloat(lonField.value);
+                    if (!isInsideServiceArea(pinLat, pinLon)) {
+                        evt.preventDefault();
+                        var title = gcRestrictToCity ? 'Grass cutting: location not eligible' : 'Location outside authorized coverage';
+                        var body = gcRestrictToCity
+                            ? ('Grass-cutting is available only within the same jurisdictions served by other CENRO programs—namely, ' + SERVICE_AREA_HELP + '. On the map, position the pin inside the solid teal boundary (Bayawan City) or the dashed teal envelopes (Basay or Santa Catalina). Pins must not be placed in red hatched exclusion zones. When the location is correct, select Next to continue.')
+                            : ('This portal accepts service requests only for premises located in ' + SERVICE_AREA_HELP + '. The coordinates you selected fall outside that authorized area and may correspond to a neighboring locality (for example, Siaton or Sibulan). Please reposition the pin within the teal boundary indicators on the map, then select Next to continue.');
+                        if (typeof window.cenroToast === 'function') {
+                            window.cenroToast(body, 'warning', 12000, title);
+                        } else {
+                            alert(title + '\n\n' + body);
+                        }
+                        if (gcRestrictToCity) showGcOutsideMsg();
+                        return;
+                    }
+                    if (!barangayInput.value || !barangayInput.value.trim()) {
+                        barangayInput.value = municipalityFromServiceBBox(pinLat, pinLon) || (isInsideBayawanCity(pinLat, pinLon) ? 'Bayawan City' : '');
+                    }
                 } else {
                     var bar = (barangayInput && barangayInput.value) ? barangayInput.value.trim() : '';
                     var addr = (addressInput && addressInput.value) ? addressInput.value.trim() : '';
-                    if (!bar) { evt.preventDefault(); alert('Please enter Barangay when using Type Address.'); if (barangayInput) barangayInput.focus(); return; }
-                    if (!addr) { evt.preventDefault(); alert('Please enter Complete Address / Landmark when using Type Address.'); if (addressInput) addressInput.focus(); return; }
+                    if (!bar) {
+                        evt.preventDefault();
+                        if (typeof window.cenroToast === 'function') {
+                            window.cenroToast(
+                                'Enter the barangay (or sitio) where the service is needed. It must be within Bayawan City, Santa Catalina, or Basay.',
+                                'warning',
+                                7000,
+                                'Barangay is required'
+                            );
+                        } else { alert('Please enter Barangay when using Type Address.'); }
+                        if (barangayInput) barangayInput.focus();
+                        return;
+                    }
+                    if (!addr) {
+                        evt.preventDefault();
+                        if (typeof window.cenroToast === 'function') {
+                            window.cenroToast(
+                                'Add the street, purok, landmark, or building name so crews can find the place. This field is required when you choose Type Address instead of the map.',
+                                'warning',
+                                7000,
+                                'Complete address is required'
+                            );
+                        } else { alert('Please enter Complete Address / Landmark when using Type Address.'); }
+                        if (addressInput) addressInput.focus();
+                        return;
+                    }
                 }
 
                 // If draw mode is active, capture canvas as base64 before submit.
@@ -1923,7 +2034,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     try { localStorage.setItem(SERVICE_KEY, serviceSel.value); } catch (e) {}
                 }
                 evt.preventDefault();
-                alert('You are offline. Service type was saved locally. Open Step 2 once online cache is available, then submit to queue the request.');
+                if (typeof window.cenroToast === 'function') {
+                    window.cenroToast(
+                        'You’re offline. Your service type was saved on this device. When you’re back online, open Step 2 and submit so the request can be queued or sent to CENRO.',
+                        'info',
+                        9000,
+                        'Working offline'
+                    );
+                } else { alert('You are offline. Service type was saved locally.'); }
             });
         }
 
@@ -1985,7 +2103,14 @@ document.addEventListener('DOMContentLoaded', function() {
             evt.preventDefault();
             var fd = mergeDraftPayload();
             if (!fd) {
-                alert('No draft data found to queue. Please complete Step 2 first.');
+                if (typeof window.cenroToast === 'function') {
+                    window.cenroToast(
+                        'Fill out Step 2 and try again. The form needs your location and other details before it can be saved to the offline queue.',
+                        'warning',
+                        8000,
+                        'Nothing to queue yet'
+                    );
+                } else { alert('No draft data found to queue.'); }
                 return;
             }
             window.CenroOffline.enqueueFormData(
@@ -1999,9 +2124,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     '<strong>Offline Draft Saved.</strong> Your request is queued. Please go online to completely submit. Sync runs automatically once connected.',
                     'success'
                 );
-                alert('You are offline. Your request is queued. Please reconnect to fully submit it to the server.');
+                if (typeof window.cenroToast === 'function') {
+                    window.cenroToast(
+                        'Your answers are stored in the offline queue. Reconnect to the internet so the app can send the request to CENRO. You’ll see a confirmation when sync finishes.',
+                        'success',
+                        10000,
+                        'Request queued for sync'
+                    );
+                } else { alert('You are offline. Your request is queued.'); }
             }).catch(function() {
-                alert('Unable to queue offline request. Please try again.');
+                if (typeof window.cenroToast === 'function') {
+                    window.cenroToast(
+                        'The offline queue could not save this submission. Check storage permissions or try again in a moment.',
+                        'danger',
+                        9000,
+                        'Could not queue request'
+                    );
+                } else { alert('Unable to queue offline request.'); }
             });
         }
 

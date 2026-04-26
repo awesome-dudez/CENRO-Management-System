@@ -8,7 +8,29 @@
         background: white; border: 1px solid #ddd; border-radius: 8px;
         padding: 40px 50px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
     }
-    .letter-header { margin-bottom: 30px; border-bottom: 2px solid #2d3142; padding-bottom: 20px; }
+    .letter-header { margin-bottom: 24px; border-bottom: 2px solid #2d3142; padding-bottom: 20px; }
+    .letter-office-meta { text-align: right; font-size: 13px; line-height: 1.5; color: #2d3142; margin-top: 8px; }
+    .letter-office-meta-lines { font-weight: 400; }
+    .letter-office-meta-lines strong { font-weight: 700; display: block; margin-bottom: 2px; }
+    .letter-formal-to { margin-bottom: 22px; font-size: 14px; color: #2d3142; }
+    .letter-formal-to-label { margin: 0 0 4px; font-weight: 600; }
+    .letter-formal-underline { text-decoration: underline; font-weight: 600; margin: 0; }
+    .letter-formal-title-line { margin: 6px 0 0; }
+    .letter-formal-body { font-size: 14px; line-height: 1.75; color: #2d3142; margin-bottom: 28px; }
+    .letter-formal-body p { margin: 0 0 14px; }
+    .letter-formal-body p:last-child { margin-bottom: 0; }
+    .letter-em { font-weight: 600; }
+    .letter-free-note { font-weight: 400; font-size: 13px; color: #555; }
+    .letter-formal-closing { font-size: 14px; margin-bottom: 32px; color: #2d3142; }
+    .letter-vty { margin: 0 0 18px; }
+    .letter-computation-heading-wrap h2.letter-computation-main-title {
+        text-align: center; font-size: 18px; letter-spacing: 0.06em; margin: 0 0 12px;
+        color: #2d3142; font-weight: 700; border: none; padding: 0;
+    }
+    .letter-prepared-footer { margin-top: 28px; font-size: 13px; color: #666; }
+    .letter-prepared-by-line { margin: 8px 0 4px; }
+    .letter-prepared-title { margin: 0 0 12px; color: #444; }
+    .letter-prepared-date { margin: 0; color: #444; }
     .letter-logos {
         display: flex;
         justify-content: space-between;
@@ -20,11 +42,6 @@
     .letter-logos-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .letter-logos-right { display: flex; align-items: center; }
     .letter-logo-bayawan { margin-top: 10px; }
-    .letter-header-titles { text-align: center; }
-    .letter-header h2 { font-size: 20px; color: #2d3142; margin: 0 0 4px; }
-    .letter-header p { font-size: 13px; color: #666; margin: 0; }
-    .letter-addressee { margin-bottom: 24px; }
-    .letter-addressee p { margin: 2px 0; font-size: 14px; color: #2d3142; }
     .letter-section { margin-bottom: 20px; }
     .letter-section h4 { color: #1abc9c; font-size: 15px; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
     .breakdown-table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -63,42 +80,46 @@
         <div class="letter-header">
             <div class="letter-logos">
                 <div class="letter-logos-left">
-                    <img class="letter-logo-bayawan" src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:102px;width:auto;">
-                    <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:56px;width:auto;">
+                    <img class="letter-logo-bayawan" src="{% static 'img/bayawan_logo.png' %}" alt="Bayawan City" style="height:140px;width:auto;">
+                    <img src="{% static 'img/bagong_pilipinas_logo.png' %}" alt="Bagong Pilipinas" style="height:82px;width:auto;">
                 </div>
                 <div class="letter-logos-right">
-                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:60px;width:auto;">
+                    <img src="{% static 'img/cenro_logo.png' %}" alt="CENRO" style="height:92px;width:auto;">
                 </div>
             </div>
-            <div class="letter-header-titles">
-                <h2>COMPUTATION LETTER</h2>
-                <p>City Environment and Natural Resources Office (CENRO)</p>
-                <p>City of Bayawan, Negros Oriental</p>
+            <div class="letter-office-meta">
+                <div class="letter-office-meta-lines">
+                    <strong>CITY ENVIRONMENT AND NATURAL RESOURCES OFFICE</strong>
+                    Ground Floor, Old City Hall, Bayawan City<br>
+                    (035) 531-0020 local 106 &amp; 206
+                </div>
             </div>
         </div>
 
-        <div class="letter-addressee">
-            <p><strong>JEZEBEL ESTI&Ntilde;OSO</strong></p>
-            <p>LRCO III</p>
-            <p style="margin-top:10px;">Date: {{ comp.created_at|date:"F d, Y" }}</p>
+        <div class="letter-formal-to">
+            <p class="letter-formal-to-label">To:</p>
+            <p class="letter-formal-underline">{{ letter_treasurer_name }}</p>
+            <p class="letter-formal-title-line">{{ letter_treasurer_title }}</p>
         </div>
 
-        <div class="letter-section">
-            <h4>Service Details</h4>
-            <table class="breakdown-table">
-                <tr><td>Reference</td><td>ECO-{{ sr.created_at|date:"Y" }}-{{ sr.id|stringformat:"03d" }}</td></tr>
-                <tr><td>Service Type</td><td>{{ sr.get_service_type_display }}</td></tr>
-                <tr><td>Client</td><td>{{ sr.client_name }}</td></tr>
-                <tr><td>Address</td><td>{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</td></tr>
-                <tr><td>Water Source Connection</td><td>{% if sr.connected_to_bawad %}BAWAD Connected{% else %}Other Source{% endif %}</td></tr>
-                <tr><td>Volume</td><td>{{ comp.cubic_meters|floatformat:0 }} cubic meters</td></tr>
-                {% if comp.distance_km %}<tr><td>Distance from CENRO Office</td><td>{{ comp.distance_km|floatformat:0 }} km</td></tr>{% endif %}
-                <tr><td>Trips</td><td>{{ comp.trips }}</td></tr>
-            </table>
+        <div class="letter-formal-body">
+            <p>Kindly receive payment of <span class="letter-em">Mr. / Mrs. {{ sr.client_name }}</span>,</p>
+            <p>resident of <span class="letter-em">{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</span>,</p>
+            <p>
+                the amount of <span class="letter-em">Php {{ comp.total_charge|floatformat:2 }}</span>{% if comp.payment_status == "FREE" %}
+                <span class="letter-free-note">(no charge — waiver or eligibility applies).</span>{% endif %}
+            </p>
         </div>
 
-        <div class="letter-section">
-            <h4>Declogging Fee Breakdown</h4>
+        <div class="letter-formal-closing">
+            <p class="letter-vty">Very truly yours,</p>
+            <p class="letter-formal-underline">{{ letter_signatory_name }}</p>
+            <p class="letter-formal-title-line">{{ letter_signatory_title }}</p>
+        </div>
+
+        <div class="letter-section letter-computation-heading-wrap">
+            <h2 class="letter-computation-main-title">COMPUTATION</h2>
+            <h4>Declogging Fee:</h4>
             <table class="breakdown-table">
                 <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking }}</td></tr>
                 {% for line in comp.get_desludging_breakdown %}
@@ -121,7 +142,7 @@
             </table>
         </div>
 
-        <div style="margin-top: 30px; font-size: 13px; color: #666;">
+        <div class="letter-prepared-footer">
             <div style="margin-bottom:8px;">
                 {% if prepared_by_signature_url %}
                 <img src="{{ prepared_by_signature_url }}" alt="Prepared by signature" style="max-height:80px; display:block;">
@@ -129,7 +150,9 @@
                 <div style="min-height:80px; max-width:220px; border-bottom:1px solid #ccc;" aria-hidden="true"></div>
                 {% endif %}
             </div>
-            <p>Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>
+            <p class="letter-prepared-by-line">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>
+            <p class="letter-prepared-title">{{ letter_prepared_by_title }}</p>
+            <p class="letter-prepared-date">Date: {% if comp.finalized_at %}{{ comp.finalized_at|date:"F d, Y" }}{% else %}{{ comp.created_at|date:"F d, Y" }}{% endif %}</p>
         </div>
 
         {% if can_finalize_letter %}

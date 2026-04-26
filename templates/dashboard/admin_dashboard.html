@@ -1,21 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Admin Dashboard - CENRO Sanitary Management System{% endblock %}
-{% block admin_subtitle %}System Dashboard{% endblock %}
 {% block content %}
 <div class="admin-dashboard-page">
-
-<!-- Dashboard Header -->
-<div class="dashboard-header">
-    <div>
-        <h2>📊 System Dashboard</h2>
-        <p class="welcome-text">Welcome back, <strong>{{ user.get_full_name|default:user.username|title }}</strong>. Here’s what’s happening across your services.</p>
-    </div>
-    <div class="dashboard-actions">
-        <a href="{% url 'scheduling:schedule_list' %}" class="btn btn-primary btn-sm">
-            <span>🗓️</span> View Schedule
-        </a>
-    </div>
-</div>
 
 <!-- Key Metrics Cards (click-through to matching admin sections) -->
 <div class="summary-cards">
@@ -81,6 +67,10 @@
             <a href="{% url 'dashboard:admin_computation' %}" class="quick-action-btn">
                 <span class="quick-action-icon">💰</span>
                 Compute Charges
+            </a>
+            <a href="{% url 'scheduling:schedule_list' %}" class="quick-action-btn">
+                <span class="quick-action-icon">🗓️</span>
+                View Schedule
             </a>
         </div>
     </div>

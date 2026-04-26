@@ -63,7 +63,7 @@ def validate_customer_receipt(uploaded_file: UploadedFile) -> None:
         raise forms.ValidationError(
             f"File must be 20MB or less (current: {uploaded_file.size / (1024*1024):.1f}MB)."
         )
-from .geocode import address_in_bayawan, extract_barangay, reverse_geocode_osm
+from .geocode import address_in_service_area, extract_barangay, reverse_geocode_osm
 from .location import detect_barangay_for_point, nearest_barangay, within_service_bounds
 
 
@@ -245,20 +245,26 @@ class ServiceRequestStep2Form(forms.Form):
 
             lat_f = float(lat)
             lon_f = float(lon)
+            if not within_service_bounds(lat_f, lon_f):
+                self.add_error(
+                    None,
+                    "Service locations are only accepted within Bayawan City, the Municipality of "
+                    "Santa Catalina, or the Municipality of Basay. Move the map pin into an allowed "
+                    "area or use Type Address.",
+                )
+                return cleaned
+
             detected = detect_barangay_for_point(lat_f, lon_f)
             if not detected:
                 data = reverse_geocode_osm(lat_f, lon_f)
                 if data:
                     address = data.get("address") or {}
                     display_name = data.get("display_name")
-                    within = address_in_bayawan(address, display_name)
+                    within = address_in_service_area(address, display_name)
                     if within:
                         detected = extract_barangay(address) or nearest_barangay(lat_f, lon_f)
                 if not detected and within_service_bounds(lat_f, lon_f):
                     detected = nearest_barangay(lat_f, lon_f)
-                # For locations outside Bayawan City, keep any manually entered
-                # barangay value instead of forcing a generic label. The system
-                # will still detect inside/outside Bayawan using coordinates.
                 if not detected:
                     detected = None
 

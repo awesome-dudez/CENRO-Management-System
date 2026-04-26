@@ -299,21 +299,7 @@ body.admin-view {
     margin-left: 240px;
     min-height: calc(100vh - 70px);
     background: var(--off-white);
-    padding: 28px 32px 48px;
-}
-
-.admin-main-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--dark-gray);
-    margin-bottom: 4px;
-    letter-spacing: -0.02em;
-}
-
-.admin-main-subtitle {
-    font-size: 1rem;
-    color: var(--text-gray);
-    margin-bottom: 24px;
+    padding: 24px 32px 48px;
 }
 
 /* ---- Hamburger (mobile) ---- */
@@ -433,10 +419,6 @@ body.admin-view {
 @media (max-width: 576px) {
     .admin-main {
         padding: 20px 16px 32px;
-    }
-
-    .admin-main-title {
-        font-size: 1.3rem;
     }
 
     /* On very small phones, hide the subtitle to save space */

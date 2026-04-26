@@ -126,6 +126,28 @@ class ServiceRequest(models.Model):
     def __str__(self) -> str:
         return f"{self.get_service_type_display()} - {self.consumer} ({self.barangay})"
 
+    # Same owner may open another request of the same service_type only after the prior
+    # one is completed, cancelled, or expired (all other statuses block duplicates).
+    TERMINAL_STATUSES_FOR_NEW_REQUEST = frozenset(
+        {
+            Status.COMPLETED,
+            Status.CANCELLED,
+            Status.EXPIRED,
+        }
+    )
+
+    @classmethod
+    def consumer_has_open_request_same_type(cls, consumer, service_type: str) -> bool:
+        """
+        True if ``consumer`` already has a non-terminal request with this ``service_type``.
+        Used to prevent duplicate submissions (e.g. PAID + scheduled must block new desludging).
+        """
+        return (
+            cls.objects.filter(consumer=consumer, service_type=service_type)
+            .exclude(status__in=cls.TERMINAL_STATUSES_FOR_NEW_REQUEST)
+            .exists()
+        )
+
     @classmethod
     def expire_stale_requests(cls) -> dict:
         """
@@ -200,9 +222,13 @@ class ServiceRequest(models.Model):
     @property
     def is_within_bayawan(self) -> bool:
         """
-        Determine if this request is within Bayawan City based on coordinates when available.
-        Falls back to a simple barangay string check for legacy records.
+        True when the request is inside CENRO's service territory (Bayawan City,
+        Santa Catalina, or Basay) using coordinates when available.
+
+        Falls back to a barangay string check for legacy records. Property name
+        is kept for backward compatibility with computation and admin code.
         """
+        _outside = frozenset({"Outside Bayawan City", "Outside service area"})
         try:
             if self.gps_latitude is not None and self.gps_longitude is not None:
                 from services.location import within_service_bounds
@@ -213,7 +239,7 @@ class ServiceRequest(models.Model):
                 )
         except Exception:
             pass
-        return bool(self.barangay and self.barangay != "Outside Bayawan City")
+        return bool(self.barangay and self.barangay not in _outside)
 
     @property
     def waived_inspection_crew_ready(self) -> bool:

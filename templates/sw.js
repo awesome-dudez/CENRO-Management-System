@@ -1,4 +1,4 @@
-const CACHE_NAME = "cenro-shell-v2";
+const CACHE_NAME = "cenro-shell-v3";
 const OFFLINE_URL = "/offline/";
 const PRECACHE_URLS = [
   "/",
@@ -34,9 +34,10 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   // JSON APIs (notifications, etc.): never cache — stale responses hide new alerts.
+  // User uploads (signatures, photos): never cache-first — wrong/stale cache breaks images.
   try {
     const path = new URL(req.url).pathname;
-    if (path.includes("/api/")) {
+    if (path.includes("/api/") || path.startsWith("/media/")) {
       event.respondWith(fetch(req));
       return;
     }

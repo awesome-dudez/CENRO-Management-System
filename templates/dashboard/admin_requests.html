@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Admin - Requests - CENRO Sanitary Management System{% endblock %}
-{% block admin_subtitle %}Requests{% endblock %}
 {% block content %}
 <style>
     .requests-container { max-width: 1100px; margin: 20px auto; padding: 20px; }
@@ -50,7 +49,7 @@
                 <input type="hidden" name="dir" value="{{ direction }}">
             {% endif %}
             <span class="request-type-label">Request Type</span>
-            <select name="request_type" class="request-type-select" onchange="this.form.submit()">
+            <select name="request_type" class="request-type-select" onchange="this.form.submit()" aria-label="Filter by request type">
                 <option value="all" {% if request_type == 'all' or not request_type %}selected{% endif %}>All Request Types</option>
                 {% for opt in request_type_options %}
                     <option value="{{ opt.key }}" {% if request_type == opt.key %}selected{% endif %}>
@@ -62,18 +61,18 @@
     </div>
 
     {% if user.is_admin %}
-    <div class="sub-tabs">
-        <a href="?tab=all{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'all' %}active{% endif %}">All</a>
-        <a href="?tab=open{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'open' %}active{% endif %}">Open</a>
-        <a href="?tab=pending{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'pending' %}active{% endif %}">Pending</a>
-        <a href="?tab=inspection{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'inspection' %}active{% endif %}">Inspection</a>
-        <a href="?tab=computation{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'computation' %}active{% endif %}">Computation</a>
-        <a href="?tab=schedule{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'schedule' %}active{% endif %}">Scheduling</a>
-        <a href="?tab=completed{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'completed' %}active{% endif %}">Completed</a>
+    <div class="sub-tabs" role="tablist" aria-label="Request workflow">
+        <a href="?tab=all{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'all' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'all' %}true{% else %}false{% endif %}">All</a>
+        <a href="?tab=open{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'open' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'open' %}true{% else %}false{% endif %}">Open</a>
+        <a href="?tab=pending{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'pending' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'pending' %}true{% else %}false{% endif %}">Pending</a>
+        <a href="?tab=inspection{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'inspection' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'inspection' %}true{% else %}false{% endif %}">Inspection</a>
+        <a href="?tab=computation{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'computation' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'computation' %}true{% else %}false{% endif %}">Computation</a>
+        <a href="?tab=schedule{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'schedule' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'schedule' %}true{% else %}false{% endif %}">Scheduling</a>
+        <a href="?tab=completed{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab {% if active_tab == 'completed' %}active{% endif %}" role="tab" aria-selected="{% if active_tab == 'completed' %}true{% else %}false{% endif %}">Completed</a>
     </div>
     {% else %}
-    <div class="sub-tabs">
-        <a href="?tab=inspection{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab active">Inspection</a>
+    <div class="sub-tabs" role="tablist" aria-label="Request workflow">
+        <a href="?tab=inspection{% if request_type and request_type != 'all' %}&request_type={{ request_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if direction %}&dir={{ direction }}{% endif %}" class="sub-tab active" role="tab" aria-selected="true">Inspection</a>
     </div>
     {% endif %}
 

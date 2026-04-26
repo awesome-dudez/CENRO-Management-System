@@ -22,12 +22,12 @@
     </script>
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <meta name="theme-color" content="#1e7a4d">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260424-summary-cards-no-underline">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260424-cenro-toast-v2">
     <link rel="stylesheet" href="{% static 'css/consumer-responsive.css' %}?v=20260419-no-bottom-nav">
     <link rel="stylesheet" href="{% static 'css/consumer-enhanced.css' %}?v=20260419-consumer-mobile">
     {% block extra_css %}{% endblock %}
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
-    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260424-users-sidebar">
+    <link rel="stylesheet" href="{% static 'css/admin-layout.css' %}?v=20260424-admin-main-slim">
     {% endif %}{% endif %}
     <!-- Leaflet Map Library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -218,10 +218,6 @@
     {% include "admin/_sidebar.html" %}
     {% endif %}{% endif %}
     <main class="{% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}admin-main{% else %}main-content{% endif %}{% else %}main-content{% endif %}">
-        {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
-        <h1 class="admin-main-title">CENRO Sanitary Management System</h1>
-        <p class="admin-main-subtitle">{% block admin_subtitle %}System Dashboard{% endblock %}</p>
-        {% endif %}{% endif %}
         {% block content %}{% endblock %}
     </main>
     {% if user.is_authenticated %}{% if user.is_admin or user.is_staff_member %}
@@ -340,29 +336,131 @@
     </script>
     {% endif %}
 
-    <!-- Toast Notification Popup -->
-    {% if messages %}
-    <div id="toast-container" class="toast-container">
+    <!-- Toast: Django messages + window.cenroToast() for client-side notices -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-relevant="additions">
+        {% if messages %}
         {% for message in messages %}
         <div class="toast toast-{% if message.tags %}{{ message.tags }}{% else %}info{% endif %}" role="alert" data-auto-dismiss="true">
             <span class="toast-icon">{% if message.tags == 'success' %}✓{% elif message.tags == 'error' or message.tags == 'danger' %}✕{% else %}!{% endif %}</span>
-            <span class="toast-message">{{ message }}</span>
-            <button class="toast-close" onclick="this.parentElement.remove()" aria-label="Close">×</button>
+            <span class="toast-message"><span class="toast-detail">{{ message }}</span></span>
+            <button type="button" class="toast-close" onclick="window.cenroToastDismiss &amp;&amp; window.cenroToastDismiss(this.closest('.toast'))" aria-label="Dismiss notification">×</button>
         </div>
         {% endfor %}
+        {% endif %}
     </div>
     <script>
+    (function() {
+        var CENRO_TOAST_MAX_VISIBLE = 5;
+        function cenroToastIcon(type) {
+            if (type === 'success') return '✓';
+            if (type === 'error' || type === 'danger') return '✕';
+            return '!';
+        }
+        function cenroToastEscapeBlocked() {
+            var legal = document.getElementById('footerLegalModal');
+            if (legal && legal.classList.contains('is-open')) return true;
+            if (document.body.classList.contains('mobile-nav-open')) return true;
+            var sidebar = document.getElementById('adminSidebar');
+            if (sidebar && sidebar.classList.contains('is-open')) return true;
+            return false;
+        }
+        function cenroToastTrimStack(container) {
+            while (container && container.children.length > CENRO_TOAST_MAX_VISIBLE) {
+                container.removeChild(container.firstElementChild);
+            }
+        }
+        function cenroToastDismiss(el) {
+            if (!el || !el.parentNode) return;
+            if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                el.remove();
+                return;
+            }
+            var mobile = window.matchMedia && window.matchMedia('(max-width: 576px)').matches;
+            el.style.animation = (mobile ? 'toastSlideOutMobile' : 'toastSlideOut') + ' 0.3s ease forwards';
+            setTimeout(function() { if (el.parentNode) el.remove(); }, 300);
+        }
+        window.cenroToastDismiss = cenroToastDismiss;
+        /**
+         * @param {string} message - Main explanation (plain text)
+         * @param {string} [type] - info | success | warning | error | danger
+         * @param {number} [durationMs] - auto-remove after ms; 0 = stay until closed
+         * @param {string} [title] - Optional short headline
+         * @param {object} [options] - { showProgress: boolean } (default: true when durationMs > 0)
+         */
+        window.cenroToast = function(message, type, durationMs, title, options) {
+            type = type || 'info';
+            if (durationMs === undefined || durationMs === null) durationMs = 6500;
+            options = options || {};
+            var showProgress = options.showProgress !== false && durationMs > 0;
+            var container = document.getElementById('toast-container');
+            if (!container) {
+                window.alert(title ? (title + '\n\n' + message) : message);
+                return;
+            }
+            var toast = document.createElement('div');
+            toast.className = 'toast toast-' + type + ' toast--client';
+            if (title) toast.classList.add('toast--rich');
+            toast.setAttribute('role', 'alert');
+            if (durationMs > 0) {
+                toast.setAttribute('data-auto-dismiss', 'true');
+                if (showProgress) {
+                    toast.classList.add('toast--timed');
+                    toast.style.setProperty('--toast-duration', durationMs + 'ms');
+                    var prog = document.createElement('span');
+                    prog.className = 'toast-progress';
+                    prog.setAttribute('aria-hidden', 'true');
+                    toast.appendChild(prog);
+                }
+            }
+            var icon = document.createElement('span');
+            icon.className = 'toast-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = cenroToastIcon(type);
+            var msgWrap = document.createElement('span');
+            msgWrap.className = 'toast-message';
+            if (title) {
+                var tEl = document.createElement('span');
+                tEl.className = 'toast-title';
+                tEl.textContent = title;
+                msgWrap.appendChild(tEl);
+            }
+            var detail = document.createElement('span');
+            detail.className = 'toast-detail';
+            detail.textContent = message;
+            msgWrap.appendChild(detail);
+            var close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'toast-close';
+            close.setAttribute('aria-label', 'Dismiss notification');
+            close.textContent = '×';
+            close.addEventListener('click', function() { cenroToastDismiss(toast); });
+            toast.appendChild(icon);
+            toast.appendChild(msgWrap);
+            toast.appendChild(close);
+            container.appendChild(toast);
+            cenroToastTrimStack(container);
+            if (durationMs > 0) {
+                setTimeout(function() { cenroToastDismiss(toast); }, durationMs);
+            }
+        };
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            if (cenroToastEscapeBlocked()) return;
+            var c = document.getElementById('toast-container');
+            if (!c || !c.lastElementChild) return;
+            var last = c.lastElementChild;
+            if (!last.classList || !last.classList.contains('toast')) return;
+            cenroToastDismiss(last);
+        });
         document.addEventListener('DOMContentLoaded', function() {
-            const toasts = document.querySelectorAll('.toast[data-auto-dismiss="true"]');
-            toasts.forEach(function(toast) {
-                setTimeout(function() {
-                    toast.style.animation = 'toastSlideOut 0.3s ease forwards';
-                    setTimeout(function() { toast.remove(); }, 300);
-                }, 4000);
+            document.querySelectorAll('#toast-container .toast[data-auto-dismiss="true"]').forEach(function(toast) {
+                if (toast.dataset.cenroServerToastScheduled) return;
+                toast.dataset.cenroServerToastScheduled = '1';
+                setTimeout(function() { cenroToastDismiss(toast); }, 4000);
             });
         });
+    })();
     </script>
-    {% endif %}
 
     <script>
         function exportData() {
