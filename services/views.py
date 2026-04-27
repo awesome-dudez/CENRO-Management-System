@@ -2,11 +2,14 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import base64
 
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ObjectDoesNotExist
 from django.forms import ValidationError
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -24,6 +27,8 @@ import time
 import os
 from uuid import uuid4
 from urllib.parse import urlencode
+
+logger = logging.getLogger(__name__)
 
 from accounts.decorators import json_consumer_required, role_required
 from accounts.models import User
@@ -70,6 +75,17 @@ _DASHBOARD_REQUESTS_TABS = frozenset({"pending", "inspection", "computation", "s
 _DASHBOARD_REQUESTS_SORT = frozenset({"id", "barangay", "date"})
 _DASHBOARD_REQUESTS_DIR = frozenset({"asc", "desc"})
 _DASHBOARD_REQUESTS_TYPES = frozenset({"all", "grass", "declogging"})
+
+# Customer self-cancel: not allowed after payment or desludging scheduling (contact CENRO instead).
+_CONSUMER_CANCEL_BLOCKED_STATUSES = frozenset(
+    {
+        ServiceRequest.Status.PAID,
+        ServiceRequest.Status.DESLUDGING_SCHEDULED,
+        ServiceRequest.Status.COMPLETED,
+        ServiceRequest.Status.CANCELLED,
+        ServiceRequest.Status.EXPIRED,
+    }
+)
 
 
 def _persist_dashboard_requests_list_params(request) -> None:
@@ -494,7 +510,7 @@ def verify_other_consumer(request):
 
     user_obj, err = find_consumer_by_registered_profile(name, brgy, addr)
     register_path = reverse("accounts:consumer_register")
-    register_url = request.build_absolute_uri(register_path)
+    register_url = request.build_absolute_uri(register_path + "?" + urlencode({"from": "sr_other"}))
 
     messages_map = {
         "missing_name": "Enter the client's full name (as registered in CENRO Sanitary Management System).",
@@ -751,7 +767,16 @@ def create_request(request):
         if step == 1:
             form = ServiceRequestStep1Form(request.POST)
             if form.is_valid():
-                form_data["service_type"] = form.cleaned_data["service_type"]
+                new_type = form.cleaned_data["service_type"]
+                if new_type == ServiceRequest.ServiceType.GRASS_CUTTING:
+                    old_bt = form_data.pop("_bawad_proof_temp", None)
+                    if old_bt:
+                        try:
+                            default_storage.delete(old_bt)
+                        except Exception:
+                            pass
+                    request.session.pop("_bawad_proof_pending", None)
+                form_data["service_type"] = new_type
                 request.session["service_request_data"] = form_data
                 return HttpResponseRedirect(reverse("services:create_request") + "?step=2")
 
@@ -761,6 +786,7 @@ def create_request(request):
                 request.POST,
                 request.FILES,
                 service_type=form_data.get("service_type"),
+                existing_bawad_proof_temp=form_data.get("_bawad_proof_temp"),
             )
             if form.is_valid():
                 request_for_val = (
@@ -838,8 +864,37 @@ def create_request(request):
                     form_data.pop("_verify_post_client_name", None)
                     form_data.pop("_verify_post_barangay", None)
                     form_data.pop("_verify_post_address", None)
-                if form.cleaned_data.get("bawad_proof"):
-                    request.session["_bawad_proof_pending"] = True
+
+                # BAWAD proof: stage to temp storage (finalized onto ServiceRequest in step 3).
+                bawad_yes = (form.cleaned_data.get("connected_to_bawad") or "NO") == "YES"
+                if not bawad_yes:
+                    old_bt = form_data.pop("_bawad_proof_temp", None)
+                    if old_bt:
+                        try:
+                            default_storage.delete(old_bt)
+                        except Exception:
+                            pass
+                    request.session.pop("_bawad_proof_pending", None)
+                else:
+                    bawad_file = request.FILES.get("bawad_proof")
+                    if bawad_file:
+                        ext = (os.path.splitext(bawad_file.name)[1] or ".pdf").lower()
+                        if ext not in (".pdf", ".jpg", ".jpeg", ".png", ".webp"):
+                            ext = ".pdf"
+                        path = f"bawad_proofs/temp/{uuid4()}{ext}"
+                        default_storage.save(path, ContentFile(bawad_file.read()))
+                        old_bt = form_data.get("_bawad_proof_temp")
+                        if old_bt and old_bt != path:
+                            try:
+                                default_storage.delete(old_bt)
+                            except Exception:
+                                pass
+                        form_data["_bawad_proof_temp"] = path
+                        request.session["_bawad_proof_pending"] = True
+                    elif form_data.get("_bawad_proof_temp"):
+                        request.session["_bawad_proof_pending"] = True
+                    else:
+                        request.session.pop("_bawad_proof_pending", None)
 
                 # Persist client signature (uploaded image or drawn on canvas) via a temporary file.
                 sig_temp_path = None
@@ -953,6 +1008,20 @@ def create_request(request):
                     )
                     return redirect("services:history")
 
+                st_submit = form_data.get("service_type", "RESIDENTIAL_DESLUDGING")
+                is_declog_submit = st_submit in (
+                    ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+                    ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+                )
+                if is_declog_submit and form_data.get("connected_to_bawad") == "YES":
+                    bt = form_data.get("_bawad_proof_temp")
+                    if not bt or not default_storage.exists(bt):
+                        messages.error(
+                            request,
+                            "BAWAD affiliation proof is missing or expired. Please return to step 2 and upload proof again.",
+                        )
+                        return redirect(reverse("services:create_request") + "?step=2")
+
                 service_request = ServiceRequest.objects.create(
                     consumer=target_consumer,
                     requested_by=request.user if target_consumer != request.user else None,
@@ -971,6 +1040,19 @@ def create_request(request):
                     public_private=form_data.get("public_private", "PRIVATE"),
                     status=ServiceRequest.Status.SUBMITTED,
                 )
+                bawad_temp = form_data.get("_bawad_proof_temp")
+                if bawad_temp and default_storage.exists(bawad_temp):
+                    try:
+                        with default_storage.open(bawad_temp, "rb") as fp:
+                            name = os.path.basename(bawad_temp)
+                            service_request.bawad_proof.save(name, ContentFile(fp.read()), save=True)
+                    except Exception:
+                        pass
+                    try:
+                        default_storage.delete(bawad_temp)
+                    except Exception:
+                        pass
+
                 photo_paths = form_data.get("_location_photos") or []
                 for i, path in enumerate(photo_paths[:2]):
                     if default_storage.exists(path):
@@ -1094,6 +1176,7 @@ def create_request(request):
                     "gps_longitude": form_data.get("gps_longitude"),
                 },
                 service_type=form_data.get("service_type"),
+                existing_bawad_proof_temp=form_data.get("_bawad_proof_temp"),
             )
         elif step == 3:
             form = ServiceRequestStep3Form()
@@ -1125,6 +1208,7 @@ def create_request(request):
         "verify_other_consumer_url": verify_other_consumer_url,
         "consumer_register_url": consumer_register_url,
         "step2_other_verified": step2_other_verified,
+        "step2_bawad_proof_saved": bool(form_data.get("_bawad_proof_temp")) if step == 2 else False,
     }
     return render(request, "services/create_request_wizard.html", context)
 
@@ -2034,6 +2118,47 @@ def request_detail(request, pk):
     else:
         requests_list_back_url = reverse("services:request_list")
 
+    bawad_proof_is_image = False
+    if service_request.bawad_proof:
+        _ct, _ = mimetypes.guess_type(service_request.bawad_proof.name or "")
+        bawad_proof_is_image = bool(_ct and _ct.startswith("image/"))
+
+    can_waive_bawad_inspection_fee = (
+        request.user.is_admin()
+        and service_request.connected_to_bawad
+        and bool(service_request.bawad_proof)
+        and not service_request.qualifies_public_bayawan_no_fees
+        and service_request.service_type
+        in (
+            ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+        )
+        and service_request.status
+        in (
+            ServiceRequest.Status.INSPECTION_FEE_DUE,
+            ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+        )
+    )
+
+    can_admin_reject_request = request.user.is_admin() and service_request.status not in (
+        ServiceRequest.Status.CANCELLED,
+        ServiceRequest.Status.COMPLETED,
+        ServiceRequest.Status.EXPIRED,
+    )
+
+    can_consumer_cancel_request = (
+        not request.user.is_admin()
+        and not request.user.is_staff_member()
+        and (
+            service_request.consumer_id == request.user.id
+            or (
+                service_request.requested_by_id
+                and service_request.requested_by_id == request.user.id
+            )
+        )
+        and service_request.status not in _CONSUMER_CANCEL_BLOCKED_STATUSES
+    )
+
     context = {
         "sr": service_request,
         "staff_members": staff_members,
@@ -2048,6 +2173,10 @@ def request_detail(request, pk):
         "desludging_time": desludging_time,
         "can_finalize_letter": can_finalize_letter,
         "requests_list_back_url": requests_list_back_url,
+        "bawad_proof_is_image": bawad_proof_is_image,
+        "can_waive_bawad_inspection_fee": can_waive_bawad_inspection_fee,
+        "can_admin_reject_request": can_admin_reject_request,
+        "can_consumer_cancel_request": can_consumer_cancel_request,
     }
     return render(request, "services/request_detail.html", context)
 
@@ -2238,6 +2367,8 @@ def submit_completion(request, pk):
     from .personnel_schedule import find_personnel_schedule_conflicts, get_desludging_timeslot_for_request
 
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    # OneToOne reverse access raises if missing; template must not use sr.inspection_detail directly.
+    insp_detail = InspectionDetail.objects.filter(service_request_id=service_request.pk).first()
     personnel_drivers = DesludgingPersonnel.objects.filter(
         role=DesludgingPersonnel.Role.DRIVER, is_active=True
     ).order_by("full_name")
@@ -2302,6 +2433,7 @@ def submit_completion(request, pk):
                     "services/completion_form.html",
                     {
                         "sr": service_request,
+                        "inspection_detail": insp_detail,
                         "personnel_drivers": personnel_drivers,
                         "personnel_helpers": personnel_helpers,
                         "service_equipment": _equipment_choices_for_form(),
@@ -2311,7 +2443,6 @@ def submit_completion(request, pk):
                             "helper1_name": helper1_name,
                             "helper2_name": helper2_name,
                             "helper3_name": helper3_name,
-                            "witnessed_by_name": witnessed_name,
                         },
                     },
                 )
@@ -2325,6 +2456,7 @@ def submit_completion(request, pk):
                     "services/completion_form.html",
                     {
                         "sr": service_request,
+                        "inspection_detail": insp_detail,
                         "personnel_drivers": personnel_drivers,
                         "personnel_helpers": personnel_helpers,
                         "service_equipment": _equipment_choices_for_form(),
@@ -2334,7 +2466,6 @@ def submit_completion(request, pk):
                             "helper1_name": helper1_name,
                             "helper2_name": helper2_name,
                             "helper3_name": helper3_name,
-                            "witnessed_by_name": witnessed_name,
                         },
                     },
                 )
@@ -2358,6 +2489,7 @@ def submit_completion(request, pk):
                     "services/completion_form.html",
                     {
                         "sr": service_request,
+                        "inspection_detail": insp_detail,
                         "personnel_drivers": personnel_drivers,
                         "personnel_helpers": personnel_helpers,
                         "service_equipment": service_equipment,
@@ -2367,7 +2499,6 @@ def submit_completion(request, pk):
                             "helper1_name": helper1_name,
                             "helper2_name": helper2_name,
                             "helper3_name": helper3_name,
-                            "witnessed_by_name": witnessed_name,
                         },
                     },
                 )
@@ -2386,6 +2517,7 @@ def submit_completion(request, pk):
                         "services/completion_form.html",
                         {
                             "sr": service_request,
+                            "inspection_detail": insp_detail,
                             "personnel_drivers": personnel_drivers,
                             "personnel_helpers": personnel_helpers,
                             "service_equipment": _equipment_choices_for_form(
@@ -2397,7 +2529,6 @@ def submit_completion(request, pk):
                                 "helper1_name": helper1_name,
                                 "helper2_name": helper2_name,
                                 "helper3_name": helper3_name,
-                                "witnessed_by_name": witnessed_name,
                             },
                         },
                     )
@@ -2424,6 +2555,7 @@ def submit_completion(request, pk):
                 "services/completion_form.html",
                 {
                     "sr": service_request,
+                    "inspection_detail": insp_detail,
                     "personnel_drivers": personnel_drivers,
                     "personnel_helpers": personnel_helpers,
                     "service_equipment": service_equipment,
@@ -2434,7 +2566,6 @@ def submit_completion(request, pk):
                         "helper1_name": helper1_name,
                         "helper2_name": helper2_name,
                         "helper3_name": helper3_name,
-                        "witnessed_by_name": witnessed_name,
                     },
                 },
             )
@@ -2455,30 +2586,7 @@ def submit_completion(request, pk):
             },
         )
 
-        # Witness signature: upload, camera, or drawn on screen (data URL)
-        sig_data = (request.POST.get("witness_signature_data") or "").strip()
-        sig_file = request.FILES.get("witnessed_by_signature")
-        try:
-            if sig_data and sig_data.startswith("data:image"):
-                header, b64_data = sig_data.split(",", 1)
-                ext = ".png"
-                if "jpeg" in header or "jpg" in header:
-                    ext = ".jpg"
-                elif "webp" in header:
-                    ext = ".webp"
-                binary = base64.b64decode(b64_data)
-                completion.witnessed_by_signature.save(
-                    f"witness_signatures/{service_request.id}{ext}",
-                    ContentFile(binary),
-                    save=False,
-                )
-            elif sig_file:
-                completion.witnessed_by_signature = sig_file
-        except Exception:
-            # If anything goes wrong with signature processing, just skip saving it.
-            pass
-
-        completion.save()
+        # Witness name/signature come from the inspection step (submit_inspection), not this form.
 
         # Auto-generate computation
         _auto_generate_computation(service_request, request.user)
@@ -2493,7 +2601,6 @@ def submit_completion(request, pk):
         "helper1_name": "",
         "helper2_name": "",
         "helper3_name": "",
-        "witnessed_by_name": "",
     }
     if existing:
         posted_initial = {
@@ -2502,7 +2609,6 @@ def submit_completion(request, pk):
             "helper1_name": existing.helper1_name or "",
             "helper2_name": existing.helper2_name or "",
             "helper3_name": existing.helper3_name or "",
-            "witnessed_by_name": existing.witnessed_by_name or "",
         }
         if not posted_initial["equipment_id"] and existing.declogger_no:
             match = ServiceEquipment.objects.filter(
@@ -2524,6 +2630,7 @@ def submit_completion(request, pk):
         "services/completion_form.html",
         {
             "sr": service_request,
+            "inspection_detail": insp_detail,
             "personnel_drivers": personnel_drivers,
             "personnel_helpers": personnel_helpers,
             "service_equipment": service_equipment,
@@ -2600,10 +2707,13 @@ def _prepared_by_signature_absolute_url(request, computation):
     """Public URL for the letter/PDF only if the signature file exists in storage."""
     from .computation_flow import stored_filefield_exists
 
-    f = getattr(computation, "prepared_by_signature", None)
-    if not stored_filefield_exists(f):
+    try:
+        f = getattr(computation, "prepared_by_signature", None)
+        if not stored_filefield_exists(f):
+            return None
+        return request.build_absolute_uri(f.url)
+    except Exception:
         return None
-    return request.build_absolute_uri(f.url)
 
 
 def _prepared_by_signature_fs_path(computation):
@@ -2614,6 +2724,32 @@ def _prepared_by_signature_fs_path(computation):
         return None
     try:
         p = computation.prepared_by_signature.path
+    except (ValueError, NotImplementedError):
+        return None
+    if os.path.isfile(p):
+        return p
+    return None
+
+
+def _signatory_signature_absolute_url(request, computation):
+    from .computation_flow import stored_filefield_exists
+
+    try:
+        f = getattr(computation, "letter_signatory_signature", None)
+        if not stored_filefield_exists(f):
+            return None
+        return request.build_absolute_uri(f.url)
+    except Exception:
+        return None
+
+
+def _signatory_signature_fs_path(computation):
+    from .computation_flow import stored_filefield_exists
+
+    if not stored_filefield_exists(getattr(computation, "letter_signatory_signature", None)):
+        return None
+    try:
+        p = computation.letter_signatory_signature.path
     except (ValueError, NotImplementedError):
         return None
     if os.path.isfile(p):
@@ -2644,7 +2780,17 @@ def view_computation(request, pk):
         _message_computation_letter_access_denied(request, service_request)
         return redirect("services:request_list")
 
-    computation = getattr(service_request, "computation", None)
+    try:
+        computation = service_request.computation
+    except ObjectDoesNotExist:
+        computation = None
+    except DatabaseError:
+        logger.exception("view_computation: database error loading computation")
+        messages.error(
+            request,
+            "Could not load the computation. Run `python manage.py migrate`, restart the server, and try again.",
+        )
+        return redirect("services:request_detail", pk=pk)
     if not computation:
         messages.warning(request, _COMPUTATION_NOT_READY_MSG)
         return redirect("services:request_detail", pk=pk)
@@ -2667,18 +2813,30 @@ def view_computation(request, pk):
                 )
                 return redirect("services:view_computation", pk=pk)
 
-            sig = request.FILES.get("prepared_by_signature")
-            if sig:
-                computation.prepared_by_signature = sig
+            sig_prepared = request.FILES.get("prepared_by_signature")
+            sig_signatory = request.FILES.get("letter_signatory_signature")
+            if sig_prepared:
+                computation.prepared_by_signature = sig_prepared
+            if sig_signatory:
+                computation.letter_signatory_signature = sig_signatory
 
             blockers = computation_finalize_blockers(
-                service_request, computation, uploaded_signature=sig
+                service_request,
+                computation,
+                uploaded_prepared_signature=sig_prepared,
+                uploaded_signatory_signature=sig_signatory,
             )
             if blockers:
                 for msg in blockers:
                     messages.error(request, msg)
-                if sig:
-                    computation.save(update_fields=["prepared_by_signature", "updated_at"])
+                _uf = []
+                if sig_prepared:
+                    _uf.append("prepared_by_signature")
+                if sig_signatory:
+                    _uf.append("letter_signatory_signature")
+                if _uf:
+                    _uf.append("updated_at")
+                    computation.save(update_fields=_uf)
                 return redirect("services:view_computation", pk=pk)
 
             computation.prepared_by = request.user
@@ -2749,6 +2907,7 @@ def view_computation(request, pk):
         address_display = f"{addr}, {brgy}" if brgy else addr
 
     prepared_by_signature_url = _prepared_by_signature_absolute_url(request, computation)
+    signatory_signature_url = _signatory_signature_absolute_url(request, computation)
 
     can_finalize_letter = (
         _user_can_finalize_computation(request.user)
@@ -2756,11 +2915,14 @@ def view_computation(request, pk):
         and computation.ready_to_finalize
     )
 
+    computation.recompute_letter_breakdown()
+
     ctx = {
         "sr": service_request,
         "comp": computation,
         "address_display": address_display,
         "prepared_by_signature_url": prepared_by_signature_url,
+        "signatory_signature_url": signatory_signature_url,
         "can_finalize_letter": can_finalize_letter,
     }
     ctx.update(_computation_letter_formal_context())
@@ -2775,7 +2937,17 @@ def download_computation_pdf(request, pk):
         _message_computation_letter_access_denied(request, service_request)
         return redirect("services:request_list")
 
-    computation = getattr(service_request, "computation", None)
+    try:
+        computation = service_request.computation
+    except ObjectDoesNotExist:
+        computation = None
+    except DatabaseError:
+        logger.exception("download_computation_pdf: database error loading computation")
+        messages.error(
+            request,
+            "Could not load the computation. Run `python manage.py migrate`, restart the server, and try again.",
+        )
+        return redirect("services:request_detail", pk=pk)
     if not computation:
         messages.warning(request, _COMPUTATION_NOT_READY_MSG)
         return redirect("services:request_detail", pk=pk)
@@ -2807,6 +2979,7 @@ def download_computation_pdf(request, pk):
     address_display = addr if (brgy and addr.endswith(brgy)) else (f"{addr}, {brgy}" if brgy else addr)
 
     prepared_by_signature_path = _prepared_by_signature_fs_path(computation)
+    signatory_signature_path = _signatory_signature_fs_path(computation)
 
     pdf_font_family = _register_xhtml2pdf_unicode_font()
     pdf_body_font_stack = (
@@ -2825,12 +2998,14 @@ def download_computation_pdf(request, pk):
         "comp": computation,
         "address_display": address_display,
         "prepared_by_signature_path": prepared_by_signature_path,
+        "signatory_signature_path": signatory_signature_path,
         "pdf_body_font_stack": pdf_body_font_stack,
         "bayawan_logo_url": bayawan_logo_url,
         "cenro_logo_url": cenro_logo_url,
         "bagong_pilipinas_logo_url": bagong_pilipinas_logo_url,
     }
     pdf_ctx.update(_computation_letter_formal_context())
+    computation.recompute_letter_breakdown()
     html = template.render(pdf_ctx)
     result = io.BytesIO()
     pdf = pisa.pisaDocument(
@@ -2859,7 +3034,18 @@ def edit_computation(request, pk):
     from dashboard.forms import ServiceComputationForm
 
     service_request = get_object_or_404(ServiceRequest, pk=pk)
-    computation = getattr(service_request, "computation", None)
+    try:
+        computation = service_request.computation
+    except ObjectDoesNotExist:
+        computation = None
+    except DatabaseError:
+        logger.exception("edit_computation: database error loading ServiceComputation (run migrations?)")
+        messages.error(
+            request,
+            "The database could not load this computation. If you updated the project, run "
+            "`python manage.py migrate` in the project folder, restart the server, and try again.",
+        )
+        return redirect("services:request_detail", pk=pk)
     if not computation:
         messages.warning(request, _COMPUTATION_NOT_READY_MSG)
         return redirect("services:request_detail", pk=pk)
@@ -2868,28 +3054,37 @@ def edit_computation(request, pk):
         from dashboard.models import ConfigurableRate
 
         sr = service_request
-        fk = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
-        km_free = int(fk) if fk == fk.to_integral_value() else fk
-        if computation.qualifies_inside_public_bawad_program:
+        try:
+            fk = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
+            try:
+                km_free = int(fk) if fk == fk.to_integral_value() else fk
+            except Exception:
+                km_free = fk
+            if computation.qualifies_inside_public_bawad_program:
+                f.fields["distance_km"].help_text = (
+                    f"Public / BAWAD (inside Bayawan): first {km_free} km from CENRO office are not charged for travel. "
+                    "Beyond that, distance travel (billable km × ₱20 × 2), wear & tear (20% of trucking + travel), and meals still apply; "
+                    "trucking and tipping/septage stay waived."
+                )
+            elif (
+                sr.is_within_bayawan
+                and not computation.is_outside_bayawan
+                and sr.consumer_is_bayawan_city_resident
+            ):
+                f.fields["distance_km"].help_text = (
+                    f"Bayawan City resident + service within Bayawan: first {km_free} km are not charged "
+                    "for distance travel (enter full km from CENRO; billing uses the distance above that)."
+                )
+            else:
+                f.fields["distance_km"].help_text = (
+                    "Distance from CENRO (whole km). Outside Bayawan: all kilometers are billable. "
+                    "Inside Bayawan (private, not public/BAWAD waiver): first 10 km free only for Bayawan City residents "
+                    "(profile municipality)."
+                )
+        except Exception:
+            logger.exception("edit_computation: distance help text fallback")
             f.fields["distance_km"].help_text = (
-                f"Public / BAWAD (inside Bayawan): first {km_free} km from CENRO office are not charged for travel. "
-                "Beyond that, distance travel (billable km × ₱20 × 2), wear & tear (20% of trucking + travel), and meals still apply; "
-                "trucking and tipping/septage stay waived."
-            )
-        elif (
-            sr.is_within_bayawan
-            and not computation.is_outside_bayawan
-            and sr.consumer_is_bayawan_city_resident
-        ):
-            f.fields["distance_km"].help_text = (
-                f"Bayawan City resident + service within Bayawan: first {km_free} km are not charged "
-                "for distance travel (enter full km from CENRO; billing uses the distance above that)."
-            )
-        else:
-            f.fields["distance_km"].help_text = (
-                "Distance from CENRO (whole km). Outside Bayawan: all kilometers are billable. "
-                "Inside Bayawan (private, not public/BAWAD waiver): first 10 km free only for Bayawan City residents "
-                "(profile municipality)."
+                "Distance from CENRO (whole km). Billing uses configured free-km rules for your area and waivers."
             )
 
     form = ServiceComputationForm(instance=computation)
@@ -2906,40 +3101,53 @@ def edit_computation(request, pk):
         form.fields.pop("is_outside_bayawan", None)
         _apply_computation_distance_help(form)
         if form.is_valid():
-            form.save()
+            try:
+                form.save()
 
-            # Update signature whenever a new file is uploaded (for both Save and Finalize)
-            sig = request.FILES.get("prepared_by_signature")
-            if sig:
-                computation.prepared_by_signature = sig
+                # Update signatures whenever new files are uploaded (for both Save and Finalize)
+                sig = request.FILES.get("prepared_by_signature")
+                if sig:
+                    computation.prepared_by_signature = sig
+                sig_en = request.FILES.get("letter_signatory_signature")
+                if sig_en:
+                    computation.letter_signatory_signature = sig_en
 
-            service_request.fee_amount = computation.total_charge
+                service_request.fee_amount = computation.total_charge
 
-            service_request.save(update_fields=["fee_amount"])
-            computation.ready_to_finalize = True
-            if action == "finalize":
-                messages.info(
+                service_request.save(update_fields=["fee_amount"])
+                computation.ready_to_finalize = True
+                if action == "finalize":
+                    messages.info(
+                        request,
+                        "Finalize and send is only on the computation letter. Your changes were saved — open the letter and use Finalize & Send when ready.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Computation updated. Charges recalculated. Review the letter to finalize and send.",
+                    )
+                computation.save()
+                from dashboard.models import ServiceComputation
+
+                ServiceComputation.objects.filter(pk=computation.pk).update(ready_to_finalize=True)
+            except DatabaseError:
+                logger.exception("edit_computation: save failed (migrations needed?)")
+                messages.error(
                     request,
-                    "Finalize and send is only on the computation letter. Your changes were saved — open the letter and use Finalize & Send when ready.",
+                    "Could not save the computation (database error). Run `python manage.py migrate`, restart the server, and try again.",
                 )
-            else:
-                messages.success(
-                    request,
-                    "Computation updated. Charges recalculated. Review the letter to finalize and send.",
-                )
-            computation.save()
-            from dashboard.models import ServiceComputation
-
-            ServiceComputation.objects.filter(pk=computation.pk).update(ready_to_finalize=True)
+                return redirect("services:request_detail", pk=pk)
             return redirect("services:view_computation", pk=pk)
 
     prepared_by_signature_url = _prepared_by_signature_absolute_url(request, computation)
+    signatory_signature_url = _signatory_signature_absolute_url(request, computation)
 
     return render(request, "services/computation_edit.html", {
         "form": form,
         "sr": service_request,
         "comp": computation,
         "prepared_by_signature_url": prepared_by_signature_url,
+        "signatory_signature_url": signatory_signature_url,
     })
 
 
@@ -3206,6 +3414,27 @@ def view_inspection_fee_receipt(request, pk):
 
 
 @login_required
+def view_bawad_proof(request, pk):
+    """Serve BAWAD affiliation proof with the same access rules as other request uploads."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if not _can_view_request_uploaded_files(request.user, service_request):
+        _message_uploaded_file_access_denied(request, service_request, "the BAWAD affiliation proof")
+        return redirect("services:request_list")
+    if not service_request.bawad_proof:
+        messages.error(request, "No BAWAD affiliation proof was uploaded for this request.")
+        return redirect("services:request_detail", pk=pk)
+    try:
+        proof_file = service_request.bawad_proof.open("rb")
+    except FileNotFoundError:
+        messages.error(request, "The BAWAD proof file could not be found on the server.")
+        return redirect("services:request_detail", pk=pk)
+    ctype, _ = mimetypes.guess_type(service_request.bawad_proof.name or "")
+    if not ctype:
+        ctype = "application/octet-stream"
+    return FileResponse(proof_file, as_attachment=False, content_type=ctype)
+
+
+@login_required
 def view_location_photo(request, pk, slot):
     """Serve location photos with the same access rules as payment receipts (login + role)."""
     if slot not in (1, 2):
@@ -3285,6 +3514,99 @@ def print_application(request, pk):
     })
 
 
+@login_required
+@require_POST
+def consumer_cancel_request(request, pk):
+    """
+    Consumer or original submitter (request-for-other) cancels the request.
+    Requires POST field ``confirm_text`` exactly equal to ``DELETE``.
+    """
+    user = request.user
+    if user.is_admin() or user.is_staff_member():
+        messages.error(
+            request,
+            "Office accounts cannot use customer cancel — use the administrator tools on this page instead.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    is_party = service_request.consumer_id == user.id or (
+        service_request.requested_by_id and service_request.requested_by_id == user.id
+    )
+    if not is_party:
+        messages.error(request, "You can only cancel requests tied to your own account.")
+        return redirect("services:request_list")
+
+    if service_request.status in _CONSUMER_CANCEL_BLOCKED_STATUSES:
+        messages.error(
+            request,
+            "This request can no longer be cancelled online. For changes at this stage, contact CENRO Bayawan directly.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    if (request.POST.get("confirm_text") or "").strip() != "DELETE":
+        messages.error(
+            request,
+            'Cancellation was not confirmed. Type the word DELETE (all caps) exactly as shown, then try again.',
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    who = "customer"
+    if service_request.requested_by_id == user.id and service_request.consumer_id != user.id:
+        who = "submitter"
+
+    note_line = (
+        f"{ServiceRequest.CUSTOMER_CANCELLED_NOTE_PREFIX} "
+        f"Cancelled by portal user ({who}, user id {user.id})."
+    )
+    new_notes = ((service_request.notes or "").strip() + "\n" + note_line).strip()
+
+    with transaction.atomic():
+        service_request.status = ServiceRequest.Status.CANCELLED
+        service_request.notes = new_notes
+        service_request.assigned_inspector = None
+        service_request.inspection_date = None
+        service_request.save(
+            update_fields=[
+                "status",
+                "notes",
+                "assigned_inspector",
+                "inspection_date",
+                "updated_at",
+            ]
+        )
+
+    type_label = service_request.get_service_type_display()
+    _notify_admin_users(
+        f"Request #{service_request.id} ({type_label}, {service_request.client_name}) was cancelled by the customer in the portal.",
+        Notification.NotificationType.STATUS_CHANGE,
+        service_request,
+    )
+
+    if service_request.consumer_id == user.id:
+        if service_request.requested_by_id and service_request.requested_by_id != user.id:
+            Notification.objects.create(
+                user_id=service_request.requested_by_id,
+                message=(
+                    f"Request #{service_request.id} for {service_request.client_name} was cancelled by the registered customer."
+                )[:500],
+                notification_type=Notification.NotificationType.STATUS_CHANGE,
+                related_request=service_request,
+            )
+    else:
+        Notification.objects.create(
+            user_id=service_request.consumer_id,
+            message=(
+                f"Your {type_label} request #{service_request.id} was cancelled by the person who submitted it on your behalf."
+            )[:500],
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+
+    messages.success(request, "Your request has been cancelled.")
+    return redirect("services:request_detail", pk=pk)
+
+
 # ---------------------------------------------------------------------------
 # Mark request complete
 # ---------------------------------------------------------------------------
@@ -3349,10 +3671,7 @@ def mark_notification_read(request, pk):
         sr = notif.related_request
         ntype = notif.notification_type
         if request.user.is_admin() or request.user.is_staff_member():
-            if ntype == Notification.NotificationType.REQUEST_SUBMITTED:
-                return redirect("dashboard:admin_requests")
-            elif ntype == Notification.NotificationType.PAYMENT_UPLOADED:
-                return redirect("services:request_detail", pk=sr.pk)
+            # Always open the related request so admins are not dropped on a list tab (e.g. Pending).
             return redirect("services:request_detail", pk=sr.pk)
         else:
             if ntype == Notification.NotificationType.COMPUTATION_READY:

@@ -760,6 +760,9 @@
                     {{ form.bawad_proof }}
                     {% if form.bawad_proof.errors %}<div class="form-error">{{ form.bawad_proof.errors.0 }}</div>{% endif %}
                     <div class="form-help-text">Upload your BAWAD certificate or latest bill.</div>
+                    {% if step2_bawad_proof_saved %}
+                    <p class="form-help-text" style="color:#1a7f5a;margin-top:8px;font-weight:600;">A proof file is already saved for this request. Upload again only if you want to replace it.</p>
+                    {% endif %}
                 </div>
             </div>
 

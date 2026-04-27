@@ -18,6 +18,9 @@
 
         <form method="post" class="auth-form" novalidate>
             {% csrf_token %}
+            {% if registration_bridge_sr_other %}
+            <input type="hidden" name="registration_context" value="sr_other">
+            {% endif %}
 
             <!-- Username -->
             <div class="form-group mb-3">

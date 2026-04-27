@@ -11,6 +11,11 @@ urlpatterns = [
     path("admin/", admin_views.admin_dashboard, name="admin_dashboard"),
     path("admin/requests/", admin_views.admin_requests, name="admin_requests"),
     path("admin/requests/approve/<int:pk>/", admin_views.approve_request, name="approve_request"),
+    path(
+        "admin/requests/<int:pk>/reject/",
+        admin_views.admin_reject_service_request,
+        name="admin_reject_service_request",
+    ),
     path("admin/requests/<int:pk>/assign-inspector/", admin_views.assign_inspector, name="assign_inspector"),
     path("admin/requests/<int:pk>/waive-inspection/", admin_views.waive_inspection, name="waive_inspection"),
     path("admin/requests/<int:pk>/proceed-to-computation/", admin_views.proceed_to_computation, name="proceed_to_computation"),
@@ -37,6 +42,11 @@ urlpatterns = [
         "admin/requests/<int:pk>/waive-public-bayawan-inspection-fee/",
         admin_views.waive_public_bayawan_inspection_fee,
         name="waive_public_bayawan_inspection_fee",
+    ),
+    path(
+        "admin/requests/<int:pk>/waive-bawad-inspection-fee/",
+        admin_views.waive_bawad_inspection_fee_after_proof,
+        name="waive_bawad_inspection_fee",
     ),
     path("admin/requests/schedule/", admin_views.admin_schedule_by_barangay, name="admin_schedule"),
     path("admin/membership/", admin_views.admin_membership, name="admin_membership"),

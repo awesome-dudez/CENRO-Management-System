@@ -311,14 +311,30 @@ def login_view(request):
         return redirect("dashboard:home")
 
 
+def _consumer_register_page_context(form, captcha_a, captcha_b, registration_bridge_sr_other):
+    return {
+        "form": form,
+        "captcha_a": captcha_a,
+        "captcha_b": captcha_b,
+        "registration_bridge_sr_other": registration_bridge_sr_other,
+    }
+
+
 def consumer_register(request):
+    # True when opened from service-request "another person" flow (?from=sr_other + hidden field on POST).
+    registration_bridge_sr_other = (
+        request.POST.get("registration_context") == "sr_other"
+        if request.method == "POST"
+        else (request.GET.get("from") == "sr_other")
+    )
+
     if request.method != "POST":
         a, b = _init_registration_captcha(request)
         form = ConsumerRegistrationForm()
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
 
     captcha_data = request.session.get("registration_captcha") or {}
@@ -336,7 +352,7 @@ def consumer_register(request):
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
     except Exception as e:
         logger.exception("Register view crashed: %s", e)
@@ -348,7 +364,7 @@ def consumer_register(request):
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
 
     # Additional security checks after built-in validation (must run on every POST; was previously dead code).
@@ -386,7 +402,7 @@ def consumer_register(request):
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
 
     try:
@@ -399,11 +415,14 @@ def consumer_register(request):
         role = getattr(user, "role", None)
         if role == User.Role.ADMIN:
             return redirect("dashboard:admin_dashboard")
-        # Let other browser tabs (e.g. service request wizard) detect successful signup via bridge page.
-        request.session["_consumer_reg_notify_pending"] = True
+        # Bridge page + BroadcastChannel: only when someone registers from the "request for another person" popup.
+        if registration_bridge_sr_other:
+            request.session["_consumer_reg_notify_pending"] = True
         if getattr(user, "must_change_password", False) and role == User.Role.CONSUMER:
             return redirect("accounts:force_password_change")
-        return redirect("accounts:consumer_register_complete_notify")
+        if registration_bridge_sr_other:
+            return redirect("accounts:consumer_register_complete_notify")
+        return redirect("dashboard:home")
     except IntegrityError as e:
         logger.exception("Registration IntegrityError: %s", e)
         if "username" in str(e).lower() or "unique" in str(e).lower():
@@ -416,7 +435,7 @@ def consumer_register(request):
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
     except (OperationalError, ProgrammingError) as e:
         logger.exception("Registration DB error: %s", e)
@@ -428,7 +447,7 @@ def consumer_register(request):
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
     except Exception as e:
         logger.exception("Registration failed: %s", e)
@@ -440,7 +459,7 @@ def consumer_register(request):
         return render(
             request,
             "accounts/consumer_register.html",
-            {"form": form, "captcha_a": a, "captcha_b": b},
+            _consumer_register_page_context(form, a, b, registration_bridge_sr_other),
         )
 
 
@@ -496,8 +515,9 @@ def force_password_change(request):
 @login_required
 def consumer_register_complete_notify(request):
     """
-    Minimal page shown once after consumer self-registration.
-    Notifies other tabs (BroadcastChannel / localStorage) then sends the user to the dashboard.
+    Shown only after consumer registration opened from the service-request
+    "another person" flow (?from=sr_other). Lets the requester tab coordinate via postMessage.
+    Regular self-registration goes straight to the dashboard instead.
     """
     if not request.session.pop("_consumer_reg_notify_pending", False):
         return redirect("dashboard:home")

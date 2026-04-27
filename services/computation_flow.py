@@ -23,12 +23,13 @@ def computation_finalize_blockers(
     service_request: ServiceRequest,
     computation,
     *,
-    uploaded_signature,
+    uploaded_prepared_signature,
+    uploaded_signatory_signature,
 ) -> list[str]:
     """
     Return human-readable reasons the computation cannot be finalized/sent, or [] if OK.
 
-    ``uploaded_signature`` is the File object from request.FILES (or None).
+    File objects from request.FILES (or None) for signatures being submitted this request.
     """
     blockers: list[str] = []
     desludging = service_request.service_type in (
@@ -52,10 +53,18 @@ def computation_finalize_blockers(
     if cm is None or cm <= 0:
         blockers.append("Cubic meters must be greater than zero.")
 
-    has_sig = bool(uploaded_signature) or stored_filefield_exists(
+    has_prepared = bool(uploaded_prepared_signature) or stored_filefield_exists(
         getattr(computation, "prepared_by_signature", None)
     )
-    if not has_sig:
+    if not has_prepared:
         blockers.append("Upload a prepared-by signature before sending the computation to the customer.")
+
+    has_signatory = bool(uploaded_signatory_signature) or stored_filefield_exists(
+        getattr(computation, "letter_signatory_signature", None)
+    )
+    if not has_signatory:
+        blockers.append(
+            "Upload the letter signatory signature (e.g. City ENRO) before sending the computation to the customer."
+        )
 
     return blockers

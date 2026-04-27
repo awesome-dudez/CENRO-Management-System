@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
@@ -14,6 +15,11 @@ PUBLIC_BAYAWAN_NO_FEES_FLAG = "[PUBLIC_BAYAWAN_NO_FEES]"
 
 
 class ServiceRequest(models.Model):
+    # Line prefix in ``notes`` when an admin rejects the request (mandatory reason).
+    ADMIN_REQUEST_REJECTED_NOTE_PREFIX = "[ADMIN_REQUEST_REJECTED]"
+    # Line prefix when the consumer or request submitter cancels from the portal.
+    CUSTOMER_CANCELLED_NOTE_PREFIX = "[CUSTOMER_CANCELLED]"
+
     class ServiceType(models.TextChoices):
         RESIDENTIAL_DESLUDGING = "RESIDENTIAL_DESLUDGING", "Residential Septage Desludging"
         COMMERCIAL_DESLUDGING = "COMMERCIAL_DESLUDGING", "Commercial Septage Desludging"
@@ -125,6 +131,25 @@ class ServiceRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.get_service_type_display()} - {self.consumer} ({self.barangay})"
+
+    @property
+    def admin_rejection_reason(self) -> str:
+        """Reason text left by an administrator when rejecting this request (stored in ``notes``)."""
+        prefix = self.ADMIN_REQUEST_REJECTED_NOTE_PREFIX
+        if not self.notes:
+            return ""
+        for line in self.notes.replace("\r\n", "\n").split("\n"):
+            s = line.strip()
+            if s.startswith(prefix):
+                return s[len(prefix):].strip()
+        return ""
+
+    @property
+    def was_cancelled_by_customer(self) -> bool:
+        """True if cancellation was initiated by the customer (or submitter) in the portal."""
+        if not self.notes:
+            return False
+        return self.CUSTOMER_CANCELLED_NOTE_PREFIX in self.notes
 
     # Same owner may open another request of the same service_type only after the prior
     # one is completed, cancelled, or expired (all other statuses block duplicates).
@@ -278,14 +303,14 @@ class ServiceRequest(models.Model):
             return False
 
     @property
-    def bawad_free_eligible(self) -> bool:
-        """BAWAD members get free service if < 5 m3 used within 4-year cycle."""
+    def bawad_prior_used_m3_in_cycle(self) -> Decimal:
+        """Completed desludging m³ for this consumer in the current BAWAD cycle (excludes this request)."""
         if not self.connected_to_bawad:
-            return False
+            return Decimal("0")
         from dashboard.models import ConfigurableRate
-        limit = ConfigurableRate.get("bawad_free_limit_m3", 5)
-        cycle_years = ConfigurableRate.get("bawad_cycle_years", 4)
-        cutoff = timezone.now().date() - timedelta(days=int(cycle_years) * 365)
+
+        cycle_years = int(ConfigurableRate.get("bawad_cycle_years", 4))
+        cutoff = timezone.now().date() - timedelta(days=cycle_years * 365)
         used = (
             ServiceRequest.objects.filter(
                 consumer=self.consumer,
@@ -298,9 +323,18 @@ class ServiceRequest(models.Model):
             )
             .exclude(pk=self.pk)
             .aggregate(total=models.Sum("cubic_meters"))["total"]
-            or 0
         )
-        return used < limit
+        return Decimal(str(used or 0))
+
+    @property
+    def bawad_free_eligible(self) -> bool:
+        """True if any of the cycle's free m³ allowance remains (private BAWAD inside Bayawan rules)."""
+        if not self.connected_to_bawad:
+            return False
+        from dashboard.models import ConfigurableRate
+
+        limit = ConfigurableRate.get("bawad_free_limit_m3", 5)
+        return self.bawad_prior_used_m3_in_cycle < limit
 
     @property
     def qualifies_public_bayawan_no_fees(self) -> bool:

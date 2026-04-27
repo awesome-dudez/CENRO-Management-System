@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static humanize %}
 {% block title %}Computation Letter{% endblock %}
 {% block content %}
 <style>
@@ -22,6 +22,11 @@
     .letter-em { font-weight: 600; }
     .letter-free-note { font-weight: 400; font-size: 13px; color: #555; }
     .letter-formal-closing { font-size: 14px; margin-bottom: 32px; color: #2d3142; }
+    .letter-signatory-sig-wrap { margin-bottom: 8px; min-height: 0; margin-left: -22px; }
+    .letter-signatory-sig-wrap img { max-height: 80px; display: block; }
+    .letter-prepared-footer .letter-prepared-sig-frame { margin-bottom: 8px; margin-left: 24px; }
+    .letter-prepared-footer .letter-prepared-sig-img { max-height: 44px; width: auto; display: block; }
+    .letter-prepared-footer .letter-prepared-sig-placeholder { min-height: 44px; max-width: 200px; border-bottom: 1px solid #ccc; }
     .letter-vty { margin: 0 0 18px; }
     .letter-computation-heading-wrap h2.letter-computation-main-title {
         text-align: center; font-size: 18px; letter-spacing: 0.06em; margin: 0 0 12px;
@@ -106,13 +111,20 @@
             <p>Kindly receive payment of <span class="letter-em">Mr. / Mrs. {{ sr.client_name }}</span>,</p>
             <p>resident of <span class="letter-em">{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</span>,</p>
             <p>
-                the amount of <span class="letter-em">Php {{ comp.total_charge|floatformat:2 }}</span>{% if comp.payment_status == "FREE" %}
+                the amount of <span class="letter-em">Php {{ comp.total_charge|floatformat:2|intcomma }}</span>{% if comp.payment_status == "FREE" %}
                 <span class="letter-free-note">(no charge — waiver or eligibility applies).</span>{% endif %}
             </p>
         </div>
 
         <div class="letter-formal-closing">
             <p class="letter-vty">Very truly yours,</p>
+            <div class="letter-signatory-sig-wrap">
+                {% if signatory_signature_url %}
+                <img src="{{ signatory_signature_url }}" alt="Signature of {{ letter_signatory_name }}">
+                {% else %}
+                <div style="min-height:80px; max-width:220px; border-bottom:1px solid #ccc;" aria-hidden="true"></div>
+                {% endif %}
+            </div>
             <p class="letter-formal-underline">{{ letter_signatory_name }}</p>
             <p class="letter-formal-title-line">{{ letter_signatory_title }}</p>
         </div>
@@ -121,33 +133,39 @@
             <h2 class="letter-computation-main-title">COMPUTATION</h2>
             <h4>Declogging Fee:</h4>
             <table class="breakdown-table">
-                <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking }}</td></tr>
+                <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td>&#8369;{{ comp.fixed_trucking|floatformat:2|intcomma }}</td></tr>
                 {% for line in comp.get_desludging_breakdown %}
-                <tr><td>{{ line.label }}</td><td>&#8369;{{ line.amount }}</td></tr>
+                <tr><td>{{ line.label }}</td><td>&#8369;{{ line.amount|floatformat:2|intcomma }}</td></tr>
                 {% endfor %}
-                <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td>&#8369;{{ comp.desludging_fee }}</td></tr>
-                {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee{% if comp.billable_travel_km < comp.distance_km %}<br><span style="font-size:11px;color:#666;">{{ comp.distance_km|floatformat:0 }} km to site; first {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO office not charged — {{ comp.billable_travel_km|floatformat:0 }} km billable &#215; &#8369;20 &#215; 2</span>{% else %} ({{ comp.distance_km|floatformat:0 }} km &#215; &#8369;20 &#215; 2){% endif %}</td><td>&#8369;{{ comp.distance_travel_fee }}</td></tr>{% endif %}
-                <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.wear_charge }}</td></tr>
-                <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge }}</td></tr>
+                <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td>&#8369;{{ comp.desludging_fee|floatformat:2|intcomma }}</td></tr>
+                {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee{% if comp.billable_travel_km < comp.distance_km %}<br><span style="font-size:11px;color:#666;">{{ comp.distance_km|floatformat:0 }} km to site; first {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO office not charged — {{ comp.billable_travel_km|floatformat:0 }} km billable &#215; &#8369;20 &#215; 2</span>{% else %} ({{ comp.distance_km|floatformat:0 }} km &#215; &#8369;20 &#215; 2){% endif %}</td><td>&#8369;{{ comp.distance_travel_fee|floatformat:2|intcomma }}</td></tr>{% endif %}
+                <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td>&#8369;{{ comp.letter_wear_display_amount|floatformat:2|intcomma }}</td></tr>
+                <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td>&#8369;{{ comp.meals_transport_charge|floatformat:2|intcomma }}</td></tr>
                 {% if comp.payment_status == "FREE" %}
-                <tr class="subtotal"><td>Total charges</td><td>&#8369;{{ comp.billable_subtotal }}</td></tr>
-                <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Public property waiver (no charge){% else %}BAWAD discount (free service){% endif %}</td><td>- &#8369;{{ comp.billable_subtotal }}</td></tr>
-                <tr class="total"><td>TOTAL</td><td>&#8369;0.00</td></tr>
+                <tr class="subtotal"><td>Subtotal</td><td>&#8369;{{ comp.billable_subtotal|floatformat:2|intcomma }}</td></tr>
+                <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Discount — public property (no charge){% else %}Discount — BAWAD (free service){% endif %}</td><td>- &#8369;{{ comp.billable_subtotal|floatformat:2|intcomma }}</td></tr>
+                <tr class="total"><td>Grand total <span class="letter-free-note">(amount due)</span></td><td>&#8369;{{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
+                {% elif comp.uses_private_bawad_volume_discount %}
+                <tr class="subtotal"><td>Subtotal</td><td>&#8369;{{ comp.declog_gross_before_inside_rules|floatformat:2|intcomma }}</td></tr>
+                <tr class="free"><td>Discount — BAWAD <span class="letter-free-note">({{ comp.private_bawad_free_m3_this_job|floatformat:2 }} m³ allowance; fixed trucking waived{% if comp.billable_travel_km == 0 %}; distance, wear &amp; meals waived (≤{{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO){% endif %})</span></td><td>- &#8369;{{ comp.private_bawad_volume_discount_amount|floatformat:2|intcomma }}</td></tr>
+                <tr class="total"><td>Grand total <span class="letter-free-note">(amount due)</span></td><td>&#8369;{{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
                 {% elif comp.uses_inside_public_bawad_partial_waiver %}
-                <tr class="free"><td>Public / BAWAD waiver — fixed trucking &amp; tipping / septage (inside Bayawan; site &gt; {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO)</td><td>- &#8369;{{ comp.waived_inside_base_service_amount }}</td></tr>
-                <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
+                <tr class="subtotal"><td>Subtotal</td><td>&#8369;{{ comp.declog_gross_before_inside_rules|floatformat:2|intcomma }}</td></tr>
+                <tr class="free"><td>Discount — public property <span class="letter-free-note">(fixed trucking &amp; tipping / septage; site &gt; {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO)</span></td><td>- &#8369;{{ comp.waived_inside_base_service_amount|floatformat:2|intcomma }}</td></tr>
+                <tr class="total"><td>Grand total <span class="letter-free-note">(amount due)</span></td><td>&#8369;{{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
                 {% else %}
-                <tr class="total"><td>TOTAL</td><td>&#8369;{{ comp.total_charge }}</td></tr>
+                <tr class="subtotal"><td>Subtotal</td><td>&#8369;{{ comp.declog_gross_before_inside_rules|floatformat:2|intcomma }}</td></tr>
+                <tr class="total"><td>Grand total <span class="letter-free-note">(amount due)</span></td><td>&#8369;{{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
                 {% endif %}
             </table>
         </div>
 
         <div class="letter-prepared-footer">
-            <div style="margin-bottom:8px;">
+            <div class="letter-prepared-sig-frame">
                 {% if prepared_by_signature_url %}
-                <img src="{{ prepared_by_signature_url }}" alt="Prepared by signature" style="max-height:80px; display:block;">
+                <img src="{{ prepared_by_signature_url }}" alt="Prepared by signature" class="letter-prepared-sig-img">
                 {% else %}
-                <div style="min-height:80px; max-width:220px; border-bottom:1px solid #ccc;" aria-hidden="true"></div>
+                <div class="letter-prepared-sig-placeholder" aria-hidden="true"></div>
                 {% endif %}
             </div>
             <p class="letter-prepared-by-line">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>
@@ -158,6 +176,11 @@
         {% if can_finalize_letter %}
         <form id="finalize-letter-form" method="post" enctype="multipart/form-data" class="finalize-letter-wrap">
             {% csrf_token %}
+            <div class="form-group">
+                <label style="display:block; font-weight:600; margin-bottom:6px;">Letter signatory signature ({{ letter_signatory_name }}) <span style="color:#c0392b;">(required to send)</span></label>
+                <input type="file" name="letter_signatory_signature" accept="image/*">
+                <p style="font-size:12px;color:#666;margin-top:4px;">Scanned signature for the closing block (e.g. City ENRO). Shown above the signatory name on the letter.</p>
+            </div>
             <div class="form-group">
                 <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature <span style="color:#c0392b;">(required to send)</span></label>
                 <input type="file" name="prepared_by_signature" accept="image/*">

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}Computation{% endblock %}
 {% block content %}
 <div class="admin-computation-page comp-page">
@@ -81,29 +82,35 @@
                     · {{ computation_result.trips }} trip{{ computation_result.trips|pluralize }}
                 </p>
                 <div class="charges-summary">
-                    <div class="charge-row"><span>Trucking</span><span class="charge-amt">₱{{ computation_result.fixed_trucking|floatformat:2 }}</span></div>
+                    <div class="charge-row"><span>Trucking</span><span class="charge-amt">₱{{ computation_result.fixed_trucking|floatformat:2|intcomma }}</span></div>
                     {% for line in computation_result.desludging_breakdown %}
-                    <div class="charge-row sub"><span>{{ line.label }}</span><span class="charge-amt">₱{{ line.amount|floatformat:2 }}</span></div>
+                    <div class="charge-row sub"><span>{{ line.label }}</span><span class="charge-amt">₱{{ line.amount|floatformat:2|intcomma }}</span></div>
                     {% endfor %}
-                    <div class="charge-row"><span>Septage</span><span class="charge-amt">₱{{ computation_result.desludging_fee|floatformat:2 }}</span></div>
+                    <div class="charge-row"><span>Septage</span><span class="charge-amt">₱{{ computation_result.desludging_fee|floatformat:2|intcomma }}</span></div>
                     {% if computation_result.distance_km %}
-                    <div class="charge-row"><span>Distance ({{ computation_result.distance_km|floatformat:0 }} km)</span><span class="charge-amt">₱{{ computation_result.distance_travel_fee|floatformat:2 }}</span></div>
+                    <div class="charge-row"><span>Distance ({{ computation_result.distance_km|floatformat:0 }} km)</span><span class="charge-amt">₱{{ computation_result.distance_travel_fee|floatformat:2|intcomma }}</span></div>
                     {% endif %}
-                    <div class="charge-row"><span>Wear (20%)</span><span class="charge-amt">₱{{ computation_result.wear_charge|floatformat:2 }}</span></div>
-                    <div class="charge-row"><span>Meals (×{{ computation_result.personnel_count }})</span><span class="charge-amt">₱{{ computation_result.meals_transport_charge|floatformat:2 }}</span></div>
+                    <div class="charge-row"><span>Wear (20%)</span><span class="charge-amt">₱{{ computation_result.wear_charge|floatformat:2|intcomma }}</span></div>
+                    <div class="charge-row"><span>Meals (×{{ computation_result.personnel_count }})</span><span class="charge-amt">₱{{ computation_result.meals_transport_charge|floatformat:2|intcomma }}</span></div>
                     {% if computation_result.partial_waiver %}
                     <div class="charge-row waive">
-                        <span>Waiver (public / BAWAD — trucking &amp; septage)</span>
-                        <span class="charge-amt">−₱{{ computation_result.waived_base_amount|floatformat:2 }}</span>
+                        <span>Waiver (public — trucking &amp; septage)</span>
+                        <span class="charge-amt">−₱{{ computation_result.waived_base_amount|floatformat:2|intcomma }}</span>
+                    </div>
+                    {% elif computation_result.uses_bawad_volume_discount %}
+                    <div class="charge-row strong"><span>Subtotal</span><span class="charge-amt">₱{{ computation_result.subtotal_before_waiver|floatformat:2|intcomma }}</span></div>
+                    <div class="charge-row waive">
+                        <span>BAWAD — {{ computation_result.bawad_free_m3_applied|floatformat:2 }} m³ free this cycle (customer pays excess)</span>
+                        <span class="charge-amt">−₱{{ computation_result.bawad_volume_discount_amount|floatformat:2|intcomma }}</span>
                     </div>
                     {% elif computation_result.free_reason %}
-                    <div class="charge-row strong"><span>Subtotal</span><span class="charge-amt">₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span></div>
+                    <div class="charge-row strong"><span>Subtotal</span><span class="charge-amt">₱{{ computation_result.subtotal_before_waiver|floatformat:2|intcomma }}</span></div>
                     <div class="charge-row waive">
-                        <span>{% if computation_result.free_reason == 'public_bawad_inside_under_10km' %}{% if computation_result.is_public %}Waiver (public){% else %}Waiver (BAWAD){% endif %}{% elif computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
-                        <span class="charge-amt">−₱{{ computation_result.subtotal_before_waiver|floatformat:2 }}</span>
+                        <span>{% if computation_result.free_reason == 'public_bawad_inside_under_10km' %}{% if computation_result.is_public %}Waiver (public){% else %}Waiver (BAWAD){% endif %}{% elif computation_result.free_reason == 'bawad_private_full_allowance_under_10km' %}Waiver (BAWAD — within cycle &amp; free km){% elif computation_result.free_reason == 'public_area' %}Waiver (public){% else %}Waiver (BAWAD){% endif %}</span>
+                        <span class="charge-amt">−₱{{ computation_result.subtotal_before_waiver|floatformat:2|intcomma }}</span>
                     </div>
                     {% endif %}
-                    <div class="charge-row total"><span>Total</span><span class="charge-amt">₱{{ computation_result.total_charge|floatformat:2 }}</span></div>
+                    <div class="charge-row total"><span>Total</span><span class="charge-amt">₱{{ computation_result.total_charge|floatformat:2|intcomma }}</span></div>
                 </div>
                 <p class="comp-prepared-by">{{ computation_result.prepared_by }}</p>
                 <button type="button" class="btn btn-success comp-btn-print" onclick="window.print()">Print breakdown</button>

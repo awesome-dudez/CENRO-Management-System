@@ -21,15 +21,20 @@ DEBUG = _debug()
 
 # Django's static() helper only mounts /media/ when DEBUG=True. Many local .env files use
 # DEBUG=False, which breaks ImageField URLs (404). Serve uploads when DEBUG, when using
-# runserver, or when SERVE_MEDIA=true (e.g. staging). Production behind nginx should
-# serve MEDIA_ROOT separately and keep this False.
+# runserver, when SERVE_MEDIA=true, or on Render (RENDER=true) so Gunicorn still exposes
+# /media/. Without this, profile pictures and signatures 404 on Render while they work
+# locally (runserver sets SERVE_MEDIA implicitly).
+#
+# Note: Render's filesystem is ephemeral — uploads can disappear on redeploy/restart.
+# For durable files use object storage (e.g. django-storages + S3) and set SERVE_MEDIA=False.
 _serve_media_env = config("SERVE_MEDIA", default="")
 if str(_serve_media_env).strip().lower() in ("1", "true", "yes", "on"):
     SERVE_MEDIA = True
 elif str(_serve_media_env).strip().lower() in ("0", "false", "no", "off"):
     SERVE_MEDIA = False
 else:
-    SERVE_MEDIA = DEBUG or ("runserver" in sys.argv)
+    _on_render = (os.environ.get("RENDER") or "").strip().lower() in ("1", "true", "yes")
+    SERVE_MEDIA = DEBUG or ("runserver" in sys.argv) or _on_render
 
 # -------------------------
 # Hosts & CSRF (Render-safe)
@@ -103,6 +108,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
 
     # Project apps
     "accounts",

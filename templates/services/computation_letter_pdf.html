@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load humanize %}
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
@@ -58,6 +59,12 @@
         .letter-free-note { font-weight: normal; font-size: 13px; color: #555; }
         .letter-formal-closing { font-size: 14px; margin-bottom: 32px; color: #2d3142; }
         .letter-vty { margin: 0 0 18px; padding: 0; border: none; }
+        .letter-signatory-sig-wrap { margin-bottom: 8px; margin-left: -14px; }
+        .letter-signatory-sig-wrap img {
+            height: 68px !important;
+            width: auto !important;
+            display: block;
+        }
         .letter-computation-main-title {
             text-align: center;
             font-size: 18px;
@@ -113,9 +120,9 @@
         .prepared .letter-prepared-title { margin: 0 0 12px 0; color: #444; }
         .prepared .letter-prepared-date { margin: 0; color: #444; }
         /* xhtml2pdf ignores max-height on img — use explicit height */
-        .prepared-sig-wrap { margin-bottom: 4px; }
+        .prepared-sig-wrap { margin-bottom: 4px; margin-left: 24px; }
         .prepared-sig-wrap img {
-            height: 68px !important;
+            height: 44px !important;
             width: auto !important;
             display: block;
         }
@@ -160,13 +167,20 @@
         <p>Kindly receive payment of <span class="letter-em">Mr. / Mrs. {{ sr.client_name }}</span>,</p>
         <p>resident of <span class="letter-em">{% if address_display %}{{ address_display }}{% else %}{{ sr.address }}{% if sr.barangay %}, {{ sr.barangay }}{% endif %}{% endif %}</span>,</p>
         <p>
-            the amount of <span class="letter-em">Php {{ comp.total_charge|floatformat:2 }}</span>{% if comp.payment_status == "FREE" %}
+            the amount of <span class="letter-em">Php {{ comp.total_charge|floatformat:2|intcomma }}</span>{% if comp.payment_status == "FREE" %}
             <span class="letter-free-note">(no charge — waiver or eligibility applies).</span>{% endif %}
         </p>
     </div>
 
     <div class="letter-formal-closing">
         <p class="letter-vty">Very truly yours,</p>
+        <div class="letter-signatory-sig-wrap">
+            {% if signatory_signature_path %}
+            <img src="{{ signatory_signature_path }}" alt="" height="68" style="height:68px;width:auto;display:block;">
+            {% else %}
+            <div style="height:68px; max-width:200px; border-bottom:1px solid #999;" aria-hidden="true"></div>
+            {% endif %}
+        </div>
         <p class="letter-formal-underline">{{ letter_signatory_name }}</p>
         <p class="letter-formal-title-line">{{ letter_signatory_title }}</p>
     </div>
@@ -175,23 +189,29 @@
         <h2 class="letter-computation-main-title">COMPUTATION</h2>
         <h4>Declogging Fee:</h4>
         <table class="breakdown-table">
-            <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td><span class="currency">&#8369;</span> {{ comp.fixed_trucking }}</td></tr>
+            <tr class="used-for-computation"><td>Fixed Trucking Fee</td><td><span class="currency">&#8369;</span> {{ comp.fixed_trucking|floatformat:2|intcomma }}</td></tr>
             {% for line in comp.get_desludging_breakdown %}
-            <tr><td>{{ line.label }}</td><td><span class="currency">&#8369;</span> {{ line.amount }}</td></tr>
+            <tr><td>{{ line.label }}</td><td><span class="currency">&#8369;</span> {{ line.amount|floatformat:2|intcomma }}</td></tr>
             {% endfor %}
-            <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td><span class="currency">&#8369;</span> {{ comp.desludging_fee }}</td></tr>
-            {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee{% if comp.billable_travel_km < comp.distance_km %}<br><span style="font-size:10px;color:#666;">{{ comp.distance_km|floatformat:0 }} km to site; first {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO office not charged — {{ comp.billable_travel_km|floatformat:0 }} km billable &#215; <span class="currency">&#8369;</span> 20 &#215; 2</span>{% else %} ({{ comp.distance_km|floatformat:0 }} km &#215; <span class="currency">&#8369;</span> 20 &#215; 2){% endif %}</td><td><span class="currency">&#8369;</span> {{ comp.distance_travel_fee }}</td></tr>{% endif %}
-            <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td><span class="currency">&#8369;</span> {{ comp.wear_charge }}</td></tr>
-            <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td><span class="currency">&#8369;</span> {{ comp.meals_transport_charge }}</td></tr>
+            <tr class="subtotal used-for-computation"><td>Tipping and Septage Fee (subtotal)</td><td><span class="currency">&#8369;</span> {{ comp.desludging_fee|floatformat:2|intcomma }}</td></tr>
+            {% if comp.distance_km %}<tr class="used-for-computation"><td>Distance Travel Fee{% if comp.billable_travel_km < comp.distance_km %}<br><span style="font-size:10px;color:#666;">{{ comp.distance_km|floatformat:0 }} km to site; first {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO office not charged — {{ comp.billable_travel_km|floatformat:0 }} km billable &#215; <span class="currency">&#8369;</span> 20 &#215; 2</span>{% else %} ({{ comp.distance_km|floatformat:0 }} km &#215; <span class="currency">&#8369;</span> 20 &#215; 2){% endif %}</td><td><span class="currency">&#8369;</span> {{ comp.distance_travel_fee|floatformat:2|intcomma }}</td></tr>{% endif %}
+            <tr class="used-for-computation"><td>Wear &amp; Tear (20%)</td><td><span class="currency">&#8369;</span> {{ comp.letter_wear_display_amount|floatformat:2|intcomma }}</td></tr>
+            <tr class="used-for-computation"><td>Meals &amp; Transportation ({{ comp.personnel_count }} personnel)</td><td><span class="currency">&#8369;</span> {{ comp.meals_transport_charge|floatformat:2|intcomma }}</td></tr>
             {% if comp.payment_status == "FREE" %}
-            <tr class="subtotal"><td>Total charges</td><td><span class="currency">&#8369;</span> {{ comp.billable_subtotal }}</td></tr>
-            <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Public property waiver (no charge){% else %}BAWAD discount (free service){% endif %}</td><td>- <span class="currency">&#8369;</span> {{ comp.billable_subtotal }}</td></tr>
-            <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> 0.00</td></tr>
+            <tr class="subtotal"><td>Subtotal</td><td><span class="currency">&#8369;</span> {{ comp.billable_subtotal|floatformat:2|intcomma }}</td></tr>
+            <tr class="free"><td>{% if sr.qualifies_public_bayawan_no_fees %}Discount — public property (no charge){% else %}Discount — BAWAD (free service){% endif %}</td><td>- <span class="currency">&#8369;</span> {{ comp.billable_subtotal|floatformat:2|intcomma }}</td></tr>
+            <tr class="total"><td>Grand total (amount due)</td><td><span class="currency">&#8369;</span> {{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
+            {% elif comp.uses_private_bawad_volume_discount %}
+            <tr class="subtotal"><td>Subtotal</td><td><span class="currency">&#8369;</span> {{ comp.declog_gross_before_inside_rules|floatformat:2|intcomma }}</td></tr>
+            <tr class="free"><td>Discount — BAWAD <span style="font-size:11px;color:#555;font-weight:400;">({{ comp.private_bawad_free_m3_this_job|floatformat:2 }} m³ allowance; fixed trucking waived{% if comp.billable_travel_km == 0 %}; distance, wear &amp; meals waived (≤{{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO){% endif %})</span></td><td>- <span class="currency">&#8369;</span> {{ comp.private_bawad_volume_discount_amount|floatformat:2|intcomma }}</td></tr>
+            <tr class="total"><td>Grand total (amount due)</td><td><span class="currency">&#8369;</span> {{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
             {% elif comp.uses_inside_public_bawad_partial_waiver %}
-            <tr class="free"><td>Public / BAWAD waiver — fixed trucking &amp; tipping / septage (inside Bayawan; site &gt; {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO)</td><td>- <span class="currency">&#8369;</span> {{ comp.waived_inside_base_service_amount }}</td></tr>
-            <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> {{ comp.total_charge }}</td></tr>
+            <tr class="subtotal"><td>Subtotal</td><td><span class="currency">&#8369;</span> {{ comp.declog_gross_before_inside_rules|floatformat:2|intcomma }}</td></tr>
+            <tr class="free"><td>Discount — public property <span style="font-size:11px;color:#555;font-weight:400;">(fixed trucking &amp; tipping / septage; site &gt; {{ comp.cenro_free_travel_km|floatformat:0 }} km from CENRO)</span></td><td>- <span class="currency">&#8369;</span> {{ comp.waived_inside_base_service_amount|floatformat:2|intcomma }}</td></tr>
+            <tr class="total"><td>Grand total (amount due)</td><td><span class="currency">&#8369;</span> {{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
             {% else %}
-            <tr class="total"><td>TOTAL</td><td><span class="currency">&#8369;</span> {{ comp.total_charge }}</td></tr>
+            <tr class="subtotal"><td>Subtotal</td><td><span class="currency">&#8369;</span> {{ comp.declog_gross_before_inside_rules|floatformat:2|intcomma }}</td></tr>
+            <tr class="total"><td>Grand total (amount due)</td><td><span class="currency">&#8369;</span> {{ comp.total_charge|floatformat:2|intcomma }}</td></tr>
             {% endif %}
         </table>
     </div>
@@ -199,9 +219,9 @@
     <div class="prepared">
         <div class="prepared-sig-wrap">
             {% if prepared_by_signature_path %}
-            <img src="{{ prepared_by_signature_path }}" alt="" height="68" style="height:68px;width:auto;display:block;">
+            <img src="{{ prepared_by_signature_path }}" alt="" height="44" style="height:44px;width:auto;display:block;">
             {% else %}
-            <div style="height:68px; max-width:200px; border-bottom:1px solid #999;" aria-hidden="true"></div>
+            <div style="height:44px; max-width:200px; border-bottom:1px solid #999;" aria-hidden="true"></div>
             {% endif %}
         </div>
         <p style="margin:8px 0 4px; font-size:13px; color:#666;">Prepared by: {{ comp.prepared_by.get_full_name|default:"Admin" }}</p>

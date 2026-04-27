@@ -1,8 +1,25 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}Service Request Details{% endblock %}
 {% block content %}
 <style>
     .detail-container { max-width: 900px; margin: 30px auto; padding: 20px; }
+    /* When admin can reject: keep tile at end of document flow and pin toward viewport bottom if page is short */
+    body.admin-view .detail-container:has(.admin-reject-request-tile) {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 100px);
+        box-sizing: border-box;
+    }
+    /* Spacer grows on short pages (pins reject near bottom); min-height keeps gap when the page is long (margin-top:auto alone collapses to 0). */
+    body.admin-view .admin-reject-flex-spacer {
+        flex: 1 1 auto;
+        min-height: 28px;
+    }
+    body.admin-view .admin-reject-request-tile {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
     .detail-back-row { margin-bottom: 14px; }
     .btn-back-requests {
         display: inline-flex; align-items: center; gap: 6px;
@@ -104,6 +121,37 @@
     .cenro-confirm-primary.cenro-confirm--teal:hover { background: #16a085; }
     .cenro-confirm-primary.cenro-confirm--warn { background: #e67e22; }
     .cenro-confirm-primary.cenro-confirm--warn:hover { background: #d35400; }
+
+    /* Customer self-cancel modal (type DELETE) */
+    .consumer-cancel-overlay {
+        position: fixed; inset: 0; z-index: 10060;
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px; box-sizing: border-box;
+        background: rgba(45, 49, 66, 0.5);
+        backdrop-filter: blur(3px);
+        opacity: 0; visibility: hidden; transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .consumer-cancel-overlay.is-open { opacity: 1; visibility: visible; }
+    .consumer-cancel-dialog {
+        background: #fff; border-radius: 12px; max-width: 460px; width: 100%;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.22); border: 1px solid rgba(0,0,0,0.08);
+        padding: 24px 26px 22px;
+    }
+    .consumer-cancel-dialog h2 { margin: 0 0 12px; font-size: 1.2rem; color: #c0392b; }
+    .consumer-cancel-dialog p { margin: 0 0 14px; font-size: 14px; color: #555; line-height: 1.55; }
+    .consumer-cancel-dialog label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #2d3142; }
+    .consumer-cancel-dialog input[type="text"] {
+        width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px;
+        font-size: 15px; font-family: ui-monospace, monospace; letter-spacing: 0.02em;
+        box-sizing: border-box; margin-bottom: 16px;
+    }
+    .consumer-cancel-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+    .consumer-cancel-actions .btn { padding: 10px 18px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .consumer-cancel-back { background: #eef1f4; color: #2d3142; }
+    .consumer-cancel-back:hover { background: #e2e6ea; }
+    .consumer-cancel-submit { background: #c0392b; color: #fff; }
+    .consumer-cancel-submit:hover:not(:disabled) { background: #a93226; }
+    .consumer-cancel-submit:disabled { opacity: 0.45; cursor: not-allowed; }
 </style>
 
 <div class="detail-container">
@@ -114,6 +162,19 @@
         <h1>Service Request</h1>
         <span class="status-pill {{ sr.status|lower }}">{% if sr.status == "COMPUTATION_SENT" and sr.computation and not sr.computation.is_finalized %}Computation — pending admin finalization{% else %}{{ sr.get_status_display }}{% endif %}</span>
     </div>
+
+    {% if sr.status == "CANCELLED" and sr.admin_rejection_reason %}
+    <div class="section-card" style="border-left:4px solid #e74c3c;background:#fdf2f2;">
+        <h3 style="margin-top:0;color:#c0392b;">Request rejected by the office</h3>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:#2d3142;">{{ sr.admin_rejection_reason }}</p>
+        <p style="margin:12px 0 0;font-size:13px;color:#666;">If you believe this was a mistake, contact CENRO Bayawan with your reference request number (#{{ sr.pk }}).</p>
+    </div>
+    {% elif sr.status == "CANCELLED" and sr.was_cancelled_by_customer %}
+    <div class="section-card" style="border-left:4px solid #7f8c8d;background:#f4f6f7;">
+        <h3 style="margin-top:0;color:#2d3142;">You cancelled this request</h3>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:#555;">This service request was cancelled from your account. CENRO has been notified. If you still need service, you may submit a new request when you are ready.</p>
+    </div>
+    {% endif %}
 
     <!-- Customer Information -->
     <div class="section-card">
@@ -126,9 +187,6 @@
             <div class="info-item"><label>Service Type</label><span>{{ sr.get_service_type_display }}</span></div>
             <div class="info-item"><label>Property type</label><span>{{ sr.get_public_private_display }}</span></div>
             <div class="info-item"><label>Water Source Connection</label><span>{% if sr.connected_to_bawad %}BAWAD Connected{% else %}Other Source{% endif %}</span></div>
-            {% if sr.bawad_proof %}
-            <div class="info-item"><label>BAWAD Proof</label><span><a href="{{ sr.bawad_proof.url }}" target="_blank">View Document</a></span></div>
-            {% endif %}
             {% if sr.client_signature %}
             <div class="info-item" style="grid-column: 1 / -1;">
                 <label>Client signature</label>
@@ -142,6 +200,31 @@
             {% endif %}
         </div>
     </div>
+
+    {% if sr.connected_to_bawad and sr.service_type != "GRASS_CUTTING" %}
+    <div class="section-card">
+        <h3>BAWAD affiliation proof</h3>
+        <p style="margin:0 0 14px;font-size:14px;color:#555;line-height:1.5;">
+            Submitted certificate or billing document for <strong>BAWAD-connected</strong> properties.
+            {% if user.is_admin %}
+            Review this file before waiving the first-time inspection fee (if applicable) or before confirming a Treasurer receipt.
+            {% endif %}
+        </p>
+        {% if sr.bawad_proof %}
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
+            {% if bawad_proof_is_image %}
+            <a href="{% url 'services:view_bawad_proof' sr.pk %}" class="cenro-doc-modal" title="Click to view full size" style="display:block;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;max-width:100%;cursor:pointer;">
+                <img src="{% url 'services:view_bawad_proof' sr.pk %}" alt="BAWAD affiliation proof — click to enlarge" style="max-width:min(100%, 520px);max-height:360px;object-fit:contain;display:block;background:#fafafa;">
+            </a>
+            {% else %}
+            <a href="{% url 'services:view_bawad_proof' sr.pk %}" class="cenro-doc-modal" style="font-weight:600;color:#1abc9c;text-decoration:underline;">View BAWAD proof</a>
+            {% endif %}
+        </div>
+        {% else %}
+        <p style="margin:0;color:#c0392b;font-size:14px;font-weight:600;">No BAWAD proof file is stored for this request. The customer may need to re-submit from a new request, or staff can correct the record.</p>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Location -->
     <div class="section-card">
@@ -184,7 +267,7 @@
         <div class="info-grid">
             <div class="info-item">
                 <label>Receipt</label>
-                <span><a href="{% url 'services:view_inspection_fee_receipt' sr.pk %}" target="_blank">View Receipt</a></span>
+                <span><a href="{% url 'services:view_inspection_fee_receipt' sr.pk %}" class="cenro-doc-modal">View Receipt</a></span>
             </div>
         </div>
     </div>
@@ -233,6 +316,16 @@
         <div class="info-grid">
             <div class="info-item"><label>Date Completed</label><span>{{ sr.completion_info.date_completed|date:"M d, Y" }}</span></div>
             <div class="info-item"><label>Witnessed By</label><span>{{ sr.completion_info.witnessed_by_name|default:"N/A" }}</span></div>
+            {% if sr.completion_info.witnessed_by_signature %}
+            <div class="info-item" style="grid-column: 1 / -1;">
+                <label>Witness signature</label>
+                <span>
+                    <a href="{{ sr.completion_info.witnessed_by_signature.url }}" class="cenro-doc-modal" title="Click to view full size" style="display:inline-block;margin-top:6px;border:1px solid #e0e0e0;border-radius:8px;padding:10px;background:#fafafa;cursor:pointer;">
+                        <img src="{{ sr.completion_info.witnessed_by_signature.url }}" alt="Witness signature" style="max-width:min(100%, 360px);max-height:200px;object-fit:contain;display:block;">
+                    </a>
+                </span>
+            </div>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -242,7 +335,7 @@
     <div class="section-card">
         <h3>Computation</h3>
         <div class="info-grid">
-            <div class="info-item"><label>Total Charge</label><span style="font-size:18px;color:#1abc9c;font-weight:700;">&#8369;{{ sr.computation.total_charge }}</span></div>
+            <div class="info-item"><label>Total Charge</label><span style="font-size:18px;color:#1abc9c;font-weight:700;">&#8369;{{ sr.computation.total_charge|floatformat:2|intcomma }}</span></div>
             <div class="info-item"><label>Payment Status</label><span>{% if sr.status == "PAID" %}Paid{% elif sr.treasurer_receipt and sr.status == "AWAITING_PAYMENT" %}Awaiting Verification{% else %}{{ sr.computation.get_payment_status_display }}{% endif %}</span></div>
         </div>
         {% if user.is_admin or sr.consumer == user or sr.requested_by == user %}
@@ -259,6 +352,11 @@
         <form method="post" action="{% url 'services:view_computation' sr.pk %}" enctype="multipart/form-data" style="margin-top:8px;">
             {% csrf_token %}
             <div class="form-group">
+                <label style="display:block; font-weight:600; margin-bottom:6px;">Letter signatory signature <span style="color:#c0392b;">(required to send)</span></label>
+                <input type="file" name="letter_signatory_signature" accept="image/*">
+                <p style="font-size:12px;color:#666;margin-top:4px;">Signature for the City ENRO closing block on the letter.</p>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:6px;">Prepared by signature <span style="color:#c0392b;">(required to send)</span></label>
                 <input type="file" name="prepared_by_signature" accept="image/*">
                 <p style="font-size:12px;color:#666;margin-top:4px;">Required before finalizing. Crew (waived inspection) or completion info (with inspection) must also be complete.</p>
@@ -278,7 +376,7 @@
     {% if sr.treasurer_receipt %}
     <div class="section-card">
         <h3>{% if sr.service_type == "GRASS_CUTTING" %}Treasurer payment receipt (uploaded){% else %}Payment Receipt{% endif %}</h3>
-        <div class="info-item"><label>Receipt</label><span><a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank">View Receipt</a></span></div>
+        <div class="info-item"><label>Receipt</label><span><a href="{% url 'services:view_treasurer_receipt' sr.pk %}" class="cenro-doc-modal">View Receipt</a></span></div>
         {% if sr.payment_confirmed_at %}
         <div class="info-item" style="margin-top:8px;"><label>Confirmed At</label><span>{{ sr.payment_confirmed_at|date:"M d, Y H:i" }}</span></div>
         {% endif %}
@@ -313,7 +411,7 @@
         <div class="info-grid">
             <div class="info-item">
                 <label>Application form receipt</label>
-                <span><a href="{% url 'services:grasscutting_application_receipt' sr.pk %}">View official receipt</a></span>
+                <span><a href="{% url 'services:grasscutting_application_receipt' sr.pk %}" class="cenro-doc-modal">View official receipt</a></span>
             </div>
             <div class="info-item">
                 <label>Current step</label>
@@ -405,6 +503,17 @@
             </form>
             {% endif %}
 
+            {% if can_waive_bawad_inspection_fee %}
+            <form method="post" action="{% url 'dashboard:waive_bawad_inspection_fee' sr.pk %}" class="inline-form cenro-confirm-form" style="margin-left:8px;"
+                  data-cenro-confirm-kicker="BAWAD — inspection fee"
+                  data-cenro-confirm-title="Waive first-time inspection fee after BAWAD review?"
+                  data-cenro-confirm-body="Only use this after you have reviewed the BAWAD affiliation proof on the request. The ₱150 Treasurer inspection fee will be marked satisfied without a payment receipt, and the request will move to Under Review so you can assign an inspector."
+                  data-cenro-confirm-primary-label="Waive fee &amp; continue"
+                  data-cenro-confirm-variant="teal">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-teal">Waive inspection fee (BAWAD proof reviewed)</button>
+            </form>
+            {% endif %}
             {% if sr.inspection_fee_receipt and sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
             <form method="post" action="{% url 'dashboard:confirm_inspection_fee' sr.pk %}" class="inline-form" style="margin-left:8px;">
                 {% csrf_token %}
@@ -465,7 +574,7 @@
 
         {% if sr.consumer == user or sr.requested_by == user %}
             {% if sr.status == "INSPECTION_FEE_DUE" or sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
-            <a href="{% url 'services:inspection_fee_bill' sr.pk %}" class="btn btn-orange">View Inspection Fee Bill</a>
+            <a href="{% url 'services:inspection_fee_bill' sr.pk %}" class="btn btn-orange cenro-doc-modal">View Inspection Fee Bill</a>
             {% if sr.status == "INSPECTION_FEE_DUE" %}
             <a href="{% url 'services:upload_inspection_fee' sr.pk %}" class="btn btn-green">Upload Inspection Fee Receipt</a>
             {% elif sr.status == "INSPECTION_FEE_AWAITING_VERIFICATION" %}
@@ -501,8 +610,7 @@
                 {% endif %}
             {% elif sr.treasurer_receipt %}
                 <a href="{% url 'services:view_treasurer_receipt' sr.pk %}"
-                   class="btn btn-blue"
-                   target="_blank" rel="noopener"
+                   class="btn btn-blue cenro-doc-modal"
                    style="min-width: 260px; text-align: center;">
                     View uploaded Treasurer receipt
                 </a>
@@ -515,7 +623,73 @@
         </div>
         {% endif %}
     {% endif %}
+
+    {% if can_consumer_cancel_request %}
+    <div class="section-card" style="border-color:#e0e0e0;background:#fafbfc;">
+        <h3 style="margin-top:0;">Cancel this request</h3>
+        <p style="margin:0 0 12px;font-size:14px;color:#555;line-height:1.5;">
+            You can withdraw this request while it is still early in processing. After payment is recorded or desludging is scheduled, please contact CENRO instead. Cancellation is permanent and will notify the office.
+        </p>
+        <button type="button" class="btn btn-outline" id="consumerCancelOpenBtn" style="border:2px solid #c0392b;color:#c0392b;background:#fff;">
+            Cancel my request…
+        </button>
+    </div>
+    {% endif %}
+
+    {# Admin: spacer + reject tile last — spacer keeps separation from action bar when flex free space is zero. #}
+    {% if user.is_admin and can_admin_reject_request %}
+    <div class="admin-reject-flex-spacer" aria-hidden="true"></div>
+    <div class="section-card admin-reject-request-tile" style="border-color:#f0b27a;background:#fffbf7;">
+        <h3 style="margin-top:0;">Reject this request</h3>
+        <p style="margin:0 0 12px;font-size:14px;color:#555;line-height:1.5;">
+            The registered customer (and the submitter, if someone else filed on their behalf) will be notified. A <strong>reason is required</strong> — it will appear in their notification and on this page after rejection.
+        </p>
+        <form method="post" action="{% url 'dashboard:admin_reject_service_request' sr.pk %}" class="cenro-confirm-form"
+              data-cenro-validate-named="rejection_reason"
+              data-cenro-validate-minlen="10"
+              data-cenro-confirm-kicker="Reject service request"
+              data-cenro-confirm-title="Reject this request?"
+              data-cenro-confirm-body="The request will be marked Cancelled. This cannot be undone from the customer portal. Ensure the reason is accurate and professional."
+              data-cenro-confirm-primary-label="Reject request"
+              data-cenro-confirm-variant="warn"
+              style="display:flex;flex-direction:column;gap:10px;max-width:640px;">
+            {% csrf_token %}
+            <label for="id_rejection_reason" style="font-weight:600;font-size:14px;">Reason for rejection <span style="color:#c0392b;">*</span></label>
+            <textarea name="rejection_reason" id="id_rejection_reason" required minlength="10" maxlength="2000" rows="4"
+                placeholder="Explain clearly why this request cannot proceed (e.g. incomplete documents, ineligible location, duplicate submission)."
+                style="width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
+            <div>
+                <button type="submit" class="btn btn-orange" style="border:none;">Reject request</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
 </div>
+
+{% if can_consumer_cancel_request %}
+<div id="consumerCancelModal" class="consumer-cancel-overlay" hidden aria-hidden="true">
+    <div class="consumer-cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="consumerCancelTitle" aria-describedby="consumerCancelDesc">
+        <h2 id="consumerCancelTitle">Cancel this request?</h2>
+        <p id="consumerCancelDesc">
+            <strong>This cannot be undone.</strong> Your request will be closed and CENRO staff will see that you cancelled it.
+            If you are requesting for someone else, the registered customer will be notified.
+        </p>
+        <p style="font-size:14px;color:#333;margin-bottom:12px;">
+            To confirm, type the word <strong style="font-family:ui-monospace,monospace;">DELETE</strong> in capital letters in the box below.
+        </p>
+        <form method="post" action="{% url 'services:consumer_cancel_request' sr.pk %}" id="consumerCancelForm">
+            {% csrf_token %}
+            <label for="id_consumer_cancel_confirm">Type DELETE to confirm</label>
+            <input type="text" name="confirm_text" id="id_consumer_cancel_confirm" autocomplete="off"
+                   placeholder="DELETE" autocapitalize="characters" spellcheck="false">
+            <div class="consumer-cancel-actions">
+                <button type="button" class="btn consumer-cancel-back" id="consumerCancelDismiss">Go back</button>
+                <button type="submit" class="btn consumer-cancel-submit" id="consumerCancelSubmit" disabled>Yes, cancel request</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <div id="cenroConfirmOverlay" class="cenro-confirm-overlay" hidden aria-hidden="true">
     <div class="cenro-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="cenroConfirmTitleEl" aria-describedby="cenroConfirmBodyEl">
@@ -569,6 +743,25 @@
 
     document.querySelectorAll('form.cenro-confirm-form').forEach(function(form) {
         form.addEventListener('submit', function(e) {
+            var named = form.getAttribute('data-cenro-validate-named');
+            if (named) {
+                var field = form.querySelector('[name="' + named + '"]');
+                if (field) {
+                    if (typeof field.checkValidity === 'function' && !field.checkValidity()) {
+                        e.preventDefault();
+                        field.reportValidity();
+                        return;
+                    }
+                    var minLen = parseInt(form.getAttribute('data-cenro-validate-minlen') || '0', 10);
+                    if (minLen > 0 && (field.value || '').trim().length < minLen) {
+                        e.preventDefault();
+                        field.setCustomValidity('Please enter at least ' + minLen + ' characters.');
+                        field.reportValidity();
+                        field.setCustomValidity('');
+                        return;
+                    }
+                }
+            }
             e.preventDefault();
             openModal(form);
         });
@@ -592,6 +785,65 @@
     });
 })();
 </script>
+
+{% if can_consumer_cancel_request %}
+<script>
+(function() {
+    var modal = document.getElementById('consumerCancelModal');
+    var openBtn = document.getElementById('consumerCancelOpenBtn');
+    var dismissBtn = document.getElementById('consumerCancelDismiss');
+    var form = document.getElementById('consumerCancelForm');
+    var input = document.getElementById('id_consumer_cancel_confirm');
+    var submitBtn = document.getElementById('consumerCancelSubmit');
+    if (!modal || !openBtn || !form || !input || !submitBtn || !dismissBtn) return;
+
+    function syncSubmit() {
+        submitBtn.disabled = (input.value || '').trim() !== 'DELETE';
+    }
+
+    function openM() {
+        modal.removeAttribute('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        modal.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        input.value = '';
+        syncSubmit();
+        setTimeout(function() { input.focus(); }, 50);
+    }
+
+    function closeM() {
+        modal.classList.remove('is-open');
+        modal.setAttribute('hidden', '');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        input.value = '';
+        syncSubmit();
+    }
+
+    openBtn.addEventListener('click', openM);
+    dismissBtn.addEventListener('click', closeM);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeM();
+    });
+    input.addEventListener('input', syncSubmit);
+    input.addEventListener('keyup', syncSubmit);
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            e.preventDefault();
+            closeM();
+        }
+    });
+
+    form.addEventListener('submit', function(e) {
+        if ((input.value || '').trim() !== 'DELETE') {
+            e.preventDefault();
+            syncSubmit();
+        }
+    });
+})();
+</script>
+{% endif %}
 
 {% if sr.gps_latitude and sr.gps_longitude %}
 <script>
@@ -644,4 +896,6 @@
 })();
 </script>
 {% endif %}
+
+{% include "services/_document_viewer_modal.html" %}
 {% endblock %}

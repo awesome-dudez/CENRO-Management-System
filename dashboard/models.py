@@ -117,6 +117,37 @@ def _billable_travel_km(
     )
 
 
+def _bawad_customer_desludging_fee(
+    *,
+    effective_m3: Decimal,
+    cubic_meters: Decimal,
+    free_m3: Decimal,
+    desludging_per_m3: Decimal,
+    second_trip_surcharge: Decimal,
+) -> Decimal:
+    """
+    Septage/tipping due for private BAWAD inside Bayawan: bill only volume beyond cycle allowance,
+    trip-by-trip (first 5 m³ at base rate, further m³ at base + surcharge).
+    """
+    max_m3_per_trip = Decimal("5")
+    cm = cubic_meters or Decimal("0")
+    trips = max(1, math.ceil(float(cm) / float(max_m3_per_trip)))
+    remaining_free = min(max(free_m3, Decimal("0")), effective_m3)
+    total = Decimal("0")
+    for t in range(trips):
+        if t == 0:
+            vol_this_trip = max_m3_per_trip
+        else:
+            remaining_vol = effective_m3 - (t * max_m3_per_trip)
+            vol_this_trip = min(max_m3_per_trip, max(Decimal("0"), remaining_vol))
+        rate = desludging_per_m3 if t == 0 else (desludging_per_m3 + second_trip_surcharge)
+        waived_here = min(vol_this_trip, remaining_free)
+        billable_vol = vol_this_trip - waived_here
+        remaining_free -= waived_here
+        total += billable_vol * rate
+    return total
+
+
 class ChargeCategory(models.Model):
     """Categories for service charges"""
 
@@ -180,6 +211,12 @@ class ServiceComputation(models.Model):
     prepared_by_signature = models.FileField(
         upload_to="computation_signatures/", null=True, blank=True
     )
+    letter_signatory_signature = models.FileField(
+        upload_to="computation_signatures/",
+        null=True,
+        blank=True,
+        help_text="Scanned signature for the letter signatory (e.g. City ENRO), shown above the closing block.",
+    )
     is_finalized = models.BooleanField(default=False)
     finalized_at = models.DateTimeField(null=True, blank=True)
     ready_to_finalize = models.BooleanField(
@@ -214,7 +251,8 @@ class ServiceComputation(models.Model):
         second_trip_surcharge = R("second_trip_surcharge")
         min_m3 = R("min_cubic_meters")
         max_m3_per_trip = Decimal("5")
-        effective_m3 = max(self.cubic_meters, min_m3)
+        raw_m3 = self.cubic_meters if self.cubic_meters is not None else Decimal("0")
+        effective_m3 = max(raw_m3, min_m3)
         rate_extra = desludging_per_m3 + second_trip_surcharge
         lines = []
         # Trip 1 (always 5 m³ billed at base rate)
@@ -278,12 +316,50 @@ class ServiceComputation(models.Model):
 
     @property
     def uses_inside_public_bawad_partial_waiver(self) -> bool:
-        """Inside public/BAWAD: site farther than free km — trucking & septage waived, travel/wear/meals still apply."""
+        """Inside public property: site farther than free km — trucking & septage waived, travel/wear/meals still apply."""
         if not self.qualifies_inside_public_bawad_program:
+            return False
+        sr = self.service_request
+        from services.models import ServiceRequest
+
+        try:
+            if sr.public_private != ServiceRequest.PublicPrivate.PUBLIC:
+                return False
+        except Exception:
             return False
         dist = (self.distance_km or Decimal("0")).quantize(Decimal("1"), rounding=ROUND_DOWN)
         free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
         return dist > free_km
+
+    @property
+    def uses_private_bawad_volume_discount(self) -> bool:
+        return getattr(self, "_uses_private_bawad_volume_discount", False)
+
+    @property
+    def private_bawad_free_m3_this_job(self) -> Decimal:
+        return getattr(self, "_private_bawad_free_m3_this_job", Decimal("0"))
+
+    @property
+    def declog_gross_before_inside_rules(self) -> Decimal:
+        return getattr(
+            self,
+            "_declog_gross_before_inside_rules",
+            self.billable_subtotal,
+        )
+
+    @property
+    def private_bawad_volume_discount_amount(self) -> Decimal:
+        if not self.uses_private_bawad_volume_discount:
+            return Decimal("0")
+        return self.declog_gross_before_inside_rules - self.total_charge
+
+    @property
+    def letter_wear_display_amount(self) -> Decimal:
+        if self.uses_private_bawad_volume_discount:
+            v = getattr(self, "_letter_gross_wear_charge", None)
+            if v is not None:
+                return v
+        return self.wear_charge or Decimal("0")
 
     @property
     def waived_inside_base_service_amount(self) -> Decimal:
@@ -307,11 +383,12 @@ class ServiceComputation(models.Model):
         wear_pct = R("wear_tear_pct") / Decimal("100")
         min_m3 = R("min_cubic_meters")
 
-        effective_m3 = max(self.cubic_meters, min_m3)
+        raw_m3 = self.cubic_meters if self.cubic_meters is not None else Decimal("0")
+        effective_m3 = max(raw_m3, min_m3)
 
         # 1 trip = max 5 m³; more than 5 m³ auto-adjusts to additional trips
         max_m3_per_trip = Decimal("5")
-        self.trips = max(1, math.ceil(float(self.cubic_meters) / float(max_m3_per_trip)))
+        self.trips = max(1, math.ceil(float(raw_m3) / float(max_m3_per_trip)))
 
         # Fixed trucking based on service type and location
         if self.is_outside_bayawan:
@@ -366,33 +443,115 @@ class ServiceComputation(models.Model):
             + self.meals_transport_charge
         )
         self.total_charge = full_total
+        self._declog_gross_before_inside_rules = full_total
+        self._uses_private_bawad_volume_discount = False
+        self._private_bawad_free_m3_this_job = Decimal("0")
+        self._letter_gross_wear_charge = None
 
         free_km = ConfigurableRate.get("bayawan_resident_free_km", Decimal("10"))
         qualifies_inside = self.qualifies_inside_public_bawad_program
 
         if qualifies_inside:
-            if dist <= free_km:
-                # Fully free: total ₱0 (first N km from CENRO; no billable travel).
-                self.total_charge = Decimal("0")
-                if self.payment_status not in (
-                    self.PaymentStatus.PAID,
-                    self.PaymentStatus.AWAITING_VERIFICATION,
-                ):
-                    self.payment_status = self.PaymentStatus.FREE
+            try:
+                is_public = sr.public_private == ServiceRequest.PublicPrivate.PUBLIC
+            except Exception:
+                is_public = False
+
+            if is_public:
+                if dist <= free_km:
+                    # Fully free: total ₱0 (first N km from CENRO; no billable travel).
+                    self.total_charge = Decimal("0")
+                    if self.payment_status not in (
+                        self.PaymentStatus.PAID,
+                        self.PaymentStatus.AWAITING_VERIFICATION,
+                    ):
+                        self.payment_status = self.PaymentStatus.FREE
+                else:
+                    # Waive fixed trucking + tipping/septage only; charge distance, wear, meals.
+                    self.total_charge = (
+                        self.distance_travel_fee
+                        + self.wear_charge
+                        + self.meals_transport_charge
+                    )
+                    if self.payment_status not in (
+                        self.PaymentStatus.PAID,
+                        self.PaymentStatus.AWAITING_VERIFICATION,
+                    ):
+                        self.payment_status = self.PaymentStatus.PENDING
             else:
-                # Waive fixed trucking + tipping/septage only; charge distance, wear, meals.
-                self.total_charge = (
-                    self.distance_travel_fee
-                    + self.wear_charge
-                    + self.meals_transport_charge
+                # Private BAWAD inside Bayawan: fixed trucking waived; cycle allowance (m³) free on
+                # septage; within free km — no distance / wear / meals; beyond free km — pay excess
+                # distance, wear on distance only, and meals.
+                prior = sr.bawad_prior_used_m3_in_cycle
+                limit = R("bawad_free_limit_m3", 5)
+                allowance = max(Decimal("0"), limit - prior)
+                free_m3 = min(effective_m3, allowance)
+                self._private_bawad_free_m3_this_job = free_m3
+
+                ch_ft = Decimal("0")
+                ch_des = _bawad_customer_desludging_fee(
+                    effective_m3=effective_m3,
+                    cubic_meters=raw_m3,
+                    free_m3=free_m3,
+                    desludging_per_m3=desludging_per_m3,
+                    second_trip_surcharge=second_trip_surcharge,
                 )
-                if self.payment_status not in (
-                    self.PaymentStatus.PAID,
-                    self.PaymentStatus.AWAITING_VERIFICATION,
-                ):
-                    self.payment_status = self.PaymentStatus.PENDING
+
+                if dist <= free_km:
+                    if ch_des <= 0:
+                        self.total_charge = Decimal("0")
+                        self._uses_private_bawad_volume_discount = False
+                        self._letter_gross_wear_charge = None
+                        if self.payment_status not in (
+                            self.PaymentStatus.PAID,
+                            self.PaymentStatus.AWAITING_VERIFICATION,
+                        ):
+                            self.payment_status = self.PaymentStatus.FREE
+                    else:
+                        gross_wear = self.wear_charge
+                        self.wear_charge = Decimal("0")
+                        if self.waive_wear_charge:
+                            self.wear_charge = Decimal("0")
+                        self._letter_gross_wear_charge = gross_wear
+                        self.total_charge = ch_des
+                        self._uses_private_bawad_volume_discount = True
+                        if self.payment_status not in (
+                            self.PaymentStatus.PAID,
+                            self.PaymentStatus.AWAITING_VERIFICATION,
+                        ):
+                            self.payment_status = self.PaymentStatus.PENDING
+                else:
+                    gross_wear = self.wear_charge
+                    dist_fee = self.distance_travel_fee
+                    wear_base = ch_ft + dist_fee
+                    self.wear_charge = wear_base * wear_pct
+                    if self.waive_wear_charge:
+                        self.wear_charge = Decimal("0")
+                    meals_ch = (
+                        Decimal("0")
+                        if self.waive_meals_transport_charge
+                        else self.meals_transport_charge
+                    )
+                    self._letter_gross_wear_charge = gross_wear
+                    self.total_charge = ch_des + dist_fee + self.wear_charge + meals_ch
+                    self._uses_private_bawad_volume_discount = (
+                        self._declog_gross_before_inside_rules > self.total_charge
+                    )
+                    if self.payment_status not in (
+                        self.PaymentStatus.PAID,
+                        self.PaymentStatus.AWAITING_VERIFICATION,
+                    ):
+                        self.payment_status = self.PaymentStatus.PENDING
         elif not qualifies_inside and self.payment_status == self.PaymentStatus.FREE and self.total_charge > 0:
             self.payment_status = self.PaymentStatus.PENDING
+
+    def recompute_letter_breakdown(self) -> None:
+        """
+        Re-run charge rules in memory so letter/PDF templates see ephemeral fields
+        (_declog_gross_before_inside_rules, _uses_private_bawad_volume_discount, etc.)
+        that are not stored in the database. Does not write to the DB.
+        """
+        self.calculate_charges()
 
     def save(self, *args, **kwargs):
         self.calculate_charges()
@@ -512,15 +671,54 @@ def compute_quick_desludging_estimate(
     free_reason = None
     partial_waiver = False
     waived_base = Decimal("0")
+    uses_bawad_volume_discount = False
+    bawad_volume_discount_amount = Decimal("0")
+    bawad_free_m3_applied = Decimal("0")
     total_charge = subtotal
     if qualifies_inside:
-        if dist <= free_km:
-            total_charge = Decimal("0")
-            free_reason = "public_bawad_inside_under_10km"
+        if is_public:
+            if dist <= free_km:
+                total_charge = Decimal("0")
+                free_reason = "public_bawad_inside_under_10km"
+            else:
+                total_charge = distance_travel_fee + wear_charge + meals_transport_charge
+                partial_waiver = True
+                waived_base = fixed_trucking + desludging_fee
         else:
-            total_charge = distance_travel_fee + wear_charge + meals_transport_charge
-            partial_waiver = True
-            waived_base = fixed_trucking + desludging_fee
+            allowance = max(Decimal("0"), bawad_limit - bawad_prior_used_m3)
+            free_m3 = min(effective_m3, allowance)
+            bawad_free_m3_applied = free_m3
+            ch_ft = Decimal("0")
+            ch_des = _bawad_customer_desludging_fee(
+                effective_m3=effective_m3,
+                cubic_meters=cubic_meters or Decimal("0"),
+                free_m3=free_m3,
+                desludging_per_m3=desludging_per_m3,
+                second_trip_surcharge=second_trip_surcharge,
+            )
+            if dist <= free_km:
+                if ch_des <= 0:
+                    total_charge = Decimal("0")
+                    free_reason = "bawad_private_full_allowance_under_10km"
+                else:
+                    wear_charge = Decimal("0")
+                    if waive_wear_charge:
+                        wear_charge = Decimal("0")
+                    total_charge = ch_des
+                    uses_bawad_volume_discount = True
+                    bawad_volume_discount_amount = subtotal - total_charge
+            else:
+                wear_charge = (ch_ft + distance_travel_fee) * wear_pct
+                if waive_wear_charge:
+                    wear_charge = Decimal("0")
+                if waive_meals_transport_charge:
+                    meals_transport_charge = Decimal("0")
+                total_charge = (
+                    ch_des + distance_travel_fee + wear_charge + meals_transport_charge
+                )
+                uses_bawad_volume_discount = subtotal > total_charge
+                if uses_bawad_volume_discount:
+                    bawad_volume_discount_amount = subtotal - total_charge
 
     return {
         "trips": trips,
@@ -538,6 +736,9 @@ def compute_quick_desludging_estimate(
         "free_reason": free_reason,
         "partial_waiver": partial_waiver,
         "waived_base_amount": waived_base,
+        "uses_bawad_volume_discount": uses_bawad_volume_discount,
+        "bawad_volume_discount_amount": bawad_volume_discount_amount,
+        "bawad_free_m3_applied": bawad_free_m3_applied,
         "is_public": is_public,
         "is_within_bayawan": is_within_bayawan,
         "connected_to_bawad": connected_to_bawad,

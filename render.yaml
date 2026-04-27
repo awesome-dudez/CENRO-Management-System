@@ -23,3 +23,6 @@ services:
         value: "https://cenro-management-7.onrender.com"
       - key: DEBUG
         value: "False"
+      # Serve /media/ via Django (required on Render unless you use S3/nginx for uploads).
+      - key: SERVE_MEDIA
+        value: "true"

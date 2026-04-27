@@ -802,12 +802,88 @@ def cancel_grass_request(request, pk):
 
 @login_required
 @role_required("ADMIN")
+@require_POST
+def admin_reject_service_request(request, pk):
+    """
+    Cancel a service request with a mandatory reason; notify the registered customer
+    (and the submitter, if the request was filed for another person).
+    """
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if service_request.status in (
+        ServiceRequest.Status.CANCELLED,
+        ServiceRequest.Status.COMPLETED,
+        ServiceRequest.Status.EXPIRED,
+    ):
+        messages.error(
+            request,
+            "This request can no longer be rejected — it is already completed, cancelled, or expired.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    reason = (request.POST.get("rejection_reason") or "").strip()
+    if len(reason) < 10:
+        messages.error(
+            request,
+            "Enter a clear rejection reason (at least 10 characters). The customer will see this in their notification.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    reason = reason[:2000]
+
+    note_line = f"{ServiceRequest.ADMIN_REQUEST_REJECTED_NOTE_PREFIX} {reason}"
+    new_notes = ((service_request.notes or "").strip() + "\n" + note_line).strip()
+
+    with transaction.atomic():
+        service_request.status = ServiceRequest.Status.CANCELLED
+        service_request.notes = new_notes
+        service_request.assigned_inspector = None
+        service_request.inspection_date = None
+        save_fields = ["status", "notes", "assigned_inspector", "inspection_date", "updated_at"]
+        service_request.save(update_fields=save_fields)
+
+    type_label = service_request.get_service_type_display()
+    consumer_msg = (
+        f"Your {type_label} request #{service_request.id} has been rejected by the office. "
+        f"Reason: {reason}"
+    )
+    Notification.objects.create(
+        user=service_request.consumer,
+        message=consumer_msg[:500],
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
+    )
+    if (
+        service_request.requested_by_id
+        and service_request.requested_by_id != service_request.consumer_id
+    ):
+        Notification.objects.create(
+            user_id=service_request.requested_by_id,
+            message=(
+                f"Request #{service_request.id} for {service_request.client_name} ({type_label}) "
+                f"was rejected by the office. Reason: {reason}"
+            )[:500],
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+
+    messages.success(request, "The request was rejected and the customer was notified.")
+    return redirect("services:request_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
 def confirm_inspection_fee(request, pk):
     """Admin verifies the uploaded inspection fee receipt and unlocks inspector assignment."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
     if request.method == "POST":
         if not service_request.inspection_fee_receipt:
             messages.error(request, "No inspection fee receipt uploaded for this request.")
+            return redirect("services:request_detail", pk=pk)
+
+        if service_request.connected_to_bawad and not service_request.bawad_proof:
+            messages.error(
+                request,
+                "Review BAWAD affiliation proof on this request before confirming the Treasurer inspection fee receipt.",
+            )
             return redirect("services:request_detail", pk=pk)
 
         service_request.inspection_fee_paid = True
@@ -952,6 +1028,94 @@ def waive_public_bayawan_inspection_fee(request, pk):
 
 @login_required
 @role_required("ADMIN")
+@require_POST
+def waive_bawad_inspection_fee_after_proof(request, pk):
+    """
+    First-time ₱150 inspection fee: after admin reviews uploaded BAWAD affiliation proof,
+    waive Treasurer payment and move the request to Under Review (inspector can then be assigned).
+    """
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if not service_request.connected_to_bawad or not service_request.bawad_proof:
+        messages.error(
+            request,
+            "This action applies only to BAWAD-connected requests with affiliation proof on file.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    if service_request.qualifies_public_bayawan_no_fees:
+        messages.info(
+            request,
+            "Use the public-property Bayawan waiver for this request; it already qualifies for that policy.",
+        )
+        return redirect("services:request_detail", pk=pk)
+    if service_request.service_type not in (
+        ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+        ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+    ):
+        messages.error(request, "BAWAD inspection fee waiver applies only to desludging requests.")
+        return redirect("services:request_detail", pk=pk)
+    if service_request.status not in (
+        ServiceRequest.Status.INSPECTION_FEE_DUE,
+        ServiceRequest.Status.INSPECTION_FEE_AWAITING_VERIFICATION,
+    ):
+        messages.error(
+            request,
+            "BAWAD inspection fee waiver is only available while the request awaits the inspection fee or its verification.",
+        )
+        return redirect("services:request_detail", pk=pk)
+
+    with transaction.atomic():
+        if service_request.inspection_fee_receipt:
+            service_request.inspection_fee_receipt.delete(save=False)
+            service_request.inspection_fee_receipt = None
+        service_request.inspection_fee_paid = True
+        service_request.status = ServiceRequest.Status.UNDER_REVIEW
+        note_line = (
+            "[BAWAD_VERIFIED] First-time inspection fee waived — BAWAD affiliation proof reviewed by admin; "
+            "Treasurer receipt not required."
+        )
+        service_request.notes = ((service_request.notes or "").strip() + "\n" + note_line).strip()
+        service_request.save(
+            update_fields=[
+                "inspection_fee_receipt",
+                "inspection_fee_paid",
+                "status",
+                "notes",
+                "updated_at",
+            ]
+        )
+
+    Notification.objects.create(
+        user=service_request.consumer,
+        message=(
+            f"Request #{service_request.id}: inspection fee waived after BAWAD proof review. "
+            "Your request is under review and an inspector may be scheduled."
+        )[:500],
+        notification_type=Notification.NotificationType.STATUS_CHANGE,
+        related_request=service_request,
+    )
+    if (
+        service_request.requested_by_id
+        and service_request.requested_by_id != service_request.consumer_id
+    ):
+        Notification.objects.create(
+            user_id=service_request.requested_by_id,
+            message=(
+                f"Request #{service_request.id} ({service_request.client_name}): "
+                "inspection fee waived after BAWAD proof review."
+            )[:500],
+            notification_type=Notification.NotificationType.STATUS_CHANGE,
+            related_request=service_request,
+        )
+
+    messages.success(
+        request,
+        "BAWAD proof reviewed — inspection fee waived. You may assign an inspector when ready.",
+    )
+    return redirect("services:request_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN")
 def approve_request(request, pk):
     """Move a submitted request to under review"""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
@@ -973,6 +1137,20 @@ def approve_request(request, pk):
 def assign_inspector(request, pk):
     """Assign inspector and inspection date to a request."""
     service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if (
+        service_request.connected_to_bawad
+        and not service_request.bawad_proof
+        and service_request.service_type
+        in (
+            ServiceRequest.ServiceType.RESIDENTIAL_DESLUDGING,
+            ServiceRequest.ServiceType.COMMERCIAL_DESLUDGING,
+        )
+    ):
+        messages.error(
+            request,
+            "BAWAD affiliation proof must be on file before assigning an inspector for this request.",
+        )
+        return redirect("services:request_detail", pk=pk)
     # All staff accounts act as inspectors.
     inspectors_qs = User.objects.filter(role=User.Role.STAFF, is_approved=True).order_by(
         "first_name", "last_name"

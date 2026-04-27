@@ -286,22 +286,22 @@
                 {% if sr.treasurer_receipt %}
                     <p style="font-size:13px;color:#555;margin:0 0 12px;line-height:1.5;">
                         Official proof of payment from the City Treasurer's Office, uploaded by the applicant.
-                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener" style="font-weight:600;color:#1abc9c;">Open full receipt (new tab)</a>
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" class="cenro-doc-modal" style="font-weight:600;color:#1abc9c;">Open full receipt</a>
                     </p>
                     {% with n=sr.treasurer_receipt.name|lower %}
                     {% if ".jpg" in n or ".jpeg" in n or ".png" in n or ".webp" in n or ".gif" in n %}
                     <div class="gc-receipt-preview">
-                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener">
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" class="cenro-doc-modal">
                             <img src="{% url 'services:view_treasurer_receipt' sr.pk %}"
                                  alt="Treasurer payment receipt"
                                  class="gc-receipt-preview-img">
                         </a>
                     </div>
-                    <p style="font-size:12px;color:#666;margin-top:8px;">Click the image to enlarge in a new tab.</p>
+                    <p style="font-size:12px;color:#666;margin-top:8px;">Click the image to open a full preview (click outside the preview to close).</p>
                     {% else %}
                     <div class="gc-receipt-nonimage">
                         <p style="margin:0 0 8px;font-size:14px;color:#2d3142;">Preview is not available for this file type (for example PDF).</p>
-                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener" class="gc-receipt-open-link">View or download receipt</a>
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" class="gc-receipt-open-link cenro-doc-modal">View or download receipt</a>
                     </div>
                     {% endif %}
                     {% endwith %}
@@ -350,13 +350,13 @@
                         Confirmation is available only after the client uploads their official <strong>Treasurer payment receipt</strong>
                         on the service request page.
                         {% if sr.treasurer_receipt %}
-                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener">View uploaded receipt</a>
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" class="cenro-doc-modal">View uploaded receipt</a>
                         {% endif %}
                     </p>
                     {% endif %}
                 {% elif sr.treasurer_receipt %}
                     <p class="gc-confirm-hint">
-                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" target="_blank" rel="noopener">View Treasurer payment receipt</a> before confirming.
+                        <a href="{% url 'services:view_treasurer_receipt' sr.pk %}" class="cenro-doc-modal">View Treasurer payment receipt</a> before confirming.
                     </p>
                 {% endif %}
             {% endif %}
@@ -457,4 +457,5 @@
     if (adminEditBlocked && saveBtn) saveBtn.style.display = 'none';
 })();
 </script>
+{% include "services/_document_viewer_modal.html" %}
 {% endblock %}

@@ -203,6 +203,8 @@ class ServiceRequestStep2Form(forms.Form):
         validation can depend on whether this is a declogging or grass-cutting request.
         """
         self.service_type = kwargs.pop("service_type", None)
+        # Session-staged file path from a prior step-2 submit (multipart forms do not resend files).
+        self.existing_bawad_proof_temp = kwargs.pop("existing_bawad_proof_temp", None) or ""
         super().__init__(*args, **kwargs)
 
     def clean_request_date(self):
@@ -286,7 +288,9 @@ class ServiceRequestStep2Form(forms.Form):
             # especially for locations outside Bayawan where we auto-set to non-BAWAD.
             bawad = cleaned.get("connected_to_bawad") or "NO"
             cleaned["connected_to_bawad"] = bawad
-            if bawad == "YES" and not cleaned.get("bawad_proof") and not self.files.get("bawad_proof"):
+            has_new_bawad = bool(cleaned.get("bawad_proof") or self.files.get("bawad_proof"))
+            has_staged_bawad = bool((self.existing_bawad_proof_temp or "").strip())
+            if bawad == "YES" and not has_new_bawad and not has_staged_bawad:
                 self.add_error("bawad_proof", "Please upload proof of BAWAD affiliation.")
         else:
             # Grass cutting and other non-declogging services should not depend on BAWAD details.

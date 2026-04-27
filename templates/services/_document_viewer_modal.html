@@ -1,0 +1,308 @@
+<style>
+    .cenro-doc-modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10060;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 16px;
+        box-sizing: border-box;
+        background: rgba(15, 18, 28, 0.55);
+        backdrop-filter: blur(4px);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .cenro-doc-modal-overlay.is-open {
+        opacity: 1;
+        visibility: visible;
+    }
+    .cenro-doc-modal-panel {
+        position: relative;
+        width: min(960px, 96vw);
+        height: min(calc(100vh - 32px), 920px);
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .cenro-doc-modal-header {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 8px 10px;
+        border-bottom: 1px solid #e8e8e8;
+        background: #fafafa;
+    }
+    .cenro-doc-modal-close {
+        border: none;
+        background: transparent;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+        color: #555;
+        padding: 6px 12px;
+        border-radius: 8px;
+    }
+    .cenro-doc-modal-close:hover { background: #eee; color: #222; }
+    .cenro-doc-modal-frame-wrap {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        background: #1a1a1a;
+        overflow: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* Image / PDF: fill the dark preview area so small photos scale up with the viewport */
+    .cenro-doc-modal-frame-wrap.cenro-doc-preview--image,
+    .cenro-doc-modal-frame-wrap.cenro-doc-preview--pdf {
+        align-items: stretch;
+        justify-content: stretch;
+        padding: min(14px, 2.5vmin);
+        box-sizing: border-box;
+    }
+    /* Avoid flex+percent-height on <img> (often collapses to 0 — looks “all black”) */
+    .cenro-doc-modal-frame-wrap.cenro-doc-preview--image {
+        position: relative;
+    }
+    .cenro-doc-modal-frame-wrap.cenro-doc-preview--image .cenro-doc-modal-img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        object-position: center;
+        display: block;
+    }
+    .cenro-doc-modal-frame {
+        width: 100%;
+        height: 100%;
+        min-height: 400px;
+        border: none;
+        display: block;
+        align-self: stretch;
+    }
+    .cenro-doc-modal-img {
+        /* Default (unused unless image mode); image mode overrides with absolute inset rules above */
+        max-width: 100%;
+        object-fit: contain;
+        object-position: center;
+        display: block;
+    }
+    .cenro-doc-modal-embed {
+        border: none;
+        display: block;
+    }
+    .cenro-doc-modal-frame-wrap.cenro-doc-preview--pdf .cenro-doc-modal-embed {
+        flex: 1 1 0;
+        align-self: stretch;
+        min-width: 0;
+        min-height: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .cenro-doc-modal-loading,
+    .cenro-doc-modal-error {
+        padding: 32px 24px;
+        color: #ccc;
+        font-size: 15px;
+        text-align: center;
+        line-height: 1.5;
+    }
+    .cenro-doc-modal-error { color: #f5a5a5; }
+</style>
+<div id="cenroDocModal" class="cenro-doc-modal-overlay" hidden aria-hidden="true">
+    <div class="cenro-doc-modal-panel" role="document">
+        <div class="cenro-doc-modal-header">
+            <button type="button" class="cenro-doc-modal-close" id="cenroDocModalClose" aria-label="Close preview">&times;</button>
+        </div>
+        <div class="cenro-doc-modal-frame-wrap" id="cenroDocModalBody">
+            <div class="cenro-doc-modal-loading" id="cenroDocModalLoading" hidden>Loading preview…</div>
+            <div class="cenro-doc-modal-error" id="cenroDocModalError" hidden></div>
+            <iframe class="cenro-doc-modal-frame" id="cenroDocModalFrame" title="Document preview" hidden></iframe>
+            <img class="cenro-doc-modal-img" id="cenroDocModalImg" alt="Receipt or document preview" hidden>
+            <embed class="cenro-doc-modal-embed" id="cenroDocModalEmbed" type="application/pdf" title="PDF preview" hidden>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var overlay = document.getElementById('cenroDocModal');
+    var closeBtn = document.getElementById('cenroDocModalClose');
+    var loadingEl = document.getElementById('cenroDocModalLoading');
+    var errorEl = document.getElementById('cenroDocModalError');
+    var frame = document.getElementById('cenroDocModalFrame');
+    var imgEl = document.getElementById('cenroDocModalImg');
+    var embedEl = document.getElementById('cenroDocModalEmbed');
+    var bodyWrap = document.getElementById('cenroDocModalBody');
+    if (!overlay || !closeBtn || !loadingEl || !errorEl || !frame || !imgEl || !embedEl || !bodyWrap) return;
+
+    var objectUrl = null;
+
+    function revokeBlob() {
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+        }
+    }
+
+    function hideAllMedia() {
+        bodyWrap.classList.remove('cenro-doc-preview--image', 'cenro-doc-preview--pdf');
+        loadingEl.hidden = true;
+        errorEl.hidden = true;
+        frame.hidden = true;
+        imgEl.hidden = true;
+        embedEl.hidden = true;
+        frame.removeAttribute('src');
+        imgEl.removeAttribute('src');
+        embedEl.removeAttribute('src');
+    }
+
+    function showLoading() {
+        hideAllMedia();
+        loadingEl.hidden = false;
+    }
+
+    function showError(msg) {
+        revokeBlob();
+        hideAllMedia();
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+    }
+
+    function closeModal() {
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('hidden', '');
+        overlay.setAttribute('aria-hidden', 'true');
+        revokeBlob();
+        hideAllMedia();
+        document.body.style.overflow = '';
+    }
+
+    function openModal(url) {
+        var absUrl = new URL(url, window.location.href).href;
+        revokeBlob();
+        hideAllMedia();
+        loadingEl.hidden = false;
+        errorEl.textContent = '';
+
+        overlay.removeAttribute('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        overlay.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+
+        fetch(absUrl, { credentials: 'same-origin', redirect: 'follow', cache: 'no-store' })
+            .then(function(res) {
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+                var ct = (res.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+                return res.blob().then(function(blob) {
+                    return { blob: blob, ct: ct };
+                });
+            })
+            .then(function(_ref) {
+                var blob = _ref.blob;
+                var ct = _ref.ct;
+                objectUrl = URL.createObjectURL(blob);
+                var btype = (blob.type || '').toLowerCase();
+
+                function revealImg() {
+                    loadingEl.hidden = true;
+                    imgEl.hidden = false;
+                }
+
+                function showImageBranch() {
+                    bodyWrap.classList.add('cenro-doc-preview--image');
+                    imgEl.onerror = function() {
+                        showError('Could not display this image.');
+                    };
+                    imgEl.onload = revealImg;
+                    imgEl.src = objectUrl;
+                    if (imgEl.complete && imgEl.naturalWidth > 0) {
+                        revealImg();
+                    }
+                }
+
+                function showPdfBranch() {
+                    bodyWrap.classList.add('cenro-doc-preview--pdf');
+                    loadingEl.hidden = true;
+                    embedEl.type = 'application/pdf';
+                    embedEl.src = objectUrl;
+                    embedEl.hidden = false;
+                }
+
+                function showIframeBranch() {
+                    loadingEl.hidden = true;
+                    frame.src = objectUrl;
+                    frame.hidden = false;
+                }
+
+                if (ct.indexOf('image/') === 0 || btype.indexOf('image/') === 0) {
+                    showImageBranch();
+                    return;
+                }
+
+                if (ct === 'application/pdf' || ct === 'application/x-pdf' || btype.indexOf('pdf') !== -1) {
+                    showPdfBranch();
+                    return;
+                }
+
+                /* Uploaded files often come back as octet-stream; iframe cannot render JPEG/PDF bytes → black pane */
+                return blob.slice(0, 16).arrayBuffer().then(function(ab) {
+                    var u = new Uint8Array(ab);
+                    var isPdf = u.length >= 4 && u[0] === 0x25 && u[1] === 0x50 && u[2] === 0x44 && u[3] === 0x46;
+                    var isJpeg = u.length >= 3 && u[0] === 0xFF && u[1] === 0xD8 && u[2] === 0xFF;
+                    var isPng = u.length >= 4 && u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4E && u[3] === 0x47;
+                    var isGif = u.length >= 3 && u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46;
+                    var isWebp = u.length >= 12 && u[0] === 0x52 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x46
+                        && u[8] === 0x57 && u[9] === 0x45 && u[10] === 0x42 && u[11] === 0x50;
+                    var isBmp = u.length >= 2 && u[0] === 0x42 && u[1] === 0x4D;
+                    var isTiffLe = u.length >= 4 && u[0] === 0x49 && u[1] === 0x49 && u[2] === 0x2A && u[3] === 0x00;
+                    var isTiffBe = u.length >= 4 && u[0] === 0x4D && u[1] === 0x4D && u[2] === 0x00 && u[3] === 0x2A;
+                    if (isJpeg || isPng || isGif || isWebp || isBmp || isTiffLe || isTiffBe) {
+                        showImageBranch();
+                        return;
+                    }
+                    if (isPdf) {
+                        showPdfBranch();
+                        return;
+                    }
+                    showIframeBranch();
+                });
+            })
+            .catch(function() {
+                showError('Could not load this document. Try again, or open it in a new tab (Ctrl+click the link).');
+            });
+    }
+
+    document.addEventListener('click', function(e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        var a = e.target.closest && e.target.closest('a.cenro-doc-modal');
+        if (!a || !a.getAttribute('href')) return;
+        var href = a.getAttribute('href');
+        if (!href || href.charAt(0) === '#') return;
+        e.preventDefault();
+        openModal(href);
+    });
+
+    closeBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && overlay.classList.contains('is-open')) {
+            e.preventDefault();
+            closeModal();
+        }
+    });
+})();
+</script>
