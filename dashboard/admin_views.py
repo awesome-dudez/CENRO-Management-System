@@ -302,6 +302,39 @@ def _get_analytics_payload(request=None):
             split_status_labels = ["No data"]
             split_status_values = [0]
 
+        month_start = today.replace(day=1)
+        year_start = today.replace(month=1, day=1)
+        incoming_mtd = ServiceRequest.objects.filter(
+            service_filter,
+            created_at__date__gte=month_start,
+            created_at__date__lte=today,
+        ).count()
+        completed_mtd = ServiceRequest.objects.filter(
+            service_filter,
+            status=ServiceRequest.Status.COMPLETED,
+            request_date__gte=month_start,
+            request_date__lte=today,
+        ).count()
+        incoming_ytd = ServiceRequest.objects.filter(
+            service_filter,
+            created_at__date__gte=year_start,
+            created_at__date__lte=today,
+        ).count()
+        completed_ytd = ServiceRequest.objects.filter(
+            service_filter,
+            status=ServiceRequest.Status.COMPLETED,
+            request_date__gte=year_start,
+            request_date__lte=today,
+        ).count()
+        period_summary = {
+            "month_label": month_start.strftime("%B %Y"),
+            "incoming_month": incoming_mtd,
+            "completed_month": completed_mtd,
+            "year_label": str(today.year),
+            "incoming_year": incoming_ytd,
+            "completed_year": completed_ytd,
+        }
+
         return {
             "kpi_30d": split_total_30,
             "trend_pct": split_trend,
@@ -332,6 +365,7 @@ def _get_analytics_payload(request=None):
                 "label": top_label,
                 "count": top_count,
             },
+            "period_summary": period_summary,
         }
 
     split_analytics = {

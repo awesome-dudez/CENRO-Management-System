@@ -487,7 +487,14 @@ body.admin-view {
 .analytics-kpi {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    align-items: stretch;
+}
+
+/* Stretch with Request Overview row; content stays top-aligned via justify-content above */
+.analytics-kpi .analytics-card-title-row {
+    margin-top: 0;
+    margin-bottom: 12px;
 }
 
 .analytics-kpi-value {

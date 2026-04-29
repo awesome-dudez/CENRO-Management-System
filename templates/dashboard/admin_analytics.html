@@ -17,9 +17,15 @@
                         <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
                     </span>
                 </span>
-                <button type="button" class="analytics-print-btn" id="analyticsPrintBtn" title="Print a text summary for the service type shown above">
-                    <span aria-hidden="true">🖨️</span> Print summary
-                </button>
+                <span class="analytics-kpi-print-cluster">
+                    <span class="analytics-summary-period-toggle" id="analyticsSummaryPeriodToggle" role="group" aria-label="Print report period">
+                        <button type="button" class="analytics-summary-period-btn active" data-period="month">Monthly</button>
+                        <button type="button" class="analytics-summary-period-btn" data-period="year">Annual</button>
+                    </span>
+                    <button type="button" class="analytics-print-btn" id="analyticsPrintBtn" title="Print a summary for the selected service type and period">
+                        <span aria-hidden="true">🖨️</span> Print summary
+                    </button>
+                </span>
             </h3>
             <div class="analytics-kpi-value" id="splitKpiValue">0</div>
             <div class="analytics-kpi-trend" id="splitKpiTrend"></div>
@@ -235,6 +241,7 @@
     var initialData = null;
     var latestData = null;
     var activeService = 'desludging';
+    var printSummaryPeriod = 'month';
     var el = document.getElementById('analytics-data');
     if (el && el.textContent) {
         try { initialData = JSON.parse(el.textContent); } catch (e) {}
@@ -293,20 +300,64 @@
         var pct = s.trend_pct != null ? s.trend_pct : 0;
         var tb = s.top_barangay || {};
 
+        var ps = s.period_summary || {};
+        var reportKind = printSummaryPeriod === 'year' ? 'Annual' : 'Monthly';
+        var overviewTitle =
+            printSummaryPeriod === 'year'
+                ? 'Year-to-date totals (' + escapeHtml(String(ps.year_label || '')) + ')'
+                : 'Month-to-date totals (' + escapeHtml(String(ps.month_label || '')) + ')';
+
         parts.push('<header class="analytics-print-header">');
         parts.push('<h1>CENRO Sanitary Management System</h1>');
-        parts.push('<p class="analytics-print-meta analytics-print-service">Statistics summary <span class="analytics-print-service-badge">' + escapeHtml(serviceLabel) + '</span></p>');
+        parts.push('<p class="analytics-print-meta analytics-print-service">' + escapeHtml(reportKind) + ' report <span class="analytics-print-service-badge">' + escapeHtml(serviceLabel) + '</span></p>');
         parts.push('<p class="analytics-print-meta">Generated on ' + escapeHtml(new Date().toLocaleString()) + '</p>');
         parts.push('</header>');
 
         parts.push('<section class="analytics-print-overview">');
-        parts.push('<h2>30-Day Overview</h2>');
+        parts.push('<h2>' + overviewTitle + '</h2>');
         parts.push('<div class="analytics-print-kpis">');
-        parts.push('<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Requests</div><div class="analytics-print-kpi-value">' + (s.kpi_30d != null ? s.kpi_30d : 0) + '</div><div class="analytics-print-kpi-sub">Last 30 days</div></div>');
-        parts.push('<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Trend</div><div class="analytics-print-kpi-value">' + (pct >= 0 ? '+' : '') + pct + '%</div><div class="analytics-print-kpi-sub">vs prior 30 days</div></div>');
-        parts.push('<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Top Barangay</div><div class="analytics-print-kpi-value">' + escapeHtml(tb.label || '—') + '</div><div class="analytics-print-kpi-sub">' + (tb.count != null ? tb.count : 0) + ' request(s)</div></div>');
+        if (printSummaryPeriod === 'year') {
+            parts.push(
+                '<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Incoming (created YTD)</div><div class="analytics-print-kpi-value">' +
+                    (ps.incoming_year != null ? ps.incoming_year : 0) +
+                    '</div><div class="analytics-print-kpi-sub">Requests submitted since Jan 1</div></div>'
+            );
+            parts.push(
+                '<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Completed (YTD)</div><div class="analytics-print-kpi-value">' +
+                    (ps.completed_year != null ? ps.completed_year : 0) +
+                    '</div><div class="analytics-print-kpi-sub">By request date, since Jan 1</div></div>'
+            );
+            parts.push(
+                '<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Top barangay (all time)</div><div class="analytics-print-kpi-value">' +
+                    escapeHtml(tb.label || '—') +
+                    '</div><div class="analytics-print-kpi-sub">' +
+                    (tb.count != null ? tb.count : 0) +
+                    ' request(s)</div></div>'
+            );
+        } else {
+            parts.push(
+                '<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Incoming (created MTD)</div><div class="analytics-print-kpi-value">' +
+                    (ps.incoming_month != null ? ps.incoming_month : 0) +
+                    '</div><div class="analytics-print-kpi-sub">This calendar month</div></div>'
+            );
+            parts.push(
+                '<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Completed (MTD)</div><div class="analytics-print-kpi-value">' +
+                    (ps.completed_month != null ? ps.completed_month : 0) +
+                    '</div><div class="analytics-print-kpi-sub">By request date, this month</div></div>'
+            );
+            parts.push(
+                '<div class="analytics-print-kpi"><div class="analytics-print-kpi-label">Rolling 30 days</div><div class="analytics-print-kpi-value">' +
+                    (s.kpi_30d != null ? s.kpi_30d : 0) +
+                    '</div><div class="analytics-print-kpi-sub">' +
+                    (pct >= 0 ? '+' : '') +
+                    pct +
+                    '% vs prior 30 days</div></div>'
+            );
+        }
         parts.push('</div>');
         parts.push('</section>');
+
+        parts.push('<p class="analytics-print-meta" style="margin:12pt 0 8pt;font-size:11pt;color:#555;">The sections below use the same rolling windows as the Statistics dashboard charts.</p>');
 
         var nv = s.new_vs_returning || {};
         var nvLabels = nv.labels || [];
@@ -558,6 +609,19 @@
         }
         var searchInput = document.getElementById('analyticsTableSearch');
         if (searchInput) searchInput.addEventListener('input', filterTable);
+        var periodToggle = document.getElementById('analyticsSummaryPeriodToggle');
+        if (periodToggle) {
+            periodToggle.addEventListener('click', function(evt) {
+                var btn = evt.target.closest('.analytics-summary-period-btn');
+                if (!btn) return;
+                var next = btn.getAttribute('data-period');
+                if (!next || next === printSummaryPeriod) return;
+                printSummaryPeriod = next;
+                periodToggle.querySelectorAll('.analytics-summary-period-btn').forEach(function(b) {
+                    b.classList.toggle('active', b === btn);
+                });
+            });
+        }
         var printBtn = document.getElementById('analyticsPrintBtn');
         if (printBtn) {
             printBtn.addEventListener('click', function() {
@@ -648,6 +712,35 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+}
+.analytics-kpi-print-cluster {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.analytics-summary-period-toggle {
+    display: inline-flex;
+    border: 1px solid #d8e4de;
+    border-radius: 999px;
+    overflow: hidden;
+    vertical-align: middle;
+}
+.analytics-summary-period-btn {
+    border: none;
+    background: #fff;
+    color: #4a4a4a;
+    font-size: 12px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.analytics-summary-period-btn.active {
+    background: #e8f5ee;
+    color: #1e7a4d;
+}
+.analytics-summary-period-btn:not(.active):hover {
+    background: #f7faf8;
 }
 .analytics-print-btn {
     border: 1px solid #d8e4de;
