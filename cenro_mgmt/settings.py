@@ -97,6 +97,9 @@ if _render_host:
 # Recommended when behind Render/Cloudflare proxy (helps Django know request is HTTPS)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Render terminates TLS and forwards Host — keeps absolute URLs correct when generating links.
+USE_X_FORWARDED_HOST = True
+
 
 # -------------------------
 # Apps
@@ -232,7 +235,16 @@ if _windows_root_static.exists():
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+_media_root_raw = (os.environ.get("MEDIA_ROOT") or "").strip()
+if not _media_root_raw:
+    try:
+        _media_root_raw = (config("MEDIA_ROOT", default="") or "").strip()
+    except Exception:
+        _media_root_raw = ""
+if _media_root_raw:
+    MEDIA_ROOT = Path(_media_root_raw).expanduser().resolve()
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
 
 # Computation letter — formal block (logos + fee table stay in templates; edit via env if needed)
 COMPUTATION_LETTER_TREASURER_NAME = config(

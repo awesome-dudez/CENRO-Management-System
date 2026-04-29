@@ -58,9 +58,10 @@ class User(AbstractUser):
 
     @property
     def profile_picture_url(self) -> str:
+        from cenro_mgmt.media_utils import file_url_if_exists
+
         try:
-            if self.consumer_profile.profile_picture:
-                return self.consumer_profile.profile_picture.url
+            return file_url_if_exists(self.consumer_profile.profile_picture)
         except ConsumerProfile.DoesNotExist:
             pass
         return ""
@@ -97,6 +98,12 @@ class ConsumerProfile(models.Model):
     def full_address(self) -> str:
         parts = [self.street_address, self.barangay, self.municipality, self.province]
         return ", ".join(p for p in parts if p)
+
+    @property
+    def profile_picture_safe_url(self) -> str:
+        from cenro_mgmt.media_utils import file_url_if_exists
+
+        return file_url_if_exists(self.profile_picture)
 
     @property
     def is_bayawan_city_municipality(self) -> bool:

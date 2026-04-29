@@ -6,8 +6,8 @@
         <div class="profile-header">
             <div class="profile-avatar-wrapper">
                 <div class="profile-avatar" id="avatarPreview">
-                    {% if profile.profile_picture %}
-                    <img src="{{ profile.profile_picture.url }}" alt="Profile" id="avatarImg">
+                    {% if profile.profile_picture_safe_url %}
+                    <img src="{{ profile.profile_picture_safe_url }}" alt="Profile" id="avatarImg">
                     {% elif profile.gender == 'FEMALE' %}
                     <svg viewBox="0 0 100 100" width="80" height="80" id="avatarSvg"><circle cx="50" cy="50" r="50" fill="#2d8659"/><ellipse cx="50" cy="38" rx="16" ry="18" fill="white"/><path d="M50 20 C30 20 28 40 30 48 Q32 36 40 30 Q45 28 50 28 Q55 28 60 30 Q68 36 70 48 C72 40 70 20 50 20Z" fill="white" opacity="0.5"/><path d="M25 85 Q25 60 50 56 Q75 60 75 85" fill="white"/></svg>
                     {% elif profile.gender == 'NON_BINARY' %}

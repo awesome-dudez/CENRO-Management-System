@@ -26,3 +26,7 @@ services:
       # Serve /media/ via Django (required on Render unless you use S3/nginx for uploads).
       - key: SERVE_MEDIA
         value: "true"
+      # Optional: persistent uploads — mount a Render Disk (paid plans), then set e.g.
+      # MEDIA_ROOT=/var/media to match the mount path so files survive redeploys.
+      # - key: MEDIA_ROOT
+      #   value: "/var/media"

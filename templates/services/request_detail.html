@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize %}
+{% load media_tags %}
 {% block title %}Service Request Details{% endblock %}
 {% block content %}
 <style>
@@ -317,14 +318,23 @@
             <div class="info-item"><label>Date Completed</label><span>{{ sr.completion_info.date_completed|date:"M d, Y" }}</span></div>
             <div class="info-item"><label>Witnessed By</label><span>{{ sr.completion_info.witnessed_by_name|default:"N/A" }}</span></div>
             {% if sr.completion_info.witnessed_by_signature %}
+            {% with sig_url=sr.completion_info.witnessed_by_signature|file_url_if_exists %}
+            {% if sig_url %}
             <div class="info-item" style="grid-column: 1 / -1;">
                 <label>Witness signature</label>
                 <span>
-                    <a href="{{ sr.completion_info.witnessed_by_signature.url }}" class="cenro-doc-modal" title="Click to view full size" style="display:inline-block;margin-top:6px;border:1px solid #e0e0e0;border-radius:8px;padding:10px;background:#fafafa;cursor:pointer;">
-                        <img src="{{ sr.completion_info.witnessed_by_signature.url }}" alt="Witness signature" style="max-width:min(100%, 360px);max-height:200px;object-fit:contain;display:block;">
+                    <a href="{{ sig_url }}" class="cenro-doc-modal" title="Click to view full size" style="display:inline-block;margin-top:6px;border:1px solid #e0e0e0;border-radius:8px;padding:10px;background:#fafafa;cursor:pointer;">
+                        <img src="{{ sig_url }}" alt="Witness signature" style="max-width:min(100%, 360px);max-height:200px;object-fit:contain;display:block;">
                     </a>
                 </span>
             </div>
+            {% else %}
+            <div class="info-item" style="grid-column: 1 / -1;">
+                <label>Witness signature</label>
+                <span style="display:block;margin-top:6px;color:#777;font-size:13px;">File missing from server (common after redeploy without persistent storage). Re-upload via inspection if needed.</span>
+            </div>
+            {% endif %}
+            {% endwith %}
             {% endif %}
         </div>
     </div>
