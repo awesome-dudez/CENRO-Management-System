@@ -284,8 +284,71 @@ def _owner_profile_dict(user):
 
 
 # ---------------------------------------------------------------------------
-# Permission helper
+# PDF helpers (xhtml2pdf / ReportLab)
 # ---------------------------------------------------------------------------
+
+def _pdf_link_callback(uri, rel=None):
+    """Resolve images/links to local filesystem paths for xhtml2pdf.
+
+    Templates pass ``request.build_absolute_uri(static(...))`` for logos. That makes
+    xhtml2pdf HTTP-fetch the same host — unreliable on Render (timeouts/SSL). Map
+    ``STATIC_URL`` / ``MEDIA_URL`` and plain paths from ``FileField.path`` instead.
+    """
+    from urllib.parse import urlparse, unquote
+
+    if not uri:
+        return uri
+
+    cleaned = uri.strip()
+
+    if cleaned and os.path.isfile(cleaned):
+        return cleaned
+
+    if cleaned.startswith("file:"):
+        try:
+            from pathlib import Path
+
+            return str(Path(cleaned).resolve())
+        except Exception:
+            return uri
+
+    parsed = urlparse(cleaned)
+    path_only = unquote(parsed.path or "")
+    if parsed.scheme in ("http", "https"):
+        path_only = unquote(parsed.path or "")
+
+    if path_only and not path_only.startswith("/"):
+        path_only = "/" + path_only
+
+    static_prefix = settings.STATIC_URL
+    if static_prefix and not static_prefix.startswith("/"):
+        static_prefix = "/" + static_prefix
+    static_prefix = static_prefix.rstrip("/") + "/"
+
+    media_prefix = settings.MEDIA_URL
+    if media_prefix and not media_prefix.startswith("/"):
+        media_prefix = "/" + media_prefix
+    media_prefix = media_prefix.rstrip("/") + "/"
+
+    if path_only.startswith(static_prefix):
+        rel_path = path_only[len(static_prefix) :].lstrip("/")
+        from django.contrib.staticfiles import finders
+
+        found = finders.find(rel_path)
+        if found and os.path.isfile(found):
+            return found
+        candidate = os.path.join(settings.STATIC_ROOT, rel_path)
+        if os.path.isfile(candidate):
+            return candidate
+
+    if path_only.startswith(media_prefix):
+        rel_path = path_only[len(media_prefix) :].lstrip("/")
+        candidate = os.path.join(settings.MEDIA_ROOT, rel_path)
+        if os.path.isfile(candidate):
+            return candidate
+
+    return uri
+
 
 def _register_xhtml2pdf_unicode_font():
     """Register a TTF so xhtml2pdf can render ₱ (U+20B1).
@@ -344,6 +407,10 @@ def _register_xhtml2pdf_unicode_font():
             continue
     return None
 
+
+# ---------------------------------------------------------------------------
+# Permission helper
+# ---------------------------------------------------------------------------
 
 def _can_act_on_request(user, service_request):
     """Return True if the user is the consumer, the requester, or an admin."""
@@ -3013,8 +3080,14 @@ def download_computation_pdf(request, pk):
         io.BytesIO(html.encode("utf-8")),
         result,
         encoding="utf-8",
+        link_callback=_pdf_link_callback,
     )
     if pdf.err:
+        logger.error(
+            "download_computation_pdf: xhtml2pdf failed pk=%s warnings=%s",
+            service_request.pk,
+            getattr(pdf, "warn", None),
+        )
         messages.error(
             request,
             f"The PDF could not be built from the computation letter (request #{service_request.pk}). "
@@ -3312,8 +3385,14 @@ def download_inspection_fee_bill_pdf(request, pk):
         io.BytesIO(html.encode("utf-8")),
         result,
         encoding="utf-8",
+        link_callback=_pdf_link_callback,
     )
     if pdf.err:
+        logger.error(
+            "download_inspection_fee_bill_pdf: xhtml2pdf failed pk=%s warnings=%s",
+            service_request.pk,
+            getattr(pdf, "warn", None),
+        )
         messages.error(
             request,
             f"The inspection fee bill PDF could not be generated (request #{service_request.pk}). "

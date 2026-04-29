@@ -450,6 +450,10 @@ body.admin-view {
     gap: 20px;
 }
 
+.analytics-grid-primary {
+    margin-bottom: 28px;
+}
+
 .analytics-card {
     background: var(--white);
     border-radius: 12px;

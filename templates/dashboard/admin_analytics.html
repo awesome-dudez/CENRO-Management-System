@@ -7,6 +7,34 @@
         <div class="analytics-print-summary-inner" id="analyticsPrintSummaryInner"></div>
     </div>
 
+    <div class="analytics-grid analytics-grid-primary">
+        <div class="analytics-card analytics-kpi">
+            <h3 class="analytics-card-title analytics-card-title-row">
+                <span class="analytics-card-title-main">
+                    Service statistics (30 days)
+                    <span class="analytics-split-toggle" id="analyticsSplitToggle">
+                        <button type="button" class="analytics-split-btn active" data-service="desludging">Desludging</button>
+                        <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
+                    </span>
+                </span>
+                <button type="button" class="analytics-print-btn" id="analyticsPrintBtn" title="Print a text summary for the service type shown above">
+                    <span aria-hidden="true">🖨️</span> Print summary
+                </button>
+            </h3>
+            <div class="analytics-kpi-value" id="splitKpiValue">0</div>
+            <div class="analytics-kpi-trend" id="splitKpiTrend"></div>
+            <p class="analytics-card-sub" id="splitTopSource">Top source: -</p>
+        </div>
+
+        <div class="analytics-card analytics-card-wide">
+            <h3 class="analytics-card-title">Request Overview</h3>
+            <p class="analytics-card-sub">Incoming, completed, and total by week</p>
+            <div class="analytics-chart-wrap" style="height: 260px;">
+                <canvas id="chartVisitorOverview"></canvas>
+            </div>
+        </div>
+    </div>
+
     <div class="admin-dashboard-page analytics-dashboard-overview">
         <div class="charts-grid">
             <div class="card">
@@ -102,24 +130,6 @@
     </div>
 
     <div class="analytics-grid">
-        <div class="analytics-card analytics-kpi">
-            <h3 class="analytics-card-title analytics-card-title-row">
-                <span class="analytics-card-title-main">
-                    Service statistics (30 days)
-                    <span class="analytics-split-toggle" id="analyticsSplitToggle">
-                        <button type="button" class="analytics-split-btn active" data-service="desludging">Desludging</button>
-                        <button type="button" class="analytics-split-btn" data-service="grass_cutting">Grass Cutting</button>
-                    </span>
-                </span>
-                <button type="button" class="analytics-print-btn" id="analyticsPrintBtn" title="Print a text summary for the service type shown above">
-                    <span aria-hidden="true">🖨️</span> Print summary
-                </button>
-            </h3>
-            <div class="analytics-kpi-value" id="splitKpiValue">0</div>
-            <div class="analytics-kpi-trend" id="splitKpiTrend"></div>
-            <p class="analytics-card-sub" id="splitTopSource">Top source: -</p>
-        </div>
-
         <!-- Stacked Bar: New v Returning -->
         <div class="analytics-card">
             <h3 class="analytics-card-title">New v Completed Requests</h3>
@@ -134,15 +144,6 @@
             <h3 class="analytics-card-title">Top Request Sources (Barangay)</h3>
             <div class="analytics-chart-wrap" style="height: 220px;">
                 <canvas id="chartTopSources"></canvas>
-            </div>
-        </div>
-
-        <!-- Line: Visitor Overview -->
-        <div class="analytics-card analytics-card-wide">
-            <h3 class="analytics-card-title">Request Overview</h3>
-            <p class="analytics-card-sub">Incoming, completed, and total by week</p>
-            <div class="analytics-chart-wrap" style="height: 260px;">
-                <canvas id="chartVisitorOverview"></canvas>
             </div>
         </div>
 
