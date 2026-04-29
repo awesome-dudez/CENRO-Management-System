@@ -1388,8 +1388,9 @@ def grasscutting_application(request):
                     elif "webp" in header:
                         ext = ".webp"
                     binary = base64.b64decode(b64_data)
+                    # Basename only — upload_to already prefixes client_signatures/
                     service_request.client_signature.save(
-                        f"client_signatures/gc_{service_request.id}{ext}",
+                        f"gc_{service_request.id}{ext}",
                         ContentFile(binary),
                         save=True,
                     )
@@ -1398,7 +1399,7 @@ def grasscutting_application(request):
                     if ext not in _LOCATION_PHOTO_EXT_LOWER:
                         ext = ".jpg"
                     service_request.client_signature.save(
-                        f"client_signatures/gc_{service_request.id}{ext}",
+                        f"gc_{service_request.id}{ext}",
                         ContentFile(gc_sig_file.read()),
                         save=True,
                     )
@@ -3432,6 +3433,60 @@ def view_bawad_proof(request, pk):
     if not ctype:
         ctype = "application/octet-stream"
     return FileResponse(proof_file, as_attachment=False, content_type=ctype)
+
+
+def _file_response_for_client_signature(service_request):
+    """
+    Open client_signature from storage. Tries alternate relative paths for legacy rows
+    where the filename incorrectly included an extra 'client_signatures/' segment.
+    """
+    field = service_request.client_signature
+    if not field or not field.name:
+        return None
+    storage = field.storage
+    base = os.path.basename(field.name)
+
+    def _guess_ct(path_hint: str) -> str:
+        ctype, _ = mimetypes.guess_type(path_hint or base or "")
+        if not ctype or ctype == "application/octet-stream":
+            ctype = "image/png"
+        return ctype
+
+    try:
+        handle = field.open("rb")
+        return FileResponse(handle, as_attachment=False, content_type=_guess_ct(field.name))
+    except FileNotFoundError:
+        pass
+
+    for rel in (
+        f"client_signatures/{base}",
+        f"client_signatures/client_signatures/{base}",
+    ):
+        if storage.exists(rel):
+            try:
+                handle = storage.open(rel, "rb")
+                return FileResponse(handle, as_attachment=False, content_type=_guess_ct(base))
+            except OSError:
+                continue
+    return None
+
+
+@login_required
+def view_client_signature(request, pk):
+    """Serve client signature with the same access rules as other request uploads (modal-friendly URL)."""
+    service_request = get_object_or_404(ServiceRequest, pk=pk)
+    if not _can_view_request_uploaded_files(request.user, service_request):
+        _message_uploaded_file_access_denied(request, service_request, "the client signature")
+        return redirect("services:request_list")
+    if not service_request.client_signature:
+        messages.error(request, "No client signature was uploaded for this request.")
+        return redirect("services:request_detail", pk=pk)
+
+    response = _file_response_for_client_signature(service_request)
+    if response is None:
+        messages.error(request, "The signature file could not be found on the server.")
+        return redirect("services:request_detail", pk=pk)
+    return response
 
 
 @login_required

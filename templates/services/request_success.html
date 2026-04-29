@@ -193,10 +193,10 @@
         {% if service_request.client_signature %}
         <div style="text-align:left;margin-bottom:24px;">
             <div class="detail-label" style="margin-bottom:8px;">Submitted signature</div>
-            <a href="{{ service_request.client_signature.url }}" target="_blank" rel="noopener">
-                <img src="{{ service_request.client_signature.url }}" alt="Your signature" style="max-height:160px;max-width:100%;border:1px solid #e0e0e0;border-radius:8px;padding:8px;background:#fafafa;display:block;">
+            <a href="{% url 'services:view_client_signature' service_request.pk %}" class="cenro-doc-modal" title="Click to view full size" style="display:inline-block;cursor:pointer;">
+                <img src="{% url 'services:view_client_signature' service_request.pk %}" alt="Your signature — click to enlarge" style="max-height:160px;max-width:100%;border:1px solid #e0e0e0;border-radius:8px;padding:8px;background:#fafafa;display:block;">
             </a>
-            <p style="font-size:12px;color:#666;margin-top:8px;"><a href="{{ service_request.client_signature.url }}" target="_blank" rel="noopener">Open full size</a></p>
+            <p style="font-size:12px;color:#666;margin-top:8px;"><a href="{% url 'services:view_client_signature' service_request.pk %}" class="cenro-doc-modal">Open full size</a></p>
         </div>
         {% endif %}
         
@@ -217,5 +217,5 @@
         </div>
     </div>
 </div>
-
+{% include "services/_document_viewer_modal.html" %}
 {% endblock %}
