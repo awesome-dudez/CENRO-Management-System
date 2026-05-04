@@ -27,9 +27,6 @@
             <button type="submit" class="btn btn-primary">Search</button>
         </div>
     </form>
-    <p class="card-subtitle" style="margin-top: -0.5rem; margin-bottom: 1rem; font-size: 0.9rem; color: #555;">
-        Use <strong>Reset password</strong> to set a member’s login password to the system default; they will be asked to choose a new password on their next sign-in.
-    </p>
     <div class="table-responsive">
         <table class="data-table">
             <thead>
@@ -52,12 +49,6 @@
                     <td>1</td>
                     <td style="white-space: nowrap;">
                         <a href="{% url 'dashboard:member_service_history' consumer.pk %}" class="btn btn-sm">View Details</a>
-                        <form method="post" action="{% url 'dashboard:admin_reset_consumer_password' consumer.pk %}" style="display: inline-block; margin-left: 6px; vertical-align: middle;"
-                              onsubmit="return confirm('Reset this member’s password to the default temporary password? They must set a new password after the next login.');">
-                            {% csrf_token %}
-                            {% if search_query %}<input type="hidden" name="next_q" value="{{ search_query }}">{% endif %}
-                            <button type="submit" class="btn btn-sm" style="background: #e67e22; color: #fff; border: none;">Reset password</button>
-                        </form>
                     </td>
                 </tr>
                 {% empty %}

@@ -66,11 +66,6 @@ urlpatterns = [
         name="admin_profile_contact_reject",
     ),
     path("admin/equipment/", admin_views.admin_equipment, name="admin_equipment"),
-    path(
-        "admin/membership/reset-password/<int:user_id>/",
-        admin_views.admin_reset_consumer_password,
-        name="admin_reset_consumer_password",
-    ),
     path("admin/membership/update-volume/<int:user_id>/", admin_views.admin_update_prior_volume, name="admin_update_prior_volume"),
     path("admin/membership/history/<int:user_id>/", admin_views.member_service_history, name="member_service_history"),
     path("admin/computation/", admin_views.admin_computation, name="admin_computation"),

@@ -12,9 +12,6 @@ from django.utils.dateparse import parse_date
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from urllib.parse import urlencode
-
-from accounts.constants import CONSUMER_DEFAULT_RESET_PASSWORD
 from accounts.decorators import role_required
 from accounts.models import ConsumerProfile, ProfileContactChangeRequest, ProfileContactChangeToken, User
 from services.models import ServiceEquipment, ServiceRequest, Notification
@@ -2045,40 +2042,6 @@ def admin_update_prior_volume(request, user_id):
         )
     messages.success(request, msg)
     return redirect(f"{reverse('dashboard:admin_membership')}?tab=previous_account_registration")
-
-
-@login_required
-@role_required("ADMIN")
-@require_POST
-def admin_reset_consumer_password(request, user_id):
-    """
-    Set a consumer's password to the system default temporary password and
-    require them to choose a new password on next login.
-    """
-    consumer = get_object_or_404(
-        User,
-        pk=user_id,
-        role=User.Role.CONSUMER,
-        is_superuser=False,
-        is_staff=False,
-    )
-    consumer.set_password(CONSUMER_DEFAULT_RESET_PASSWORD)
-    consumer.must_change_password = True
-    consumer.save(update_fields=["password", "must_change_password"])
-    display_name = consumer.get_full_name() or consumer.username
-    messages.success(
-        request,
-        f'Password reset for {display_name}. Temporary password: {CONSUMER_DEFAULT_RESET_PASSWORD} '
-        "(share this with the member securely). They must set a new password after signing in.",
-    )
-    params = {"tab": "account_management"}
-    q = (request.POST.get("next_q") or "").strip()
-    if q:
-        params["q"] = q
-    url = reverse("dashboard:admin_membership")
-    if params:
-        url = f"{url}?{urlencode(params)}"
-    return redirect(url)
 
 
 @login_required

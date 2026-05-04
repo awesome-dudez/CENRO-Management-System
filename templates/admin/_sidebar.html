@@ -21,8 +21,8 @@ Icons beside each item; active page highlighted.
         {% if user.is_admin %}
         {% with nav_url=request.resolver_match.url_name %}
         <details
-            class="admin-sidebar-group{% if 'admin_membership' in nav_url or 'member_service_history' in nav_url or nav_url == 'admin_reset_consumer_password' or nav_url == 'admin_update_prior_volume' or nav_url == 'admin_profile_contact_requests' or nav_url == 'admin_profile_contact_approve' or nav_url == 'admin_profile_contact_reject' or nav_url == 'staff_approval_list' or nav_url == 'staff_register' %} admin-sidebar-group--child-active{% endif %}"
-            {% if 'admin_membership' in nav_url or 'member_service_history' in nav_url or nav_url == 'admin_reset_consumer_password' or nav_url == 'admin_update_prior_volume' or nav_url == 'admin_profile_contact_requests' or nav_url == 'admin_profile_contact_approve' or nav_url == 'admin_profile_contact_reject' or nav_url == 'staff_approval_list' or nav_url == 'staff_register' %}open{% endif %}
+            class="admin-sidebar-group{% if 'admin_membership' in nav_url or 'member_service_history' in nav_url or nav_url == 'admin_update_prior_volume' or nav_url == 'admin_profile_contact_requests' or nav_url == 'admin_profile_contact_approve' or nav_url == 'admin_profile_contact_reject' or nav_url == 'staff_approval_list' or nav_url == 'staff_register' %} admin-sidebar-group--child-active{% endif %}"
+            {% if 'admin_membership' in nav_url or 'member_service_history' in nav_url or nav_url == 'admin_update_prior_volume' or nav_url == 'admin_profile_contact_requests' or nav_url == 'admin_profile_contact_approve' or nav_url == 'admin_profile_contact_reject' or nav_url == 'staff_approval_list' or nav_url == 'staff_register' %}open{% endif %}
         >
             <summary class="admin-sidebar-group-summary">
                 <span class="admin-sidebar-icon" aria-hidden="true">👤</span>
@@ -30,7 +30,7 @@ Icons beside each item; active page highlighted.
                 <span class="admin-sidebar-group-chevron" aria-hidden="true"></span>
             </summary>
             <div class="admin-sidebar-subnav">
-                <a href="{% url 'dashboard:admin_membership' %}" class="admin-sidebar-sublink {% if 'admin_membership' in nav_url or 'member_service_history' in nav_url or nav_url == 'admin_reset_consumer_password' or nav_url == 'admin_update_prior_volume' %}active{% endif %}">
+                <a href="{% url 'dashboard:admin_membership' %}" class="admin-sidebar-sublink {% if 'admin_membership' in nav_url or 'member_service_history' in nav_url or nav_url == 'admin_update_prior_volume' %}active{% endif %}">
                     <span class="admin-sidebar-icon" aria-hidden="true">👥</span>
                     <span>Members</span>
                 </a>
