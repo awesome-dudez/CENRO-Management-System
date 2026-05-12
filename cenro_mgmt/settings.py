@@ -178,8 +178,26 @@ def _get_database_config():
 
     if database_url:
         try:
-            # conn_max_age improves performance on Render
-            return dj_database_url.parse(database_url, conn_max_age=600)
+            # conn_max_age improves performance on Render; health checks avoid stale TLS sockets.
+            cfg = dj_database_url.parse(database_url, conn_max_age=600)
+            if cfg.get("ENGINE") == "django.db.backends.postgresql":
+                cfg["CONN_HEALTH_CHECKS"] = True
+                opts = cfg.setdefault("OPTIONS", {})
+                opts.setdefault("connect_timeout", 10)
+                # If connections fail with SSL errors, set DATABASE_SSL_REQUIRE=true in Render env.
+                # (Many Render DSNs already include ?sslmode=require in the URL.)
+                try:
+                    ssl_require = config("DATABASE_SSL_REQUIRE", default="").strip().lower() in (
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    )
+                except Exception:
+                    ssl_require = False
+                if ssl_require and "sslmode" not in opts and "sslmode" not in (database_url or "").lower():
+                    opts["sslmode"] = "require"
+            return cfg
         except Exception:
             pass
 
